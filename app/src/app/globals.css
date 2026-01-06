@@ -16,9 +16,9 @@
 
   /* Text Hierarchy - High contrast for terminal feel */
   --text: #fafafa;
-  --text-mid: #a3a3a3;
-  --text-dim: #525252;
-  --text-ghost: #333333;
+  --text-mid: #d4d4d4;
+  --text-dim: #8a8a8a;
+  --text-ghost: #525252;
 
   /* Signal Colors - Platform indicators + accents */
   --green: #22c55e;

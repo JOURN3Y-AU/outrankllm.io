@@ -249,7 +249,7 @@ export default function LearnPage() {
                   <div className="flex items-stretch">
                     {/* Line number column */}
                     <div className="w-16 flex-shrink-0 flex items-center justify-center border-r border-[var(--border)] bg-[var(--bg)]">
-                      <span className="font-mono text-xs text-[var(--text-ghost)]">
+                      <span className="font-mono text-xs text-[var(--text-dim)]">
                         {String(i + 1).padStart(2, '0')}
                       </span>
                     </div>
@@ -301,7 +301,7 @@ export default function LearnPage() {
                 >
                   <div className="grid md:grid-cols-12" style={{ padding: '28px 0', gap: '16px' }}>
                     <div className="md:col-span-1">
-                      <span className="font-mono text-xs text-[var(--text-ghost)]">
+                      <span className="font-mono text-xs text-[var(--text-dim)]">
                         Q{String(i + 1).padStart(2, '0')}
                       </span>
                     </div>
@@ -325,22 +325,22 @@ export default function LearnPage() {
           {/* CTA Section */}
           <section className="px-6 w-full">
             <div style={{ maxWidth: '896px', marginLeft: 'auto', marginRight: 'auto' }}>
-            <div className="relative border border-[var(--border)] bg-[var(--surface)] p-12 text-center overflow-hidden">
+            <div className="relative border border-[var(--border)] bg-[var(--surface)] text-center overflow-hidden" style={{ padding: '48px 48px 52px' }}>
               {/* Decorative corner elements */}
               <div className="absolute top-0 left-0 w-8 h-8 border-t border-l border-[var(--green)]" />
               <div className="absolute top-0 right-0 w-8 h-8 border-t border-r border-[var(--green)]" />
               <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-[var(--green)]" />
               <div className="absolute bottom-0 right-0 w-8 h-8 border-b border-r border-[var(--green)]" />
 
-              <div className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-widest" style={{ marginBottom: '16px' }}>
+              <div className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-widest" style={{ marginBottom: '20px' }}>
                 Get Started
               </div>
 
-              <h2 className="text-3xl font-medium" style={{ marginBottom: '12px' }}>
+              <h2 className="text-3xl font-medium" style={{ marginBottom: '16px' }}>
                 Ready to check your AI visibility?
               </h2>
 
-              <p className="text-[var(--text-mid)] max-w-md mx-auto" style={{ marginBottom: '32px' }}>
+              <p className="text-[var(--text-mid)] text-center" style={{ maxWidth: '448px', marginLeft: 'auto', marginRight: 'auto', marginBottom: '36px' }}>
                 Get a free report showing how AI assistants see your business.
               </p>
 
