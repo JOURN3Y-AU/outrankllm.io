@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <!-- Black background with slight rounding for iOS -->
+  <rect width="180" height="180" fill="#0a0a0a" rx="20" ry="20"/>
+
+  <!-- Ghost body - scaled and centered -->
+  <g transform="translate(30, 20) scale(0.67)">
+    <path d="M90 10c-44 0-80 36-80 80v80c0 4 3.2 8 7.2 8 2.4 0 4.8-1.6 6.4-3.2l14.4-19.2c3.2-4 9.6-4 12.8 0l11.2 15.2c3.2 4 9.6 4 12.8 0l11.2-15.2c3.2-4 9.6-4 12.8 0l11.2 15.2c3.2 4 9.6 4 12.8 0l14.4-19.2c1.6-2.4 4-3.2 6.4-3.2 4 0 7.2 3.2 7.2 8V90c0-44-36-80-80-80z" fill="#fafafa"/>
+
+    <!-- Left eye -->
+    <ellipse cx="65" cy="100" rx="12" ry="16" fill="#0a0a0a"/>
+
+    <!-- Right eye -->
+    <ellipse cx="115" cy="100" rx="12" ry="16" fill="#0a0a0a"/>
+  </g>
+</svg>

@@ -1,36 +1,73 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Ghost } from '@/components/ghost/Ghost'
 import { FloatingPixels } from '@/components/landing/FloatingPixels'
 import { ScoreGauge } from '@/components/report/ScoreGauge'
 import { PlatformResults } from '@/components/report/PlatformResults'
-import { CompetitorsList } from '@/components/report/CompetitorsList'
+import { ReportTabs } from '@/components/report/ReportTabs'
+import { VerificationGate } from '@/components/report/VerificationGate'
 import { OptInModal } from '@/components/report/OptInModal'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import type { FeatureFlags } from '@/lib/features/flags'
 
 interface ReportData {
   report: {
+    id: string
+    url_token: string
     visibility_score: number
     platform_scores: Record<string, number>
     top_competitors: { name: string; count: number }[]
     summary: string
+    run_id: string
+    requires_verification: boolean
   }
   analysis: {
     business_type: string
     business_name: string | null
     services: string[]
     location: string | null
+    target_audience?: string | null
+    key_phrases?: string[]
+    industry?: string
+  } | null
+  crawlData: {
+    hasSitemap: boolean
+    hasRobotsTxt: boolean
+    pagesCrawled: number
+    schemaTypes: string[]
+    hasMetaDescriptions: boolean
   } | null
   responses: {
     platform: string
     response_text: string
     domain_mentioned: boolean
-    prompt: { prompt_text: string }
+    prompt: { prompt_text: string } | null
+  }[] | null
+  prompts: {
+    id: string
+    prompt_text: string
+    category: string
+  }[] | null
+  brandAwareness: {
+    platform: string
+    query_type: string
+    tested_entity: string
+    tested_attribute: string | null
+    entity_recognized: boolean
+    attribute_mentioned: boolean
+    response_text: string
+    confidence_score: number
+    compared_to: string | null
+    positioning: string | null
   }[] | null
   email: string
   domain: string
+  leadId: string
+  runId: string
+  isVerified: boolean
+  featureFlags: FeatureFlags
+  sitemapUsed: boolean
 }
 
 interface ReportClientProps {
@@ -38,22 +75,22 @@ interface ReportClientProps {
 }
 
 export function ReportClient({ data }: ReportClientProps) {
-  const { report, analysis, responses, email, domain } = data
+  const { report, analysis, crawlData, responses, prompts, brandAwareness, email, domain, runId, isVerified } = data
   const [showModal, setShowModal] = useState(false)
   const [hasSeenModal, setHasSeenModal] = useState(false)
 
   // Show modal after a brief delay on first view
   useEffect(() => {
     const modalShown = localStorage.getItem(`modal_shown_${domain}`)
-    if (!modalShown) {
+    if (!modalShown && isVerified) {
       const timer = setTimeout(() => {
         setShowModal(true)
-      }, 2000)
+      }, 8000) // Show after 8 seconds - let them explore first
       return () => clearTimeout(timer)
     } else {
       setHasSeenModal(true)
     }
-  }, [domain])
+  }, [domain, isVerified])
 
   const handleModalClose = () => {
     setShowModal(false)
@@ -63,20 +100,29 @@ export function ReportClient({ data }: ReportClientProps) {
 
   const handleOptIn = (optedIn: boolean) => {
     console.log('User opted in:', optedIn)
-    // Additional tracking can happen here
   }
 
+  const handleUpgradeClick = () => {
+    setShowModal(true)
+  }
+
+  // Wrap content in verification gate
   return (
-    <>
+    <VerificationGate
+      email={email}
+      domain={domain}
+      runId={runId}
+      isVerified={isVerified}
+    >
       {/* Background */}
       <div className="grid-bg" />
       <FloatingPixels />
 
       {/* Main content */}
-      <main className="relative z-10 min-h-screen px-6 py-12">
-        <div className="max-w-4xl mx-auto">
+      <main className="relative z-10 min-h-screen" style={{ padding: '48px 24px 80px' }}>
+        <div style={{ maxWidth: '960px', marginLeft: 'auto', marginRight: 'auto' }}>
           {/* Header */}
-          <header className="flex items-center justify-between mb-12">
+          <header className="flex items-center justify-between" style={{ marginBottom: '56px' }}>
             <Link
               href="/"
               className="flex items-center gap-2 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
@@ -86,7 +132,6 @@ export function ReportClient({ data }: ReportClientProps) {
             </Link>
 
             <div className="flex items-center gap-3">
-              <Ghost size="sm" />
               <span className="font-mono text-lg">
                 outrank<span className="text-[var(--green)]">llm</span>
               </span>
@@ -94,8 +139,11 @@ export function ReportClient({ data }: ReportClientProps) {
           </header>
 
           {/* Report header */}
-          <div className="text-center mb-12 stagger-children">
-            <h1 className="text-3xl md:text-4xl font-medium mb-4">
+          <div className="text-center stagger-children" style={{ marginBottom: '48px' }}>
+            <h1
+              className="font-medium text-[var(--text)]"
+              style={{ fontSize: 'clamp(1.75rem, 4vw, 2.5rem)', marginBottom: '16px' }}
+            >
               AI Visibility Report
             </h1>
             <a
@@ -103,104 +151,113 @@ export function ReportClient({ data }: ReportClientProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 font-mono text-[var(--text-mid)] hover:text-[var(--green)] transition-colors"
+              style={{ fontSize: '15px' }}
             >
               {domain}
               <ExternalLink className="w-4 h-4" />
             </a>
-            {analysis?.business_type && (
-              <p className="mt-2 text-[var(--text-dim)] font-mono text-sm">
+            {analysis?.business_type && analysis.business_type !== 'Business website' && (
+              <p
+                className="text-[var(--text-dim)] font-mono"
+                style={{ marginTop: '12px', fontSize: '13px' }}
+              >
                 {analysis.business_type}
                 {analysis.location && ` • ${analysis.location}`}
               </p>
             )}
           </div>
 
-          {/* Score section */}
-          <section className="flex justify-center mb-12">
-            <ScoreGauge score={report.visibility_score} size="lg" />
-          </section>
+          {/* Score + Summary + Platform - Always Visible */}
+          <div
+            className="bg-[var(--surface)] border border-[var(--border)]"
+            style={{ padding: '40px', marginBottom: '8px' }}
+          >
+            {/* Score */}
+            <div className="flex justify-center" style={{ marginBottom: '40px' }}>
+              <ScoreGauge score={report.visibility_score} size="lg" />
+            </div>
 
-          {/* Summary */}
-          <section className="mb-12">
-            <div className="card">
-              <h2 className="text-lg font-medium mb-3">Summary</h2>
-              <p className="text-[var(--text-mid)] leading-relaxed">
+            {/* Summary */}
+            <div style={{ marginBottom: '40px' }}>
+              <h2
+                className="text-[var(--green)] font-mono uppercase tracking-wider"
+                style={{ fontSize: '11px', marginBottom: '16px', letterSpacing: '0.1em' }}
+              >
+                Summary
+              </h2>
+              <p
+                className="text-[var(--text-mid)]"
+                style={{ fontSize: '15px', lineHeight: '1.7', maxWidth: '720px' }}
+              >
                 {report.summary}
               </p>
             </div>
-          </section>
 
-          {/* Platform breakdown */}
-          <section className="mb-12">
-            <h2 className="text-lg font-medium mb-4">Platform Breakdown</h2>
-            <PlatformResults scores={report.platform_scores} />
-          </section>
+            {/* Platform breakdown */}
+            <div>
+              <h2
+                className="text-[var(--green)] font-mono uppercase tracking-wider"
+                style={{ fontSize: '11px', marginBottom: '20px', letterSpacing: '0.1em' }}
+              >
+                Platform Breakdown
+              </h2>
+              <PlatformResults scores={report.platform_scores} />
+            </div>
+          </div>
 
-          {/* Competitors */}
-          <section className="mb-12">
-            <CompetitorsList competitors={report.top_competitors || []} />
-          </section>
-
-          {/* Sample responses */}
-          {responses && responses.length > 0 && (
-            <section className="mb-12">
-              <h2 className="text-lg font-medium mb-4">Sample AI Responses</h2>
-              <div className="space-y-4">
-                {responses.slice(0, 3).map((response, index) => (
-                  <div key={index} className="card">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div
-                        className="w-2 h-2"
-                        style={{
-                          backgroundColor:
-                            response.platform === 'chatgpt'
-                              ? 'var(--red)'
-                              : response.platform === 'claude'
-                                ? 'var(--green)'
-                                : 'var(--blue)',
-                        }}
-                      />
-                      <span className="font-mono text-xs text-[var(--text-dim)] uppercase">
-                        {response.platform}
-                      </span>
-                      {response.domain_mentioned && (
-                        <span className="ml-auto text-xs text-[var(--green)] font-mono">
-                          ✓ Mentioned
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[var(--text-dim)] text-sm mb-3 font-mono">
-                      Q: {response.prompt?.prompt_text}
-                    </p>
-                    <p className="text-[var(--text-mid)] text-sm leading-relaxed">
-                      {response.response_text?.slice(0, 400)}
-                      {(response.response_text?.length || 0) > 400 && '...'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+          {/* Tabbed Content */}
+          <ReportTabs
+            analysis={analysis}
+            responses={responses}
+            prompts={prompts}
+            brandAwareness={brandAwareness}
+            crawlData={crawlData ?? undefined}
+            visibilityScore={report.visibility_score}
+            platformScores={report.platform_scores}
+            competitors={report.top_competitors}
+            domain={domain}
+            onUpgradeClick={handleUpgradeClick}
+          />
 
           {/* CTA section */}
-          <section className="text-center py-12 border-t border-[var(--border)]">
-            <h2 className="text-xl font-medium mb-3">
-              Want to improve your AI visibility?
+          <section
+            className="text-center border-t border-[var(--border)]"
+            style={{ paddingTop: '56px', marginTop: '56px' }}
+          >
+            <div className="flex justify-center" style={{ marginBottom: '20px' }}>
+              <Sparkles size={36} className="text-[var(--green)]" />
+            </div>
+            <h2
+              className="font-medium text-[var(--text)]"
+              style={{ fontSize: '1.375rem', marginBottom: '16px' }}
+            >
+              Want to outrank your competitors?
             </h2>
-            <p className="text-[var(--text-mid)] mb-6 max-w-md mx-auto">
-              Get ongoing monitoring, detailed recommendations, and
+            <p
+              className="text-[var(--text-mid)]"
+              style={{
+                marginBottom: '28px',
+                maxWidth: '480px',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+                lineHeight: '1.6'
+              }}
+            >
+              Unlock competitor analysis, personalized action plans, and
               ready-to-ship PRDs for your AI coding tools.
             </p>
             <button
               onClick={() => setShowModal(true)}
-              className="form-button inline-block"
+              className="form-button inline-flex items-center gap-2"
+              style={{ width: 'auto', padding: '18px 32px' }}
             >
-              Get Started →
+              <Sparkles size={16} />
+              Upgrade for Full Access
             </button>
           </section>
 
           {/* Footer */}
-          <footer className="text-center py-8">
+          <footer className="text-center" style={{ paddingTop: '48px', paddingBottom: '24px' }}>
             <p className="font-mono text-xs text-[var(--text-dim)]">
               outrankllm.io — GEO for Vibe Coders
             </p>
@@ -216,6 +273,6 @@ export function ReportClient({ data }: ReportClientProps) {
           onOptIn={handleOptIn}
         />
       )}
-    </>
+    </VerificationGate>
   )
 }

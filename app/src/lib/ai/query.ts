@@ -1,24 +1,14 @@
 /**
  * LLM Query Engine
- * Queries multiple AI platforms and analyzes responses
+ * Queries multiple AI platforms via Vercel AI Gateway
  */
 
-import { generateText } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { generateText, createGateway } from 'ai'
+import { trackCost } from './costs'
 
-// Initialize providers
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-})
-
-const anthropic = createAnthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-})
-
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_AI_API_KEY || '',
+// Initialize Vercel AI Gateway
+const gateway = createGateway({
+  apiKey: process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '',
 })
 
 export type Platform = 'chatgpt' | 'claude' | 'gemini'
@@ -42,55 +32,55 @@ const SYSTEM_PROMPT = `You are a helpful assistant providing information about b
 async function queryPlatform(
   platform: Platform,
   prompt: string,
-  domain: string
+  domain: string,
+  runId?: string
 ): Promise<QueryResult> {
   const startTime = Date.now()
 
   try {
     let response: string
 
-    switch (platform) {
-      case 'chatgpt':
-        const openaiResult = await generateText({
-          model: openai('gpt-4o'),
-          system: SYSTEM_PROMPT,
-          prompt,
-          maxOutputTokens: 1000,
-        })
-        response = openaiResult.text
-        break
-
-      case 'claude':
-        const claudeResult = await generateText({
-          model: anthropic('claude-sonnet-4-20250514'),
-          system: SYSTEM_PROMPT,
-          prompt,
-          maxOutputTokens: 1000,
-        })
-        response = claudeResult.text
-        break
-
-      case 'gemini':
-        const geminiResult = await generateText({
-          model: google('gemini-2.0-flash-exp'),
-          system: SYSTEM_PROMPT,
-          prompt,
-          maxOutputTokens: 1000,
-        })
-        response = geminiResult.text
-        break
-
-      default:
-        throw new Error(`Unknown platform: ${platform}`)
+    // Map platform to Vercel AI Gateway model string
+    const modelMap: Record<Platform, string> = {
+      chatgpt: 'openai/gpt-4o',
+      claude: 'anthropic/claude-sonnet-4-20250514',
+      gemini: 'google/gemini-2.0-flash',
     }
 
+    const modelString = modelMap[platform]
+    if (!modelString) {
+      throw new Error(`Unknown platform: ${platform}`)
+    }
+
+    const result = await generateText({
+      model: gateway(modelString),
+      system: SYSTEM_PROMPT,
+      prompt,
+      maxOutputTokens: 1000,
+    })
+    response = result.text
+
     const responseTimeMs = Date.now() - startTime
+
+    // Track cost if runId is provided
+    if (runId && result.usage) {
+      await trackCost({
+        runId,
+        step: `query_${platform}`,
+        model: modelString,
+        usage: {
+          inputTokens: result.usage.inputTokens || 0,
+          outputTokens: result.usage.outputTokens || 0,
+          totalTokens: (result.usage.inputTokens || 0) + (result.usage.outputTokens || 0),
+        },
+      })
+    }
 
     // Check if domain is mentioned
     const { mentioned, position } = checkDomainMention(response, domain)
 
-    // Extract competitors
-    const competitors = extractCompetitors(response, domain)
+    // Extract competitors using AI
+    const competitors = await extractCompetitors(response, domain, runId)
 
     return {
       platform,
@@ -142,52 +132,88 @@ function checkDomainMention(
   return { mentioned: false, position: null }
 }
 
+const COMPETITOR_EXTRACTION_PROMPT = `Extract company/business names mentioned in this AI response. Only extract actual company names, NOT:
+- Generic terms (e.g., "AI consulting firms", "marketing agencies")
+- Locations (cities, countries, regions)
+- Common nouns or phrases
+- The target domain being searched for
+
+Target domain to EXCLUDE: {domain}
+
+AI Response:
+{response}
+
+Return a JSON array of company names found. If no specific companies are mentioned, return an empty array.
+Example: ["Accenture", "Deloitte", "PwC"]
+Return ONLY the JSON array, nothing else.`
+
 /**
- * Extract competitor mentions from response
+ * Extract competitor mentions from response using AI
  */
-function extractCompetitors(
+async function extractCompetitors(
   response: string,
-  domain: string
-): { name: string; context: string }[] {
-  const competitors: { name: string; context: string }[] = []
-
-  // Look for patterns that indicate company recommendations
-  // This is a simplified extraction - in production you might use NER
-  const patterns = [
-    /(?:recommend|suggest|consider|try|check out|look at)\s+([A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)?)/g,
-    /([A-Z][a-zA-Z0-9]+(?:\.[a-z]{2,4})?)\s+(?:is|are|offers|provides)/g,
-    /companies?\s+(?:like|such as)\s+([A-Z][a-zA-Z0-9]+(?:,\s*[A-Z][a-zA-Z0-9]+)*)/g,
-  ]
-
-  for (const pattern of patterns) {
-    const matches = response.matchAll(pattern)
-    for (const match of matches) {
-      const name = match[1].trim()
-
-      // Skip if it's the target domain
-      if (name.toLowerCase().includes(domain.toLowerCase().split('.')[0])) {
-        continue
-      }
-
-      // Skip common words that might match
-      if (['The', 'This', 'That', 'Some', 'Many', 'Here', 'These'].includes(name)) {
-        continue
-      }
-
-      // Extract context around the mention
-      const index = response.indexOf(name)
-      const start = Math.max(0, index - 30)
-      const end = Math.min(response.length, index + name.length + 30)
-      const context = response.substring(start, end).trim()
-
-      // Check if already added
-      if (!competitors.find((c) => c.name.toLowerCase() === name.toLowerCase())) {
-        competitors.push({ name, context: `...${context}...` })
-      }
-    }
+  domain: string,
+  runId?: string
+): Promise<{ name: string; context: string }[]> {
+  // Skip extraction if response is too short or empty
+  if (!response || response.length < 50) {
+    return []
   }
 
-  return competitors.slice(0, 10) // Limit to 10 competitors
+  try {
+    const prompt = COMPETITOR_EXTRACTION_PROMPT
+      .replace('{domain}', domain)
+      .replace('{response}', response.slice(0, 2000)) // Limit response length
+
+    const modelString = 'openai/gpt-4o-mini'
+    const result = await generateText({
+      model: gateway(modelString), // Use cheaper model for extraction
+      prompt,
+      maxOutputTokens: 200,
+    })
+
+    // Track cost if runId is provided
+    if (runId && result.usage) {
+      await trackCost({
+        runId,
+        step: 'competitors',
+        model: modelString,
+        usage: {
+          inputTokens: result.usage.inputTokens || 0,
+          outputTokens: result.usage.outputTokens || 0,
+          totalTokens: (result.usage.inputTokens || 0) + (result.usage.outputTokens || 0),
+        },
+      })
+    }
+
+    // Parse JSON response
+    const jsonMatch = result.text.match(/\[[\s\S]*\]/)
+    if (!jsonMatch) {
+      return []
+    }
+
+    const names = JSON.parse(jsonMatch[0]) as string[]
+
+    // Filter out the target domain and return with context
+    const domainBase = domain.toLowerCase().split('.')[0]
+    return names
+      .filter(name => !name.toLowerCase().includes(domainBase))
+      .slice(0, 5) // Limit to 5 per response
+      .map(name => {
+        // Extract context around the mention
+        const index = response.toLowerCase().indexOf(name.toLowerCase())
+        if (index !== -1) {
+          const start = Math.max(0, index - 30)
+          const end = Math.min(response.length, index + name.length + 30)
+          const context = response.substring(start, end).trim()
+          return { name, context: `...${context}...` }
+        }
+        return { name, context: '' }
+      })
+  } catch (error) {
+    console.error('Error extracting competitors:', error)
+    return []
+  }
 }
 
 /**
@@ -195,13 +221,14 @@ function extractCompetitors(
  */
 export async function queryAllPlatforms(
   prompt: string,
-  domain: string
+  domain: string,
+  runId?: string
 ): Promise<QueryResult[]> {
   const platforms: Platform[] = ['chatgpt', 'claude', 'gemini']
 
   // Query all platforms in parallel
   const results = await Promise.all(
-    platforms.map((platform) => queryPlatform(platform, prompt, domain))
+    platforms.map((platform) => queryPlatform(platform, prompt, domain, runId))
   )
 
   return results
@@ -213,14 +240,15 @@ export async function queryAllPlatforms(
 export async function queryAllPlatformsWithPrompts(
   prompts: { id: string; text: string }[],
   domain: string,
-  onProgress?: (completed: number, total: number) => void
+  onProgress?: (completed: number, total: number) => void,
+  runId?: string
 ): Promise<{ promptId: string; results: QueryResult[] }[]> {
   const allResults: { promptId: string; results: QueryResult[] }[] = []
   const total = prompts.length
 
   for (let i = 0; i < prompts.length; i++) {
     const prompt = prompts[i]
-    const results = await queryAllPlatforms(prompt.text, domain)
+    const results = await queryAllPlatforms(prompt.text, domain, runId)
     allResults.push({ promptId: prompt.id, results })
 
     onProgress?.(i + 1, total)

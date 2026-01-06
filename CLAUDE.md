@@ -7,6 +7,7 @@
 ### Core Value Proposition
 - Scan websites to analyze AI visibility
 - Track how AI assistants recommend (or don't recommend) your business
+- Test brand awareness across AI platforms
 - Generate ready-to-ship PRDs for AI coding tools (Cursor, Claude Code, Windsurf)
 
 ## Tech Stack
@@ -16,6 +17,8 @@
 - **Database**: Supabase (PostgreSQL)
 - **Hosting**: Vercel
 - **Domain**: outrankllm.io (Cloudflare DNS)
+- **Email**: Resend
+- **AI Gateway**: Vercel AI SDK (OpenAI, Anthropic, Google)
 
 ## Project Structure
 
@@ -27,6 +30,10 @@ outrankllm/
 │   ├── src/
 │   │   ├── app/                  # Next.js App Router pages
 │   │   │   ├── api/              # API routes
+│   │   │   │   ├── scan/         # Initiate scans
+│   │   │   │   ├── process/      # Process scan results
+│   │   │   │   ├── verify/       # Email verification
+│   │   │   │   └── feature-flags/# Feature flag API
 │   │   │   ├── coming-soon/      # Pre-launch landing page
 │   │   │   ├── learn/            # GEO guides & documentation
 │   │   │   ├── pricing/          # Pricing page
@@ -37,10 +44,12 @@ outrankllm/
 │   │   │   ├── landing/          # Landing page components
 │   │   │   ├── mdx/              # MDX rendering components
 │   │   │   ├── nav/              # Navigation
-│   │   │   └── report/           # Report components
+│   │   │   └── report/           # Report components (ReportTabs, etc.)
 │   │   ├── lib/                  # Utilities & services
-│   │   │   ├── ai/               # AI query & analysis
-│   │   │   ├── email/            # Email sending
+│   │   │   ├── ai/               # AI query, analysis, brand-awareness
+│   │   │   ├── email/            # Resend email integration
+│   │   │   ├── geo/              # Geography detection
+│   │   │   ├── features/         # Feature flags
 │   │   │   ├── supabase/         # Database clients
 │   │   │   └── guides.ts         # MDX guide utilities
 │   │   └── middleware.ts         # Preview/coming-soon protection
@@ -98,11 +107,35 @@ This affects: `max-w-*`, `mx-auto`, `gap-*`, `p-*` with custom values, etc.
 - Monospace used for labels, buttons, technical elements
 
 ### Key Components
-- `Ghost` - Animated mascot (eyes blink, fades in/out)
+- `Ghost` - Animated mascot (eyes blink, fades in/out) - used on landing page
 - `FloatingPixels` - Ambient background particles
 - `EmailForm` - Email + domain capture form
 - `Nav` - Fixed navigation bar
 - `Footer` - Fixed bottom footer
+- `ReportTabs` - Tabbed report interface with multiple sections
+- `VerificationGate` - Email verification wrapper for reports
+
+## Report Tabs Structure
+
+The report page uses a tabbed interface (`ReportTabs.tsx`):
+
+1. **Overview** - What the site is about (business analysis)
+2. **AI Responses** - Questions asked to LLMs and their responses
+3. **Readiness** - Technical SEO/GEO readiness indicators
+4. **Measurements** - AI Visibility score breakdown
+5. **Competitors** - Detected competitors (teased/locked for free tier)
+6. **Brand Awareness** - Direct brand recognition tests across AI platforms
+7. **Actions** - Action plans (locked)
+8. **PRD** - PRD generation (locked)
+
+### Brand Awareness Feature
+
+Tests what AI assistants actually know about a business:
+- **Brand Recall**: "What do you know about [business]?"
+- **Service Check**: Tests if AI knows specific services the business offers
+- **Competitor Compare**: How does AI position the business vs competitors
+
+Different from AI Responses tab - Brand Awareness directly asks about the brand, while AI Responses asks generic questions to see if the brand is mentioned organically.
 
 ## Environment Variables
 
@@ -114,8 +147,12 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# Vercel AI
+# Vercel AI Gateway
 VERCEL_AI_GATEWAY_KEY=
+
+# Resend Email
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=reports@outrankllm.io
 
 # App
 NEXT_PUBLIC_APP_URL=https://outrankllm.io
@@ -160,17 +197,30 @@ category: "Fundamentals"
 ## API Routes
 
 - `POST /api/scan` - Initiate domain scan (email + domain)
-- `POST /api/process` - Process scan results
+- `POST /api/process` - Process scan results (crawl, analyze, query LLMs, brand awareness)
+- `GET /api/scan/status` - Poll scan progress
+- `GET /api/verify` - Email verification (magic link)
+- `POST /api/resend-verification` - Resend verification email
+- `GET /api/feature-flags` - Get feature flags for a tier
 - `POST /api/opt-in` - Handle report opt-in
 
 ## Database Schema
 
-See `supabase/migrations/001_initial_schema.sql` for full schema.
+See `supabase/migrations/` for full schema:
+- `001_initial_schema.sql` - Core tables (leads, scan_runs, reports, etc.)
+- `002_email_verification.sql` - Email verification, feature flags, subscriptions
+- `003_brand_awareness.sql` - Brand awareness results table
 
 Key tables:
-- `scans` - Scan requests and status
-- `reports` - Generated reports
-- `users` - User accounts (future)
+- `leads` - User email + domain, verification status, tier
+- `scan_runs` - Scan requests and status
+- `site_analyses` - Website analysis results
+- `llm_responses` - AI query responses
+- `brand_awareness_results` - Direct brand awareness test results
+- `reports` - Generated reports with scores
+- `feature_flags` - Tiered feature access
+- `email_verification_tokens` - Magic link tokens
+- `subscriptions` - Stripe subscription tracking (future)
 
 ## Git Workflow
 
@@ -198,9 +248,17 @@ Edit `src/components/nav/Nav.tsx`
 ### Update pricing
 Edit `src/app/pricing/page.tsx` - plans array at top of file
 
+### Add new report tab
+1. Add tab to `tabs` array in `ReportTabs.tsx`
+2. Create tab component function
+3. Add conditional render in the tabs content section
+4. Pass any needed props from ReportClient
+
 ## Notes
 
-- Ghost mascot disappears on hover (Easter egg)
+- Ghost mascot on landing page only (removed from report header)
 - Floating pixels use CSS animations, no JS
 - Forms use monospace font for technical feel
 - Green (#22c55e) is the primary accent throughout
+- Email verification required to view reports (magic link flow)
+- Feature flags control tier-based access (free/pro/enterprise)

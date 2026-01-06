@@ -11,7 +11,7 @@ interface GhostProps {
 const sizes = {
   sm: { width: 40, height: 50 },
   md: { width: 64, height: 80 },
-  lg: { width: 96, height: 120 },
+  lg: { width: 72, height: 90 },
 }
 
 export function Ghost({ className, size = 'md' }: GhostProps) {

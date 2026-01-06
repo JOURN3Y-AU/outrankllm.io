@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { ScanProgressModal } from './ScanProgressModal'
 
 interface EmailFormProps {
   onSuccess?: (data: { email: string; domain: string; scanId: string }) => void
@@ -12,6 +13,9 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
   const [domain, setDomain] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [scanId, setScanId] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [cleanedDomain, setCleanedDomain] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -21,7 +25,9 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
     // Clean domain (remove protocol if present)
     let cleanDomain = domain.trim().toLowerCase()
     cleanDomain = cleanDomain.replace(/^https?:\/\//, '')
+    cleanDomain = cleanDomain.replace(/^www\./, '')
     cleanDomain = cleanDomain.replace(/\/$/, '')
+    setCleanedDomain(cleanDomain)
 
     try {
       const response = await fetch('/api/scan', {
@@ -36,27 +42,23 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         throw new Error(data.error || 'Something went wrong')
       }
 
+      setScanId(data.scanId)
+      setShowModal(true)
       setStatus('success')
-      onSuccess?.({ email, domain: cleanDomain, scanId: data.scanId })
+      onSuccess?.({ email: email.trim(), domain: cleanDomain, scanId: data.scanId })
     } catch (err) {
       setStatus('error')
       setError(err instanceof Error ? err.message : 'Something went wrong')
     }
   }
 
-  if (status === 'success') {
-    return (
-      <div className="w-full">
-        <div className="card text-center">
-          <div className="text-[var(--green)] text-2xl mb-2">✓</div>
-          <h3 className="text-lg font-medium mb-2">We&apos;re scanning your site</h3>
-          <p className="tagline">
-            We&apos;ll email you at <span className="text-[var(--text-mid)]">{email}</span> when
-            your report is ready. This usually takes 2-3 minutes.
-          </p>
-        </div>
-      </div>
-    )
+  const handleModalClose = () => {
+    setShowModal(false)
+    // Reset form for another scan
+    setEmail('')
+    setDomain('')
+    setStatus('idle')
+    setScanId(null)
   }
 
   return (
@@ -88,7 +90,7 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
           {status === 'loading' ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Scanning...
+              Starting...
             </>
           ) : (
             'Get Free Report →'
@@ -100,6 +102,17 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         <p className="mt-3 text-[var(--red)] font-mono text-sm text-center">
           {error}
         </p>
+      )}
+
+      {/* Progress Modal */}
+      {scanId && (
+        <ScanProgressModal
+          scanId={scanId}
+          domain={cleanedDomain}
+          email={email.trim()}
+          isOpen={showModal}
+          onClose={handleModalClose}
+        />
       )}
     </div>
   )

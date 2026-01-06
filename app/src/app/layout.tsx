@@ -29,6 +29,14 @@ export const metadata: Metadata = {
     "generative engine optimization",
   ],
   authors: [{ name: "outrankllm" }],
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/apple-icon.svg', type: 'image/svg+xml' },
+    ],
+  },
   openGraph: {
     title: "outrankllm.io | AI Visibility for Vibe Coders",
     description: "Your vibe-coded site is invisible to ChatGPT. We fix that.",

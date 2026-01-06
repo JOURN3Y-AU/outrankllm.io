@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
+import crypto from 'crypto'
 
 // Validation schema
 const ScanRequestSchema = z.object({
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
         { email, domain: cleanDomain },
         { onConflict: 'email,domain', ignoreDuplicates: false }
       )
-      .select('id')
+      .select('id, email_verified')
       .single()
 
     if (leadError) {
@@ -69,6 +70,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Generate verification token for magic link
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + 24) // 24 hour expiry
+
+    // Store verification token
+    const { error: tokenError } = await supabase
+      .from('email_verification_tokens')
+      .insert({
+        lead_id: lead.id,
+        run_id: scanRun.id,
+        token: verificationToken,
+        email: email,
+        expires_at: expiresAt.toISOString()
+      })
+
+    if (tokenError) {
+      console.error('Error creating verification token:', tokenError)
+      // Continue anyway - we can still process the scan
+    }
+
     // Trigger background processing (fire and forget)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     fetch(`${appUrl}/api/process`, {
@@ -78,6 +100,8 @@ export async function POST(request: NextRequest) {
         scanId: scanRun.id,
         domain: cleanDomain,
         email,
+        verificationToken, // Pass token for email sending
+        leadId: lead.id,
       }),
     }).catch((err) => {
       console.error('Failed to trigger background processing:', err)
@@ -86,7 +110,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       scanId: scanRun.id,
-      message: 'Scan initiated. You will receive an email when the report is ready.',
+      message: 'Scan initiated. Check your email for a verification link to view your report.',
     })
   } catch (error) {
     console.error('Scan API error:', error)

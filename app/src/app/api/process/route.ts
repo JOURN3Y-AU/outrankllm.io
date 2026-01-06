@@ -8,7 +8,13 @@ import {
   calculateVisibilityScore,
   extractTopCompetitors,
 } from '@/lib/ai/query'
-import { sendReportReadyEmail } from '@/lib/email/send'
+import {
+  generateBrandAwarenessQueries,
+  runBrandAwarenessQueries,
+} from '@/lib/ai/brand-awareness'
+import { sendVerificationEmail } from '@/lib/email/resend'
+import { detectGeography, extractTldCountry } from '@/lib/geo/detect'
+import crypto from 'crypto'
 
 // Allow up to 5 minutes for processing
 export const maxDuration = 300
@@ -17,6 +23,8 @@ interface ProcessRequest {
   scanId: string
   domain: string
   email: string
+  verificationToken?: string
+  leadId?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -24,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: ProcessRequest = await request.json()
-    const { scanId, domain, email } = body
+    const { scanId, domain, email, verificationToken, leadId } = body
 
     if (!scanId || !domain || !email) {
       return NextResponse.json(
@@ -43,34 +51,69 @@ export async function POST(request: NextRequest) {
     const crawlResult = await crawlSite(domain)
     console.log(`[${scanId}] Crawled ${crawlResult.totalPages} pages`)
 
+    // Step 1.5: Enhanced geo detection
+    const tldCountry = extractTldCountry(domain)
+    console.log(`[${scanId}] TLD country: ${tldCountry || 'none detected'}`)
+
     // Update status: analyzing
     await updateScanStatus(supabase, scanId, 'analyzing', 25)
 
     // Step 2: Analyze the crawled content
     console.log(`[${scanId}] Analyzing website content`)
     const combinedContent = combineCrawledContent(crawlResult)
-    const analysis = await analyzeWebsite(combinedContent)
+    const analysis = await analyzeWebsite(combinedContent, tldCountry, scanId)
     console.log(`[${scanId}] Analysis complete: ${analysis.businessType}`)
 
-    // Save site analysis
+    // Enhanced geo detection - combine TLD + content + AI analysis
+    const geoResult = detectGeography(domain, combinedContent, analysis.location)
+    console.log(`[${scanId}] Geo detection: ${geoResult.location} (${geoResult.confidence})`)
+
+    // Use the combined geo result for location
+    const finalLocation = geoResult.location || analysis.location
+
+    // Check if any pages have meta descriptions
+    const hasMetaDescriptions = crawlResult.pages.some(p => p.hasMetaDescription)
+
+    // Save site analysis with enhanced geo fields and crawl data
     await supabase.from('site_analyses').insert({
       run_id: scanId,
       business_type: analysis.businessType,
       business_name: analysis.businessName,
       services: analysis.services,
-      location: analysis.location,
+      products: analysis.products || [],
+      location: finalLocation,
+      locations: analysis.locations || [],
       target_audience: analysis.targetAudience,
       key_phrases: analysis.keyPhrases,
+      industry: analysis.industry,
       pages_crawled: crawlResult.totalPages,
-      raw_content: combinedContent.slice(0, 50000), // Limit stored content
+      raw_content: combinedContent.slice(0, 50000),
+      tld_country: geoResult.tldCountry,
+      detected_country: geoResult.country,
+      geo_confidence: geoResult.confidence,
+      // New crawl data fields
+      has_sitemap: crawlResult.hasSitemap,
+      has_robots_txt: crawlResult.hasRobotsTxt,
+      schema_types: crawlResult.schemaTypes,
+      extracted_locations: crawlResult.extractedLocations,
+      extracted_services: crawlResult.extractedServices,
+      extracted_products: crawlResult.extractedProducts,
+      has_meta_descriptions: hasMetaDescriptions,
     })
 
     // Update status: generating prompts
     await updateScanStatus(supabase, scanId, 'generating', 40)
 
-    // Step 3: Generate prompts
+    // Step 3: Generate prompts with enhanced location data
     console.log(`[${scanId}] Generating prompts`)
-    const generatedPrompts = await generatePrompts(analysis, domain)
+    const analysisWithEnhancedGeo = {
+      ...analysis,
+      location: finalLocation,
+      geoConfidence: geoResult.confidence,
+      city: geoResult.city,
+      country: geoResult.country,
+    }
+    const generatedPrompts = await generatePrompts(analysisWithEnhancedGeo, domain, scanId)
     console.log(`[${scanId}] Generated ${generatedPrompts.length} prompts`)
 
     // Save prompts to database
@@ -98,10 +141,10 @@ export async function POST(request: NextRequest) {
       savedPrompts.map((p: { id: string; prompt_text: string }) => ({ id: p.id, text: p.prompt_text })),
       domain,
       async (completed, total) => {
-        // Update progress during querying
         const progress = 50 + Math.round((completed / total) * 35)
         await updateScanStatus(supabase, scanId, 'querying', progress)
-      }
+      },
+      scanId // Pass runId for cost tracking
     )
 
     // Save LLM responses
@@ -121,16 +164,56 @@ export async function POST(request: NextRequest) {
 
     await supabase.from('llm_responses').insert(responseInserts)
 
-    // Step 5: Calculate scores
+    // Step 5: Calculate scores (do this early to get top competitors for brand awareness)
     console.log(`[${scanId}] Calculating visibility score`)
     const scores = calculateVisibilityScore(queryResults)
     const topCompetitors = extractTopCompetitors(queryResults)
 
+    // Step 5.5: Brand Awareness Queries
+    await updateScanStatus(supabase, scanId, 'brand_awareness', 88)
+    console.log(`[${scanId}] Running brand awareness tests`)
+
+    const brandQueries = generateBrandAwarenessQueries(
+      analysis,
+      domain,
+      topCompetitors[0]?.name // Compare against top competitor
+    )
+
+    const brandResults = await runBrandAwarenessQueries(
+      brandQueries,
+      scanId,
+      async (completed, total) => {
+        const progress = 88 + Math.round((completed / total) * 7) // 88-95%
+        await updateScanStatus(supabase, scanId, 'brand_awareness', progress)
+      }
+    )
+
+    // Save brand awareness results
+    if (brandResults.length > 0) {
+      await supabase.from('brand_awareness_results').insert(
+        brandResults.map(r => ({
+          run_id: scanId,
+          platform: r.platform,
+          query_type: r.queryType,
+          tested_entity: r.testedEntity,
+          tested_attribute: r.testedAttribute,
+          entity_recognized: r.recognized,
+          attribute_mentioned: r.attributeMentioned,
+          response_text: r.responseText,
+          confidence_score: r.confidenceScore,
+          compared_to: r.comparedTo,
+          positioning: r.positioning,
+          response_time_ms: r.responseTimeMs,
+        }))
+      )
+    }
+    console.log(`[${scanId}] Brand awareness tests complete: ${brandResults.length} results`)
+
     // Generate summary
     const summary = generateSummary(analysis, scores, topCompetitors, domain)
 
-    // Generate URL token
-    const urlToken = generateUrlToken()
+    // Generate URL token (use crypto for better randomness)
+    const urlToken = crypto.randomBytes(8).toString('hex')
 
     // Create report
     const { data: report, error: reportError } = await supabase
@@ -142,6 +225,7 @@ export async function POST(request: NextRequest) {
         platform_scores: scores.platformScores,
         top_competitors: topCompetitors,
         summary,
+        requires_verification: true,
       })
       .select('id, url_token')
       .single()
@@ -160,17 +244,70 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', scanId)
 
-    // Step 6: Send email notification
-    const reportUrl = `${process.env.NEXT_PUBLIC_APP_URL}/report/${report.url_token}`
-    console.log(`[${scanId}] Sending email to ${email}`)
-    await sendReportReadyEmail(email, domain, reportUrl, scores.overallScore)
+    // Step 6: Send verification email (instead of report-ready email)
+    console.log(`[${scanId}] Sending verification email to ${email}`)
+
+    // Use provided token or generate a new one
+    let tokenToUse = verificationToken
+    if (!tokenToUse) {
+      tokenToUse = crypto.randomBytes(32).toString('hex')
+      const expiresAt = new Date()
+      expiresAt.setHours(expiresAt.getHours() + 24)
+
+      // Get lead ID if not provided
+      let leadIdToUse = leadId
+      if (!leadIdToUse) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('email', email)
+          .eq('domain', domain)
+          .single()
+        leadIdToUse = lead?.id
+      }
+
+      if (leadIdToUse) {
+        await supabase.from('email_verification_tokens').insert({
+          lead_id: leadIdToUse,
+          run_id: scanId,
+          token: tokenToUse,
+          email: email,
+          expires_at: expiresAt.toISOString()
+        })
+      }
+    }
+
+    const emailResult = await sendVerificationEmail(email, tokenToUse, domain)
+
+    if (emailResult.success) {
+      // Log the email
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('email', email)
+        .eq('domain', domain)
+        .single()
+
+      if (lead) {
+        await supabase.from('email_logs').insert({
+          lead_id: lead.id,
+          run_id: scanId,
+          email_type: 'verification',
+          recipient: email,
+          resend_id: emailResult.messageId,
+          status: 'sent'
+        })
+      }
+    } else {
+      console.error(`[${scanId}] Failed to send verification email:`, emailResult.error)
+    }
 
     const processingTime = Date.now() - startTime
     console.log(`[${scanId}] Processing complete in ${processingTime}ms`)
 
     return NextResponse.json({
       success: true,
-      reportUrl,
+      reportToken: report.url_token,
       processingTimeMs: processingTime,
     })
   } catch (error) {
@@ -216,16 +353,6 @@ async function updateScanStatus(
       started_at: status === 'crawling' ? new Date().toISOString() : undefined,
     })
     .eq('id', scanId)
-}
-
-// Helper: Generate URL token
-function generateUrlToken(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < 12; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
 }
 
 // Helper: Generate summary text

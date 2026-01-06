@@ -3,6 +3,28 @@
  * Crawls a website to extract content for analysis
  */
 
+interface SchemaData {
+  type: string
+  name?: string
+  description?: string
+  address?: {
+    locality?: string
+    region?: string
+    country?: string
+    streetAddress?: string
+  }
+  geo?: {
+    latitude?: number
+    longitude?: number
+  }
+  areaServed?: string | string[]
+  serviceArea?: string | string[]
+  services?: string[]
+  products?: string[]
+  offers?: { name: string; description?: string }[]
+  locations?: string[]
+}
+
 interface CrawledPage {
   url: string
   path: string
@@ -12,18 +34,26 @@ interface CrawledPage {
   headings: string[]
   bodyText: string
   wordCount: number
+  schemaData: SchemaData[]
+  hasMetaDescription: boolean
 }
 
-interface CrawlResult {
+export interface CrawlResult {
   pages: CrawledPage[]
   totalPages: number
   domain: string
+  hasSitemap: boolean
+  hasRobotsTxt: boolean
+  schemaTypes: string[]
+  extractedLocations: string[]
+  extractedServices: string[]
+  extractedProducts: string[]
 }
 
 /**
  * Try to fetch and parse a sitemap
  */
-async function fetchSitemap(domain: string): Promise<string[]> {
+async function fetchSitemap(domain: string): Promise<{ urls: string[]; found: boolean }> {
   const sitemapUrls = [
     `https://${domain}/sitemap.xml`,
     `https://${domain}/sitemap_index.xml`,
@@ -52,14 +82,186 @@ async function fetchSitemap(domain: string): Promise<string[]> {
       }
 
       if (urls.length > 0) {
-        return urls.slice(0, 20) // Max 20 pages
+        return { urls: urls.slice(0, 20), found: true } // Max 20 pages
       }
     } catch {
       // Try next sitemap URL
     }
   }
 
-  return []
+  return { urls: [], found: false }
+}
+
+/**
+ * Check if robots.txt exists
+ */
+async function checkRobotsTxt(domain: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://${domain}/robots.txt`, {
+      headers: { 'User-Agent': 'outrankllm-crawler/1.0' },
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Extract JSON-LD schema markup from HTML
+ */
+function extractSchemaData(html: string): SchemaData[] {
+  const schemas: SchemaData[] = []
+
+  // Find all JSON-LD script tags
+  const scriptMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)
+
+  for (const match of scriptMatches) {
+    try {
+      const jsonText = match[1].trim()
+      const parsed = JSON.parse(jsonText)
+
+      // Handle both single objects and arrays
+      const items = Array.isArray(parsed) ? parsed : [parsed]
+
+      for (const item of items) {
+        const schema = parseSchemaItem(item)
+        if (schema) {
+          schemas.push(schema)
+        }
+
+        // Also check @graph if present
+        if (item['@graph'] && Array.isArray(item['@graph'])) {
+          for (const graphItem of item['@graph']) {
+            const graphSchema = parseSchemaItem(graphItem)
+            if (graphSchema) {
+              schemas.push(graphSchema)
+            }
+          }
+        }
+      }
+    } catch {
+      // Invalid JSON, skip
+    }
+  }
+
+  return schemas
+}
+
+/**
+ * Parse a single schema.org item
+ */
+function parseSchemaItem(item: Record<string, unknown>): SchemaData | null {
+  if (!item || typeof item !== 'object') return null
+
+  const type = (item['@type'] as string) || ''
+  if (!type) return null
+
+  const schema: SchemaData = { type }
+
+  // Extract name
+  if (item.name) schema.name = String(item.name)
+  if (item.description) schema.description = String(item.description)
+
+  // Extract address/location info
+  if (item.address && typeof item.address === 'object') {
+    const addr = item.address as Record<string, unknown>
+    schema.address = {
+      locality: addr.addressLocality ? String(addr.addressLocality) : undefined,
+      region: addr.addressRegion ? String(addr.addressRegion) : undefined,
+      country: addr.addressCountry ? String(addr.addressCountry) : undefined,
+      streetAddress: addr.streetAddress ? String(addr.streetAddress) : undefined,
+    }
+  }
+
+  // Extract geo
+  if (item.geo && typeof item.geo === 'object') {
+    const geo = item.geo as Record<string, unknown>
+    schema.geo = {
+      latitude: geo.latitude ? Number(geo.latitude) : undefined,
+      longitude: geo.longitude ? Number(geo.longitude) : undefined,
+    }
+  }
+
+  // Extract service areas
+  if (item.areaServed) {
+    if (Array.isArray(item.areaServed)) {
+      schema.areaServed = item.areaServed.map(a => {
+        if (typeof a === 'object' && a !== null) {
+          const obj = a as Record<string, unknown>
+          return obj.name ? String(obj.name) : String(a)
+        }
+        return String(a)
+      }).filter((s): s is string => typeof s === 'string')
+    } else if (typeof item.areaServed === 'object' && item.areaServed !== null) {
+      const obj = item.areaServed as Record<string, unknown>
+      schema.areaServed = obj.name ? String(obj.name) : String(item.areaServed)
+    } else {
+      schema.areaServed = String(item.areaServed)
+    }
+  }
+
+  if (item.serviceArea) {
+    if (Array.isArray(item.serviceArea)) {
+      schema.serviceArea = item.serviceArea.map(a => {
+        if (typeof a === 'object' && a !== null) {
+          const obj = a as Record<string, unknown>
+          return obj.name ? String(obj.name) : String(a)
+        }
+        return String(a)
+      }).filter((s): s is string => typeof s === 'string')
+    } else if (typeof item.serviceArea === 'object' && item.serviceArea !== null) {
+      const obj = item.serviceArea as Record<string, unknown>
+      schema.serviceArea = obj.name ? String(obj.name) : String(item.serviceArea)
+    } else {
+      schema.serviceArea = String(item.serviceArea)
+    }
+  }
+
+  // Extract services (for Service, ProfessionalService schemas)
+  if (item.hasOfferCatalog && typeof item.hasOfferCatalog === 'object') {
+    const catalog = item.hasOfferCatalog as Record<string, unknown>
+    if (catalog.itemListElement && Array.isArray(catalog.itemListElement)) {
+      schema.services = catalog.itemListElement
+        .filter((i): i is Record<string, unknown> => typeof i === 'object' && i !== null)
+        .map(i => i.name ? String(i.name) : '')
+        .filter(Boolean)
+    }
+  }
+
+  // Extract offers (products/services being offered)
+  if (item.makesOffer && Array.isArray(item.makesOffer)) {
+    schema.offers = item.makesOffer
+      .filter((o): o is Record<string, unknown> => typeof o === 'object' && o !== null)
+      .map(o => ({
+        name: o.name ? String(o.name) : '',
+        description: o.description ? String(o.description) : undefined,
+      }))
+      .filter(o => o.name)
+  }
+
+  // Extract product info
+  if (type === 'Product' || type === 'Service') {
+    if (item.name) {
+      if (!schema.products) schema.products = []
+      schema.products.push(String(item.name))
+    }
+  }
+
+  // Extract locations from LocalBusiness, Organization, etc.
+  if (type.includes('LocalBusiness') || type === 'Organization' || type === 'Store') {
+    const locations: string[] = []
+    if (schema.address?.locality) {
+      let loc = schema.address.locality
+      if (schema.address.region) loc += `, ${schema.address.region}`
+      if (schema.address.country) loc += `, ${schema.address.country}`
+      locations.push(loc)
+    }
+    if (locations.length > 0) {
+      schema.locations = locations
+    }
+  }
+
+  return schema
 }
 
 /**
@@ -202,6 +404,9 @@ async function extractPageContent(url: string): Promise<CrawledPage | null> {
 
     const wordCount = bodyText.split(' ').filter((w) => w.length > 0).length
 
+    // Extract JSON-LD schema markup
+    const schemaData = extractSchemaData(html)
+
     return {
       url,
       path,
@@ -211,6 +416,8 @@ async function extractPageContent(url: string): Promise<CrawledPage | null> {
       headings: headings.slice(0, 20),
       bodyText: bodyText.slice(0, 5000), // Limit text length
       wordCount,
+      schemaData,
+      hasMetaDescription: !!description && description.length > 20,
     }
   } catch {
     return null
@@ -221,10 +428,14 @@ async function extractPageContent(url: string): Promise<CrawledPage | null> {
  * Main crawl function
  */
 export async function crawlSite(domain: string): Promise<CrawlResult> {
-  // Try sitemap first
-  let urls = await fetchSitemap(domain)
+  // Check for sitemap and robots.txt in parallel
+  const [sitemapResult, hasRobotsTxt] = await Promise.all([
+    fetchSitemap(domain),
+    checkRobotsTxt(domain),
+  ])
 
-  // Fall back to discovery if no sitemap
+  // Use sitemap URLs or fall back to discovery
+  let urls = sitemapResult.urls
   if (urls.length === 0) {
     urls = await discoverPages(domain, 15)
   }
@@ -245,10 +456,66 @@ export async function crawlSite(domain: string): Promise<CrawlResult> {
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
 
+  // Aggregate schema data from all pages
+  const allSchemas = pages.flatMap(p => p.schemaData)
+  const schemaTypes = [...new Set(allSchemas.map(s => s.type))]
+
+  // Extract locations from schema
+  const extractedLocations: string[] = []
+  for (const schema of allSchemas) {
+    if (schema.locations) {
+      extractedLocations.push(...schema.locations)
+    }
+    if (schema.areaServed) {
+      const areas = Array.isArray(schema.areaServed) ? schema.areaServed : [schema.areaServed]
+      extractedLocations.push(...areas.map(a => String(a)))
+    }
+    if (schema.serviceArea) {
+      const areas = Array.isArray(schema.serviceArea) ? schema.serviceArea : [schema.serviceArea]
+      extractedLocations.push(...areas.map(a => String(a)))
+    }
+    if (schema.address?.locality) {
+      let loc = schema.address.locality
+      if (schema.address.country) loc += `, ${schema.address.country}`
+      extractedLocations.push(loc)
+    }
+  }
+
+  // Extract services from schema
+  const extractedServices: string[] = []
+  for (const schema of allSchemas) {
+    if (schema.services) {
+      extractedServices.push(...schema.services)
+    }
+    if (schema.offers) {
+      extractedServices.push(...schema.offers.map(o => o.name))
+    }
+    if (schema.type === 'Service' && schema.name) {
+      extractedServices.push(schema.name)
+    }
+  }
+
+  // Extract products from schema
+  const extractedProducts: string[] = []
+  for (const schema of allSchemas) {
+    if (schema.products) {
+      extractedProducts.push(...schema.products)
+    }
+    if (schema.type === 'Product' && schema.name) {
+      extractedProducts.push(schema.name)
+    }
+  }
+
   return {
     pages,
     totalPages: pages.length,
     domain,
+    hasSitemap: sitemapResult.found,
+    hasRobotsTxt,
+    schemaTypes,
+    extractedLocations: [...new Set(extractedLocations)],
+    extractedServices: [...new Set(extractedServices)],
+    extractedProducts: [...new Set(extractedProducts)],
   }
 }
 
@@ -260,6 +527,23 @@ export function combineCrawledContent(result: CrawlResult): string {
 
   sections.push(`Domain: ${result.domain}`)
   sections.push(`Pages crawled: ${result.totalPages}`)
+  sections.push(`Has sitemap: ${result.hasSitemap ? 'Yes' : 'No'}`)
+  sections.push(`Has robots.txt: ${result.hasRobotsTxt ? 'Yes' : 'No'}`)
+
+  // Include schema-extracted data upfront for the AI
+  if (result.extractedLocations.length > 0) {
+    sections.push(`\nLOCATIONS FROM SCHEMA MARKUP: ${result.extractedLocations.join(', ')}`)
+  }
+  if (result.extractedServices.length > 0) {
+    sections.push(`SERVICES FROM SCHEMA MARKUP: ${result.extractedServices.join(', ')}`)
+  }
+  if (result.extractedProducts.length > 0) {
+    sections.push(`PRODUCTS FROM SCHEMA MARKUP: ${result.extractedProducts.join(', ')}`)
+  }
+  if (result.schemaTypes.length > 0) {
+    sections.push(`SCHEMA TYPES FOUND: ${result.schemaTypes.join(', ')}`)
+  }
+
   sections.push('')
 
   for (const page of result.pages) {
