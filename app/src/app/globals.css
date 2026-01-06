@@ -1,0 +1,715 @@
+@import "tailwindcss";
+
+/* ===========================================
+   OUTRANKLLM.IO DESIGN SYSTEM
+   Industrial-Utilitarian Dark Theme
+   For Vibe Coders Who Build in Public
+   =========================================== */
+
+:root {
+  /* Core Palette - Near-black foundation with strategic pops */
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-elevated: #1a1a1a;
+  --border: #262626;
+  --border-subtle: #1f1f1f;
+
+  /* Text Hierarchy - High contrast for terminal feel */
+  --text: #fafafa;
+  --text-mid: #a3a3a3;
+  --text-dim: #525252;
+  --text-ghost: #333333;
+
+  /* Signal Colors - Platform indicators + accents */
+  --green: #22c55e;
+  --green-dim: #16a34a;
+  --green-glow: rgba(34, 197, 94, 0.15);
+  --red: #ef4444;
+  --red-dim: #dc2626;
+  --blue: #3b82f6;
+  --blue-dim: #2563eb;
+  --amber: #f59e0b;
+  --amber-dim: #d97706;
+
+  /* Spacing Scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Typography */
+  --font-display: var(--font-outfit), 'Outfit', system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), 'DM Mono', 'Fira Code', monospace;
+
+  /* Transitions */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+}
+
+/* ===========================================
+   BASE RESET & DEFAULTS
+   =========================================== */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-display);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+/* ===========================================
+   GRID BACKGROUND
+   Dot matrix pattern - industrial/technical feel
+   =========================================== */
+
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scanline overlay for extra texture */
+.grid-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+}
+
+/* ===========================================
+   FLOATING PIXELS
+   Ambient particles that drift with parallax
+   =========================================== */
+
+.pixels-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.pixel {
+  position: absolute;
+  animation: drift 25s infinite ease-in-out;
+  will-change: transform;
+}
+
+.pixel.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.pixel.green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.pixel.blue { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+.pixel.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+.pixel.sm { width: 6px; height: 6px; }
+.pixel.md { width: 10px; height: 10px; }
+.pixel.lg { width: 14px; height: 14px; }
+
+@keyframes drift {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.8;
+  }
+  25% {
+    transform: translate(15px, -25px) scale(1.1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-10px, -15px) scale(0.9);
+    opacity: 0.6;
+  }
+  75% {
+    transform: translate(20px, 10px) scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+/* ===========================================
+   GHOST MASCOT ANIMATIONS
+   The invisible → visible story in motion
+   =========================================== */
+
+.ghost {
+  position: relative;
+  cursor: pointer;
+  transition: opacity var(--duration-normal) var(--ease-out-expo);
+  animation: ghost-float 3s infinite ease-in-out;
+}
+
+.ghost img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Float Animation - Subtle hovering, alive feel */
+@keyframes ghost-float {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(2px, -4px) rotate(0.5deg);
+  }
+  50% {
+    transform: translate(-1px, -2px) rotate(-0.5deg);
+  }
+  75% {
+    transform: translate(1px, -5px) rotate(0.3deg);
+  }
+}
+
+/* Blink Animation - Quick eye close for personality */
+@keyframes ghost-blink {
+  0%, 90%, 100% { opacity: 0; }
+  92%, 98% { opacity: 1; }
+}
+
+@keyframes ghost-blink-inverse {
+  0%, 90%, 100% { opacity: 1; }
+  92%, 98% { opacity: 0; }
+}
+
+/* Fade Visibility - The "invisible → visible" story */
+@keyframes ghost-fade {
+  0%, 70%, 100% { opacity: 1; }
+  80%, 90% { opacity: 0.15; }
+}
+
+/* Combined ghost animations */
+.ghost .eyes-open {
+  animation:
+    ghost-blink-inverse 4s infinite,
+    ghost-fade 8s infinite ease-in-out;
+}
+
+.ghost .eyes-closed {
+  opacity: 0;
+  animation: ghost-blink 4s infinite;
+}
+
+/* Hover disappear - Easter egg */
+.ghost:hover {
+  opacity: 0;
+}
+
+.ghost:hover::after {
+  content: '?';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  color: var(--text-dim);
+  animation: ghost-question 0.3s ease-out;
+}
+
+@keyframes ghost-question {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* ===========================================
+   TYPOGRAPHY
+   =========================================== */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+h1 {
+  font-size: clamp(2.2rem, 6vw, 3.5rem);
+}
+
+h2 {
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+}
+
+h3 {
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+}
+
+/* Monospace text - technical, labels */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+
+.tagline {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+/* Emphasis - green accent */
+.em, .accent {
+  color: var(--green);
+}
+
+/* ===========================================
+   LOGO STYLES
+   =========================================== */
+
+.logo-text {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.logo-text .mark {
+  color: var(--green);
+}
+
+.logo-sub {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* ===========================================
+   DIVIDER
+   =========================================== */
+
+.divider {
+  width: 48px;
+  height: 1px;
+  background: var(--border);
+  position: relative;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 1px;
+  background: var(--green);
+}
+
+/* ===========================================
+   FORM STYLES
+   =========================================== */
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 18px 20px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.form-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.form-input::placeholder {
+  color: var(--text-dim);
+}
+
+.form-button {
+  width: 100%;
+  background: var(--green);
+  color: var(--bg);
+  border: none;
+  padding: 18px 24px;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
+  white-space: nowrap;
+  margin-top: 4px;
+}
+
+.form-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.form-button:active {
+  transform: translateY(0);
+}
+
+.form-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ===========================================
+   PLATFORM INDICATORS
+   =========================================== */
+
+.platform {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.platform-pip {
+  width: 6px;
+  height: 6px;
+}
+
+.platform-pip.red { background: var(--red); }
+.platform-pip.green { background: var(--green); }
+.platform-pip.blue { background: var(--blue); }
+
+/* ===========================================
+   STATUS INDICATORS
+   =========================================== */
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.amber { background: var(--amber); }
+.status-dot.green { background: var(--green); }
+.status-dot.red { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ===========================================
+   CARDS & SURFACES
+   =========================================== */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+}
+
+.card-elevated {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+}
+
+/* ===========================================
+   SCORE GAUGE (for report page)
+   =========================================== */
+
+.score-gauge {
+  --score: 0;
+  --gauge-size: 180px;
+  --gauge-thickness: 12px;
+  width: var(--gauge-size);
+  height: var(--gauge-size);
+  position: relative;
+}
+
+.score-gauge-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--green) calc(var(--score) * 3.6deg),
+    var(--border) calc(var(--score) * 3.6deg)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--gauge-thickness)),
+    black calc(100% - var(--gauge-thickness))
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--gauge-thickness)),
+    black calc(100% - var(--gauge-thickness))
+  );
+}
+
+.score-gauge-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+}
+
+.score-gauge-number {
+  font-size: 3rem;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1;
+}
+
+.score-gauge-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: var(--space-xs);
+}
+
+/* ===========================================
+   MODAL OVERLAY
+   =========================================== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  animation: modal-fade-in 0.3s ease-out;
+}
+
+.modal-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--space-2xl);
+  max-width: 420px;
+  width: 90%;
+  z-index: 101;
+  animation: modal-slide-in 0.3s var(--ease-out-expo);
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ===========================================
+   LOADING STATES
+   =========================================== */
+
+.loading-bar {
+  height: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.loading-bar-progress {
+  height: 100%;
+  background: var(--green);
+  animation: loading-progress 2s ease-in-out infinite;
+}
+
+@keyframes loading-progress {
+  0% {
+    width: 0%;
+    margin-left: 0%;
+  }
+  50% {
+    width: 30%;
+    margin-left: 35%;
+  }
+  100% {
+    width: 0%;
+    margin-left: 100%;
+  }
+}
+
+/* Skeleton loading */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--border) 25%,
+    var(--surface-elevated) 50%,
+    var(--border) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===========================================
+   FOOTER
+   =========================================== */
+
+.footer {
+  position: fixed;
+  bottom: var(--space-lg);
+  left: var(--space-lg);
+  right: var(--space-lg);
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  z-index: 10;
+}
+
+.footer-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* ===========================================
+   RESPONSIVE
+   =========================================== */
+
+@media (max-width: 640px) {
+  .logo-text {
+    font-size: 1.4rem;
+  }
+
+  .form-input {
+    padding: 16px 18px;
+    font-size: 0.9rem;
+  }
+
+  .form-button {
+    padding: 16px 20px;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+
+  .footer {
+    display: none;
+  }
+
+  .pixel {
+    opacity: 0.6;
+  }
+}
+
+/* ===========================================
+   PAGE LAYOUT
+   =========================================== */
+
+.page {
+  padding: 48px 24px;
+}
+
+/* ===========================================
+   PAGE TRANSITIONS
+   =========================================== */
+
+.page-enter {
+  animation: page-enter 0.5s var(--ease-out-expo);
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Staggered children animation */
+.stagger-children > * {
+  animation: stagger-fade-in 0.5s var(--ease-out-expo) backwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+
+@keyframes stagger-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
