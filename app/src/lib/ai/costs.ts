@@ -7,19 +7,26 @@
 import { createServiceClient } from '@/lib/supabase/server'
 
 // Pricing per 1K tokens (as of Jan 2025)
-// Source: https://vercel.com/docs/ai-gateway/pricing
+// Source: https://vercel.com/docs/ai-gateway/pricing, https://openai.com/pricing, https://ai.google.dev/pricing
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // OpenAI
   'gpt-4o': { input: 0.0025, output: 0.01 },
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
+  'o4-mini': { input: 0.0011, output: 0.0044 },  // Reasoning model
+  'o4-mini-search': { input: 0.0011, output: 0.0044 },  // o4-mini with web search
   // Anthropic
   'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },
   'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
   'claude-3-haiku-20240307': { input: 0.00025, output: 0.00125 },
   // Google
   'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
+  'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },  // Newer flash model
+  'gemini-2.5-flash-grounded': { input: 0.00015, output: 0.0006 },  // With search grounding
   'gemini-1.5-pro': { input: 0.00125, output: 0.005 },
+  // Perplexity (sonar-pro pricing - includes search)
+  'sonar-pro': { input: 0.003, output: 0.015 },
+  'sonar': { input: 0.001, output: 0.001 },
 }
 
 // Map gateway model strings to pricing keys
@@ -27,11 +34,18 @@ const MODEL_MAP: Record<string, string> = {
   'openai/gpt-4o': 'gpt-4o',
   'openai/gpt-4o-mini': 'gpt-4o-mini',
   'openai/gpt-4-turbo': 'gpt-4-turbo',
+  'openai/o4-mini': 'o4-mini',
+  'openai/o4-mini-search': 'o4-mini-search',
   'anthropic/claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
   'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
   'anthropic/claude-3-haiku-20240307': 'claude-3-haiku-20240307',
   'google/gemini-2.0-flash': 'gemini-2.0-flash',
+  'google/gemini-2.5-flash': 'gemini-2.5-flash',
+  'google/gemini-2.5-flash-grounded': 'gemini-2.5-flash-grounded',
   'google/gemini-1.5-pro': 'gemini-1.5-pro',
+  // Perplexity
+  'perplexity/sonar-pro': 'sonar-pro',
+  'perplexity/sonar': 'sonar',
 }
 
 export interface UsageData {

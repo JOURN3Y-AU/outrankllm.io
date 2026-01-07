@@ -29,7 +29,7 @@ export default function Home() {
 
           {/* Headline */}
           <h1 className="text-center" style={{ marginBottom: '12px' }}>
-            Your site is invisible to <span className="em">AI</span>
+            Your business is invisible to <span className="em">AI</span>
           </h1>
 
           {/* Subhead */}

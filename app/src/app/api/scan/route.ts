@@ -91,8 +91,14 @@ export async function POST(request: NextRequest) {
       // Continue anyway - we can still process the scan
     }
 
-    // Trigger background processing (fire and forget)
+    // Trigger background processing (true fire-and-forget)
+    // Use AbortController to not wait for response - /api/process takes ~5 minutes
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const controller = new AbortController()
+
+    // Abort after 5 seconds - enough time to establish connection and send request
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
     fetch(`${appUrl}/api/process`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,9 +109,18 @@ export async function POST(request: NextRequest) {
         verificationToken, // Pass token for email sending
         leadId: lead.id,
       }),
-    }).catch((err) => {
-      console.error('Failed to trigger background processing:', err)
+      signal: controller.signal,
     })
+      .then(() => clearTimeout(timeoutId))
+      .catch((err) => {
+        clearTimeout(timeoutId)
+        // AbortError is expected - we intentionally abort after 5s
+        if (err.name === 'AbortError') {
+          // This is expected - the request was sent and we aborted waiting for response
+          return
+        }
+        console.error('Failed to trigger background processing:', err)
+      })
 
     return NextResponse.json({
       success: true,

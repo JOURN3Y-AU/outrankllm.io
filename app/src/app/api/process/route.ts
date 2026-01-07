@@ -2,18 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { crawlSite, combineCrawledContent } from '@/lib/ai/crawl'
 import { analyzeWebsite } from '@/lib/ai/analyze'
-import { generatePrompts } from '@/lib/ai/prompts'
 import {
-  queryAllPlatformsWithPrompts,
-  calculateVisibilityScore,
-  extractTopCompetitors,
-} from '@/lib/ai/query'
+  researchQueries,
+  dedupeAndRankQueries,
+  generateFallbackQueries,
+} from '@/lib/ai/query-research'
+import {
+  queryAllPlatformsWithSearch,
+  calculateSearchVisibilityScore,
+  type LocationContext,
+} from '@/lib/ai/search-providers'
+import { extractTopCompetitors } from '@/lib/ai/query'
 import {
   generateBrandAwarenessQueries,
   runBrandAwarenessQueries,
 } from '@/lib/ai/brand-awareness'
 import { sendVerificationEmail } from '@/lib/email/resend'
-import { detectGeography, extractTldCountry } from '@/lib/geo/detect'
+import { detectGeography, extractTldCountry, countryToIsoCode } from '@/lib/geo/detect'
+import { log } from '@/lib/logger'
 import crypto from 'crypto'
 
 // Allow up to 5 minutes for processing
@@ -47,26 +53,27 @@ export async function POST(request: NextRequest) {
     await updateScanStatus(supabase, scanId, 'crawling', 10)
 
     // Step 1: Crawl the site
-    console.log(`[${scanId}] Starting crawl for ${domain}`)
+    log.start(scanId, domain)
+    log.step(scanId, 'Crawling', domain)
     const crawlResult = await crawlSite(domain)
-    console.log(`[${scanId}] Crawled ${crawlResult.totalPages} pages`)
+    log.done(scanId, 'Crawl', `${crawlResult.totalPages} pages`)
 
     // Step 1.5: Enhanced geo detection
     const tldCountry = extractTldCountry(domain)
-    console.log(`[${scanId}] TLD country: ${tldCountry || 'none detected'}`)
+    if (tldCountry) log.info(scanId, `TLD country: ${tldCountry}`)
 
     // Update status: analyzing
     await updateScanStatus(supabase, scanId, 'analyzing', 25)
 
     // Step 2: Analyze the crawled content
-    console.log(`[${scanId}] Analyzing website content`)
+    log.step(scanId, 'Analyzing', 'website content')
     const combinedContent = combineCrawledContent(crawlResult)
     const analysis = await analyzeWebsite(combinedContent, tldCountry, scanId)
-    console.log(`[${scanId}] Analysis complete: ${analysis.businessType}`)
+    log.done(scanId, 'Analysis', analysis.businessType)
 
     // Enhanced geo detection - combine TLD + content + AI analysis
     const geoResult = detectGeography(domain, combinedContent, analysis.location)
-    console.log(`[${scanId}] Geo detection: ${geoResult.location} (${geoResult.confidence})`)
+    log.info(scanId, `Geo: ${geoResult.location} (${geoResult.confidence})`)
 
     // Use the combined geo result for location
     const finalLocation = geoResult.location || analysis.location
@@ -101,11 +108,11 @@ export async function POST(request: NextRequest) {
       has_meta_descriptions: hasMetaDescriptions,
     })
 
-    // Update status: generating prompts
-    await updateScanStatus(supabase, scanId, 'generating', 40)
+    // Update status: researching queries
+    await updateScanStatus(supabase, scanId, 'researching', 35)
 
-    // Step 3: Generate prompts with enhanced location data
-    console.log(`[${scanId}] Generating prompts`)
+    // Step 3: Research what queries people actually use (NEW APPROACH)
+    log.step(scanId, 'Researching queries', analysis.businessType)
     const analysisWithEnhancedGeo = {
       ...analysis,
       location: finalLocation,
@@ -113,41 +120,93 @@ export async function POST(request: NextRequest) {
       city: geoResult.city,
       country: geoResult.country,
     }
-    const generatedPrompts = await generatePrompts(analysisWithEnhancedGeo, domain, scanId)
-    console.log(`[${scanId}] Generated ${generatedPrompts.length} prompts`)
 
-    // Save prompts to database
+    let researchedQueryList = await researchQueries(
+      analysisWithEnhancedGeo,
+      scanId,
+      (platform) => log.platform(scanId, platform, 'researching queries')
+    )
+
+    // Dedupe and rank, limit to 7 for free tier
+    let topQueries = dedupeAndRankQueries(researchedQueryList, 7)
+    log.done(scanId, 'Query research', `${topQueries.length} unique queries`)
+
+    // Fallback if research failed
+    if (topQueries.length === 0) {
+      log.warn(scanId, 'Research failed, using fallback queries')
+      topQueries = generateFallbackQueries(analysisWithEnhancedGeo)
+    }
+
+    // Save researched queries to database
+    const researchInserts = researchedQueryList.map((q) => ({
+      run_id: scanId,
+      platform: q.platform,
+      suggested_query: q.query,
+      category: q.category,
+      selected_for_scan: topQueries.some((t) => t.query === q.query),
+    }))
+
+    if (researchInserts.length > 0) {
+      const { error: researchInsertError } = await supabase.from('query_research_results').insert(researchInserts)
+      if (researchInsertError) {
+        log.error(scanId, `Failed to insert query research results: ${researchInsertError.message}`)
+        console.error('Query research insert error:', researchInsertError)
+      }
+    }
+
+    // Update status: generating prompts
+    await updateScanStatus(supabase, scanId, 'generating', 45)
+
+    // Save selected queries as prompts
+    log.info(scanId, `Saving ${topQueries.length} prompts`)
     const { data: savedPrompts } = await supabase
       .from('scan_prompts')
       .insert(
-        generatedPrompts.map((p) => ({
+        topQueries.map((q) => ({
           run_id: scanId,
-          prompt_text: p.text,
-          category: p.category,
+          prompt_text: q.query,
+          category: q.category,
+          source: 'researched',
         }))
       )
-      .select('id, prompt_text')
+      .select('id, prompt_text, category')
 
     if (!savedPrompts || savedPrompts.length === 0) {
       throw new Error('Failed to save prompts')
     }
 
-    // Update status: querying LLMs
+    // Update status: querying LLMs with search
     await updateScanStatus(supabase, scanId, 'querying', 50)
 
-    // Step 4: Query all LLMs
-    console.log(`[${scanId}] Querying LLMs with ${savedPrompts.length} prompts`)
-    const queryResults = await queryAllPlatformsWithPrompts(
-      savedPrompts.map((p: { id: string; prompt_text: string }) => ({ id: p.id, text: p.prompt_text })),
+    // Step 4: Query all LLMs WITH SEARCH ENABLED
+    log.step(scanId, 'Querying LLMs', `${savedPrompts.length} prompts (search enabled)`)
+
+    // Build location context for search providers (helps with "near me" queries)
+    const locationContext: LocationContext = {
+      location: finalLocation || undefined,
+      city: geoResult.city || undefined,
+      country: geoResult.country || undefined,
+      countryCode: countryToIsoCode(geoResult.country) || undefined,
+    }
+    log.data(scanId, 'Location context', locationContext as Record<string, unknown>)
+
+    const queryResults = await queryAllPlatformsWithSearch(
+      savedPrompts.map((p: { id: string; prompt_text: string; category: string }) => ({
+        id: p.id,
+        text: p.prompt_text,
+        category: p.category,
+      })),
       domain,
+      scanId,
       async (completed, total) => {
         const progress = 50 + Math.round((completed / total) * 35)
         await updateScanStatus(supabase, scanId, 'querying', progress)
+        log.progress(scanId, completed, total, 'LLM queries')
       },
-      scanId // Pass runId for cost tracking
+      locationContext
     )
 
-    // Save LLM responses
+    // Save LLM responses with search metadata
     const responseInserts = queryResults.flatMap(({ promptId, results }) =>
       results.map((r) => ({
         run_id: scanId,
@@ -159,19 +218,56 @@ export async function POST(request: NextRequest) {
         competitors_mentioned: r.competitorsMentioned,
         response_time_ms: r.responseTimeMs,
         error_message: r.error,
+        search_enabled: r.searchEnabled,
+        sources: r.sources,
       }))
     )
 
-    await supabase.from('llm_responses').insert(responseInserts)
+    const { error: responseInsertError } = await supabase.from('llm_responses').insert(responseInserts)
+    if (responseInsertError) {
+      log.error(scanId, `Failed to insert LLM responses: ${responseInsertError.message}`)
+      console.error('LLM responses insert error:', responseInsertError)
+    } else {
+      log.step(scanId, `Saved ${responseInserts.length} LLM responses`)
+    }
 
     // Step 5: Calculate scores (do this early to get top competitors for brand awareness)
-    console.log(`[${scanId}] Calculating visibility score`)
-    const scores = calculateVisibilityScore(queryResults)
-    const topCompetitors = extractTopCompetitors(queryResults)
+    log.step(scanId, 'Calculating scores')
+    const searchScores = calculateSearchVisibilityScore(queryResults)
+
+    // Convert to format expected by rest of code
+    const scores = {
+      overallScore: searchScores.overall,
+      platformScores: {
+        chatgpt: searchScores.byPlatform.chatgpt.score,
+        claude: searchScores.byPlatform.claude.score,
+        gemini: searchScores.byPlatform.gemini.score,
+        perplexity: searchScores.byPlatform.perplexity.score,
+      },
+      totalMentions: Object.values(searchScores.byPlatform).reduce((sum, p) => sum + p.mentioned, 0),
+      totalQueries: Object.values(searchScores.byPlatform).reduce((sum, p) => sum + p.total, 0),
+    }
+
+    // Extract competitors from search results
+    const topCompetitors = extractTopCompetitors(
+      queryResults.map(({ promptId, results }) => ({
+        promptId,
+        results: results.map((r) => ({
+          platform: r.platform,
+          promptText: r.query,
+          response: r.response,
+          domainMentioned: r.domainMentioned,
+          mentionPosition: r.mentionPosition,
+          competitorsMentioned: r.competitorsMentioned,
+          responseTimeMs: r.responseTimeMs,
+          error: r.error || null,
+        })),
+      }))
+    )
 
     // Step 5.5: Brand Awareness Queries
     await updateScanStatus(supabase, scanId, 'brand_awareness', 88)
-    console.log(`[${scanId}] Running brand awareness tests`)
+    log.step(scanId, 'Brand awareness', 'testing recognition')
 
     const brandQueries = generateBrandAwarenessQueries(
       analysis,
@@ -185,12 +281,13 @@ export async function POST(request: NextRequest) {
       async (completed, total) => {
         const progress = 88 + Math.round((completed / total) * 7) // 88-95%
         await updateScanStatus(supabase, scanId, 'brand_awareness', progress)
+        log.progress(scanId, completed, total, 'brand tests')
       }
     )
 
     // Save brand awareness results
     if (brandResults.length > 0) {
-      await supabase.from('brand_awareness_results').insert(
+      const { error: brandInsertError } = await supabase.from('brand_awareness_results').insert(
         brandResults.map(r => ({
           run_id: scanId,
           platform: r.platform,
@@ -206,8 +303,12 @@ export async function POST(request: NextRequest) {
           response_time_ms: r.responseTimeMs,
         }))
       )
+      if (brandInsertError) {
+        log.error(scanId, `Failed to insert brand awareness results: ${brandInsertError.message}`)
+        console.error('Brand awareness insert error:', brandInsertError)
+      }
     }
-    console.log(`[${scanId}] Brand awareness tests complete: ${brandResults.length} results`)
+    log.done(scanId, 'Brand awareness', `${brandResults.length} results`)
 
     // Generate summary
     const summary = generateSummary(analysis, scores, topCompetitors, domain)
@@ -245,7 +346,7 @@ export async function POST(request: NextRequest) {
       .eq('id', scanId)
 
     // Step 6: Send verification email (instead of report-ready email)
-    console.log(`[${scanId}] Sending verification email to ${email}`)
+    log.step(scanId, 'Sending email', email)
 
     // Use provided token or generate a new one
     let tokenToUse = verificationToken
@@ -299,24 +400,24 @@ export async function POST(request: NextRequest) {
         })
       }
     } else {
-      console.error(`[${scanId}] Failed to send verification email:`, emailResult.error)
+      log.error(scanId, 'Failed to send verification email', emailResult.error)
     }
 
-    const processingTime = Date.now() - startTime
-    console.log(`[${scanId}] Processing complete in ${processingTime}ms`)
+    log.done(scanId, 'Email sent')
+    log.end(scanId, true)
 
     return NextResponse.json({
       success: true,
       reportToken: report.url_token,
-      processingTimeMs: processingTime,
+      processingTimeMs: Date.now() - startTime,
     })
   } catch (error) {
-    console.error('Process error:', error)
-
     // Try to update scan status to failed
     try {
       const body = await request.clone().json()
       if (body.scanId) {
+        log.error(body.scanId, 'Process failed', error)
+        log.end(body.scanId, false)
         const supabase = createServiceClient()
         await supabase
           .from('scan_runs')
@@ -328,7 +429,7 @@ export async function POST(request: NextRequest) {
           .eq('id', body.scanId)
       }
     } catch {
-      // Ignore error updating status
+      console.error('Process error:', error)
     }
 
     return NextResponse.json(

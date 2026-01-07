@@ -3,7 +3,7 @@
 import { CheckCircle, XCircle } from 'lucide-react'
 
 interface PlatformScore {
-  platform: 'chatgpt' | 'claude' | 'gemini'
+  platform: 'chatgpt' | 'claude' | 'gemini' | 'perplexity'
   score: number
 }
 
@@ -27,6 +27,11 @@ const platformConfig = {
     color: 'var(--blue)',
     description: 'Google Gemini',
   },
+  perplexity: {
+    name: 'Perplexity',
+    color: '#1FB8CD',
+    description: 'Perplexity AI',
+  },
 }
 
 export function PlatformResults({ scores }: PlatformResultsProps) {
@@ -34,10 +39,11 @@ export function PlatformResults({ scores }: PlatformResultsProps) {
     { platform: 'chatgpt', score: scores.chatgpt || 0 },
     { platform: 'claude', score: scores.claude || 0 },
     { platform: 'gemini', score: scores.gemini || 0 },
+    { platform: 'perplexity', score: scores.perplexity || 0 },
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {platforms.map(({ platform, score }) => {
         const config = platformConfig[platform]
         const isMentioned = score > 0

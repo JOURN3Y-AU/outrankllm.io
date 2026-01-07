@@ -331,29 +331,31 @@ export function ReportTabs({
           className="flex"
           style={{ marginBottom: '-1px' }}
         >
-          {tabs.map((tab) => {
+          {tabs.map((tab, index) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
+            const isLast = index === tabs.length - 1
 
             return (
               <button
                 key={tab.id}
                 onClick={() => !tab.locked && setActiveTab(tab.id)}
                 className={`
-                  relative flex items-center justify-center gap-2 flex-1 py-4 font-mono transition-all
+                  relative flex flex-col items-center justify-center flex-1 font-mono transition-all
                   border-b-2
                   ${isActive
                     ? 'text-[var(--text)] border-[var(--green)] bg-[var(--surface)]'
                     : 'text-[var(--text-dim)] border-transparent hover:text-[var(--text-mid)] hover:bg-[var(--surface)]/50'
                   }
                   ${tab.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                  ${!isLast ? 'border-r border-r-[var(--border-subtle)]' : ''}
                 `}
-                style={{ fontSize: '12px', minWidth: 0 }}
+                style={{ fontSize: '11px', minWidth: 0, padding: '16px 8px' }}
               >
-                <Icon size={15} className="flex-shrink-0" />
+                <Icon size={18} className="flex-shrink-0" style={{ marginBottom: '8px' }} />
                 <span className="hidden sm:inline truncate">{tab.label}</span>
                 {tab.locked && (
-                  <Lock size={10} className="text-[var(--text-ghost)] flex-shrink-0" />
+                  <Lock size={10} className="text-[var(--text-ghost)] absolute" style={{ top: '8px', right: '8px' }} />
                 )}
               </button>
             )
@@ -380,7 +382,9 @@ export function ReportTabs({
           <MeasurementsTab
             visibilityScore={visibilityScore}
             platformScores={platformScores}
+            responses={responses}
             analysis={analysis}
+            brandAwareness={brandAwareness}
           />
         )}
         {activeTab === 'competitors' && (
@@ -437,18 +441,30 @@ export function ReportTabs({
 // ============================================
 
 const categoryLabels: Record<string, string> = {
-  general: 'General Discovery',
-  location: 'Location-Based',
-  service: 'Service-Specific',
+  // New research-based categories
+  finding_provider: 'Finding a Provider',
+  product_specific: 'Product Search',
+  service: 'Service Search',
   comparison: 'Comparison',
+  review: 'Reviews & Ratings',
+  how_to: 'How-To',
+  // Legacy categories (for backward compatibility)
+  general: 'General',
+  location: 'Location-Based',
   recommendation: 'Recommendation',
 }
 
 const categoryColors: Record<string, string> = {
+  // New research-based categories
+  finding_provider: 'var(--green)',
+  product_specific: 'var(--amber)',
+  service: 'var(--blue)',
+  comparison: 'var(--red)',
+  review: 'var(--text-mid)',
+  how_to: 'var(--text-dim)',
+  // Legacy categories
   general: 'var(--blue)',
   location: 'var(--green)',
-  service: 'var(--amber)',
-  comparison: 'var(--red)',
   recommendation: 'var(--text-mid)',
 }
 
@@ -480,6 +496,21 @@ function OverviewTab({
 
   return (
     <div style={{ display: 'grid', gap: '32px' }}>
+      {/* Description Box */}
+      <div
+        className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+        style={{ padding: '20px 24px' }}
+      >
+        <div className="flex items-start" style={{ gap: '16px' }}>
+          <Globe size={20} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+          <div>
+            <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
+              <strong className="text-[var(--text)]">Your Business Profile:</strong> We crawled your website and used AI to extract key information about your business. This data powers the questions we ask AI assistants to test your visibility.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Business Identity */}
       <div className="card" style={{ padding: '32px' }}>
         <h3
@@ -612,13 +643,23 @@ function OverviewTab({
 
           <p
             className="text-[var(--text-dim)] text-sm"
-            style={{ marginBottom: '24px', lineHeight: '1.6' }}
+            style={{ marginBottom: '16px', lineHeight: '1.6' }}
           >
-            We crawled your website and identified your business as {analysis?.business_name ? <strong className="text-[var(--text-mid)]">{analysis.business_name}</strong> : 'your company'}
+            We analyzed your website and identified your business as {analysis?.business_name ? <strong className="text-[var(--text-mid)]">{analysis.business_name}</strong> : 'your company'}
             {analysis?.business_type && analysis.business_type !== 'Business website' && <>, a <strong className="text-[var(--text-mid)]">{analysis.business_type.toLowerCase()}</strong></>}
             {analysis?.location && <> in <strong className="text-[var(--text-mid)]">{analysis.location}</strong></>}.
-            These are the exact questions we asked ChatGPT, Claude, and Gemini to see if they recommend you.
           </p>
+
+          {/* Search-based queries indicator */}
+          <div
+            className="flex items-center gap-2 bg-[var(--surface)] border border-[var(--border-subtle)] px-3 py-2"
+            style={{ marginBottom: '24px', width: 'fit-content' }}
+          >
+            <Globe size={14} className="text-[var(--green)]" />
+            <span className="text-xs text-[var(--text-mid)]">
+              Based on real search queries people use for businesses like yours
+            </span>
+          </div>
 
           <div style={{ display: 'grid', gap: '12px' }}>
             {prompts.map((prompt, index) => (
@@ -834,6 +875,21 @@ function AIReadinessTab({
 
   return (
     <div style={{ display: 'grid', gap: '32px' }}>
+      {/* Description Box */}
+      <div
+        className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+        style={{ padding: '20px 24px' }}
+      >
+        <div className="flex items-start" style={{ gap: '16px' }}>
+          <Shield size={20} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+          <div>
+            <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
+              <strong className="text-[var(--text)]">Technical Readiness Check:</strong> We analyzed your website&apos;s structure, content, and metadata to determine how easily AI systems can understand and index your business. Each factor is rated by its impact on AI visibility.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Summary */}
       <div className="card" style={{ padding: '32px' }}>
         <h3
@@ -986,6 +1042,21 @@ function CompetitorsTab({
 
   return (
     <div style={{ display: 'grid', gap: '32px' }}>
+      {/* Description Box */}
+      <div
+        className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+        style={{ padding: '20px 24px' }}
+      >
+        <div className="flex items-start" style={{ gap: '16px' }}>
+          <Users size={20} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+          <div>
+            <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
+              <strong className="text-[var(--text)]">Competitor Analysis:</strong> These are businesses that AI assistants mentioned when answering questions relevant to your industry. Understanding who AI recommends helps identify what signals you need to compete for visibility.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* First competitor - fully visible */}
       <div className="card" style={{ padding: '32px' }}>
         <h3
@@ -1167,6 +1238,12 @@ function BrandAwarenessTab({
   const knowledgeGaps = [...servicesByName.entries()]
     .filter(([_, results]) => !results.some(r => r.attribute_mentioned))
     .map(([service]) => service)
+
+  // Create a map of which platforms recognized the brand (for competitor comparison context)
+  const platformRecognition = new Map<string, boolean>()
+  for (const result of brandRecallResults) {
+    platformRecognition.set(result.platform, result.entity_recognized)
+  }
 
   return (
     <div style={{ display: 'grid', gap: '32px' }}>
@@ -1428,58 +1505,90 @@ function BrandAwarenessTab({
           </p>
 
           <div style={{ display: 'grid', gap: '16px' }}>
-            {competitorCompareResults.map((result, index) => (
-              <div
-                key={index}
-                className="bg-[var(--surface-elevated)] border border-[var(--border)]"
-                style={{ padding: '20px' }}
-              >
-                <div className="flex items-center justify-between" style={{ marginBottom: '12px' }}>
-                  <div className="flex items-center" style={{ gap: '12px' }}>
-                    <span
-                      style={{
-                        width: '10px',
-                        height: '10px',
-                        backgroundColor: platformColors[result.platform] || 'var(--text-dim)',
-                      }}
-                    />
-                    <span className="font-mono text-sm text-[var(--text)]">
-                      {platformNames[result.platform] || result.platform}
-                    </span>
-                  </div>
-                  <PositioningBadge positioning={result.positioning} />
-                </div>
+            {competitorCompareResults.map((result, index) => {
+              const brandRecognized = platformRecognition.get(result.platform) ?? false
 
+              return (
                 <div
-                  className="text-[var(--text-dim)] text-sm"
-                  style={{
-                    lineHeight: '1.6',
-                    maxHeight: expandedResponse === `compare-${index}` ? 'none' : '96px',
-                    overflow: 'hidden',
-                  }}
+                  key={index}
+                  className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+                  style={{ padding: '20px' }}
                 >
-                  {result.response_text
-                    ? formatResponseText(
-                        expandedResponse === `compare-${index}`
-                          ? result.response_text
-                          : result.response_text.slice(0, 400) + ((result.response_text.length > 400) ? '...' : '')
-                      )
-                    : 'No response recorded'}
-                </div>
-
-                {(result.response_text?.length || 0) > 400 && (
-                  <button
-                    onClick={() => setExpandedResponse(
-                      expandedResponse === `compare-${index}` ? null : `compare-${index}`
+                  <div className="flex items-center justify-between" style={{ marginBottom: '12px' }}>
+                    <div className="flex items-center" style={{ gap: '12px' }}>
+                      <span
+                        style={{
+                          width: '10px',
+                          height: '10px',
+                          backgroundColor: platformColors[result.platform] || 'var(--text-dim)',
+                        }}
+                      />
+                      <span className="font-mono text-sm text-[var(--text)]">
+                        {platformNames[result.platform] || result.platform}
+                      </span>
+                    </div>
+                    {brandRecognized ? (
+                      <PositioningBadge positioning={result.positioning} />
+                    ) : (
+                      <span
+                        className="font-mono text-xs"
+                        style={{
+                          padding: '4px 10px',
+                          backgroundColor: 'var(--text-ghost)15',
+                          color: 'var(--text-ghost)',
+                          border: '1px solid var(--text-ghost)30',
+                        }}
+                      >
+                        Brand Not Known
+                      </span>
                     )}
-                    className="text-[var(--green)] font-mono text-xs hover:underline"
-                    style={{ marginTop: '8px' }}
-                  >
-                    {expandedResponse === `compare-${index}` ? 'Show less' : 'Show more'}
-                  </button>
-                )}
-              </div>
-            ))}
+                  </div>
+
+                  {!brandRecognized ? (
+                    <div
+                      className="flex items-center text-[var(--text-ghost)] text-sm"
+                      style={{ gap: '8px' }}
+                    >
+                      <AlertCircle size={14} />
+                      <span>
+                        Unable to compare — {platformNames[result.platform] || result.platform} doesn&apos;t have your brand in its knowledge base
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        className="text-[var(--text-dim)] text-sm"
+                        style={{
+                          lineHeight: '1.6',
+                          maxHeight: expandedResponse === `compare-${index}` ? 'none' : '96px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {result.response_text
+                          ? formatResponseText(
+                              expandedResponse === `compare-${index}`
+                                ? result.response_text
+                                : result.response_text.slice(0, 400) + ((result.response_text.length > 400) ? '...' : '')
+                            )
+                          : 'No response recorded'}
+                      </div>
+
+                      {(result.response_text?.length || 0) > 400 && (
+                        <button
+                          onClick={() => setExpandedResponse(
+                            expandedResponse === `compare-${index}` ? null : `compare-${index}`
+                          )}
+                          className="text-[var(--green)] font-mono text-xs hover:underline"
+                          style={{ marginTop: '8px' }}
+                        >
+                          {expandedResponse === `compare-${index}` ? 'Show less' : 'Show more'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           {/* Upgrade CTA for full competitor analysis */}
@@ -1560,13 +1669,16 @@ const platformColors: Record<string, string> = {
   chatgpt: 'var(--red)',
   claude: 'var(--green)',
   gemini: 'var(--blue)',
+  perplexity: '#1FB8CD',
 }
 
 const platformNames: Record<string, string> = {
   chatgpt: 'ChatGPT',
   claude: 'Claude',
   gemini: 'Gemini',
+  perplexity: 'Perplexity',
 }
+
 
 function ResponsesTab({
   responses,
@@ -1578,6 +1690,7 @@ function ResponsesTab({
   onFilterChange: (filter: string) => void
 }) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
+  const [mentionsOnly, setMentionsOnly] = useState(false)
 
   if (!responses || responses.length === 0) {
     return (
@@ -1588,9 +1701,15 @@ function ResponsesTab({
     )
   }
 
-  const filteredResponses = platformFilter === 'all'
+  // Apply platform filter first
+  let filteredResponses = platformFilter === 'all'
     ? responses
     : responses.filter(r => r.platform === platformFilter)
+
+  // Then apply mentions filter
+  if (mentionsOnly) {
+    filteredResponses = filteredResponses.filter(r => r.domain_mentioned)
+  }
 
   // Count by platform
   const platformCounts = responses.reduce((acc, r) => {
@@ -1598,16 +1717,55 @@ function ResponsesTab({
     return acc
   }, {} as Record<string, number>)
 
+  // Count mentions
+  const mentionCount = responses.filter(r => r.domain_mentioned).length
+
   return (
-    <div>
+    <div style={{ display: 'grid', gap: '32px' }}>
+      {/* Description Box */}
+      <div
+        className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+        style={{ padding: '20px 24px' }}
+      >
+        <div className="flex items-start" style={{ gap: '16px' }}>
+          <MessageSquare size={20} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+          <div>
+            <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
+              <strong className="text-[var(--text)]">Organic Visibility Test:</strong> We asked each AI assistant questions that a potential customer might ask (like &quot;recommend a plumber near me&quot;). These are the actual responses — look for whether your brand was mentioned organically.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Filter Bar */}
       <div
         className="flex items-center justify-between flex-wrap border-b border-[var(--border)]"
-        style={{ paddingBottom: '20px', marginBottom: '28px', gap: '16px' }}
+        style={{ paddingBottom: '20px', gap: '16px' }}
       >
-        <div className="flex items-center gap-2">
-          <Filter size={16} className="text-[var(--text-dim)]" />
-          <span className="text-[var(--text-dim)] font-mono text-sm">Filter by:</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-[var(--text-dim)]" />
+            <span className="text-[var(--text-dim)] font-mono text-sm">Filter by:</span>
+          </div>
+
+          {/* Mentions Only Toggle */}
+          <button
+            onClick={() => setMentionsOnly(!mentionsOnly)}
+            className={`
+              flex items-center gap-2 font-mono text-xs transition-all
+              ${mentionsOnly
+                ? 'bg-[var(--green)]/10 text-[var(--green)] border-[var(--green)]/30'
+                : 'bg-transparent text-[var(--text-dim)] border-[var(--border)] hover:text-[var(--text-mid)]'
+              }
+            `}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid',
+            }}
+          >
+            <CheckCircle2 size={12} />
+            Mentions only ({mentionCount})
+          </button>
         </div>
 
         <div className="flex flex-wrap" style={{ gap: '8px' }}>
@@ -1630,11 +1788,29 @@ function ResponsesTab({
         </div>
       </div>
 
+      {/* Empty state when filtering */}
+      {filteredResponses.length === 0 && (
+        <div className="text-center text-[var(--text-dim)]" style={{ padding: '60px 0' }}>
+          <MessageSquare size={40} className="mx-auto mb-4 opacity-30" />
+          <p>No responses match your filters</p>
+          <button
+            onClick={() => {
+              setMentionsOnly(false)
+              onFilterChange('all')
+            }}
+            className="text-[var(--green)] font-mono text-sm hover:underline"
+            style={{ marginTop: '12px' }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+
       {/* Response Cards */}
       <div style={{ display: 'grid', gap: '20px' }}>
         {filteredResponses.map((response, index) => {
           const isExpanded = expandedIndex === index
-          const truncateAt = 500
+          const truncateAt = 1200  // Increased from 500 to show more context before truncating
           const shouldTruncate = (response.response_text?.length || 0) > truncateAt
 
           return (
@@ -1770,170 +1946,250 @@ function FilterButton({
 // ============================================
 
 function MeasurementsTab({
-  visibilityScore,
   platformScores,
-  analysis
+  responses,
+  analysis,
+  brandAwareness
 }: {
   visibilityScore: number
   platformScores: Record<string, number>
+  responses: Response[] | null
   analysis: Analysis | null
+  brandAwareness?: BrandAwarenessResult[] | null
 }) {
   // Calculate readiness score based on analysis quality
   const readinessScore = calculateReadinessScore(analysis)
 
+  // Calculate per-platform mention stats from responses
+  const platformStats = useMemo(() => {
+    if (!responses) return {}
+
+    const stats: Record<string, { mentioned: number; total: number }> = {}
+
+    for (const response of responses) {
+      if (!stats[response.platform]) {
+        stats[response.platform] = { mentioned: 0, total: 0 }
+      }
+      stats[response.platform].total++
+      if (response.domain_mentioned) {
+        stats[response.platform].mentioned++
+      }
+    }
+
+    return stats
+  }, [responses])
+
+  // Platform display order
+  const platformOrder = ['chatgpt', 'claude', 'gemini', 'perplexity']
+
+  // Use platformStats from responses if available, otherwise fall back to platformScores from report
+  const hasResponseStats = Object.keys(platformStats).length > 0
+  const orderedPlatforms = hasResponseStats
+    ? platformOrder.filter(p => p in platformStats)
+    : platformOrder.filter(p => p in platformScores)
+
+  // Calculate summary metrics
+  const totalQueries = responses?.length || 0
+  const totalMentions = responses?.filter(r => r.domain_mentioned).length || 0
+  const queryCoverage = totalQueries > 0 ? Math.round((totalMentions / totalQueries) * 100) : 0
+
+  // Brand recognition from brand awareness data
+  const brandRecallResults = brandAwareness?.filter(r => r.query_type === 'brand_recall') || []
+  const recognizedPlatforms = brandRecallResults.filter(r => r.entity_recognized).length
+  const totalBrandPlatforms = brandRecallResults.length
+
+  // Service knowledge from brand awareness data
+  const serviceCheckResults = brandAwareness?.filter(r => r.query_type === 'service_check') || []
+  const knownServices = serviceCheckResults.filter(r => r.attribute_mentioned).length
+  const totalServiceChecks = serviceCheckResults.length
+  const serviceKnowledge = totalServiceChecks > 0 ? Math.round((knownServices / totalServiceChecks) * 100) : 0
+
+  // Define metrics for the table
+  const metrics = [
+    {
+      name: 'Query Coverage',
+      current: `${queryCoverage}%`,
+      description: 'Percentage of queries where your brand was mentioned',
+    },
+    {
+      name: 'Brand Recognition',
+      current: totalBrandPlatforms > 0 ? `${recognizedPlatforms}/${totalBrandPlatforms} platforms` : 'N/A',
+      description: 'AI platforms that recognize your brand when asked directly',
+    },
+    {
+      name: 'Service Knowledge',
+      current: totalServiceChecks > 0 ? `${serviceKnowledge}%` : 'N/A',
+      description: 'Percentage of your services that AI knows about',
+    },
+    {
+      name: 'Website Readiness',
+      current: `${readinessScore}/100`,
+      description: 'How well your site is structured for AI discovery',
+    },
+  ]
+
   return (
     <div style={{ display: 'grid', gap: '40px' }}>
-      {/* Dual Score Display */}
+      {/* Description Box */}
       <div
-        className="grid md:grid-cols-2"
-        style={{ gap: '24px' }}
+        className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+        style={{ padding: '20px 24px' }}
       >
-        {/* AI Visibility Score */}
-        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-          <h3
-            className="text-[var(--text-dim)] font-mono uppercase tracking-wider"
-            style={{ fontSize: '11px', marginBottom: '28px', letterSpacing: '0.1em' }}
-          >
-            AI Visibility Score
-          </h3>
-
-          <div
-            className="relative mx-auto"
-            style={{ width: '160px', height: '160px', marginBottom: '24px' }}
-          >
-            <svg viewBox="0 0 100 100" className="w-full h-full">
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke="var(--border)"
-                strokeWidth="8"
-              />
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke={getScoreColor(visibilityScore)}
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={`${visibilityScore * 2.64} 264`}
-                transform="rotate(-90 50 50)"
-                style={{ transition: 'stroke-dasharray 1s ease-out' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span
-                className="font-mono font-medium"
-                style={{ fontSize: '40px', color: getScoreColor(visibilityScore) }}
-              >
-                {visibilityScore}
-              </span>
-            </div>
+        <div className="flex items-start" style={{ gap: '16px' }}>
+          <BarChart3 size={20} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+          <div>
+            <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
+              <strong className="text-[var(--text)]">Your Performance Metrics:</strong> This page shows two key measurements: <em>AI Visibility</em> tracks how often each platform mentioned your brand organically, while <em>Website Readiness</em> scores how well your site is structured for AI discovery.
+            </p>
           </div>
-
-          <p className="text-[var(--text-dim)] text-sm" style={{ lineHeight: '1.6' }}>
-            How often AI assistants mention your business when answering relevant questions.
-          </p>
-        </div>
-
-        {/* Website Readiness Score */}
-        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-          <h3
-            className="text-[var(--text-dim)] font-mono uppercase tracking-wider"
-            style={{ fontSize: '11px', marginBottom: '28px', letterSpacing: '0.1em' }}
-          >
-            Website Readiness Score
-          </h3>
-
-          <div
-            className="relative mx-auto"
-            style={{ width: '160px', height: '160px', marginBottom: '24px' }}
-          >
-            <svg viewBox="0 0 100 100" className="w-full h-full">
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke="var(--border)"
-                strokeWidth="8"
-              />
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke={getScoreColor(readinessScore)}
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={`${readinessScore * 2.64} 264`}
-                transform="rotate(-90 50 50)"
-                style={{ transition: 'stroke-dasharray 1s ease-out' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span
-                className="font-mono font-medium"
-                style={{ fontSize: '40px', color: getScoreColor(readinessScore) }}
-              >
-                {readinessScore}
-              </span>
-            </div>
-          </div>
-
-          <p className="text-[var(--text-dim)] text-sm" style={{ lineHeight: '1.6' }}>
-            How easily AI can understand and extract information from your website.
-          </p>
         </div>
       </div>
 
-      {/* Platform Breakdown */}
+      {/* Metrics Summary Table */}
+      <div className="card" style={{ padding: '32px' }}>
+        <h3
+          className="text-[var(--green)] font-mono uppercase tracking-wider"
+          style={{ fontSize: '11px', marginBottom: '24px', letterSpacing: '0.1em' }}
+        >
+          Key Metrics Summary
+        </h3>
+
+        <div className="overflow-x-auto">
+          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr className="border-b border-[var(--border)]">
+                <th
+                  className="text-left font-mono text-xs text-[var(--text-dim)] uppercase"
+                  style={{ padding: '12px 16px', paddingLeft: '0' }}
+                >
+                  Metric
+                </th>
+                <th
+                  className="text-left font-mono text-xs text-[var(--text-dim)] uppercase"
+                  style={{ padding: '12px 16px' }}
+                >
+                  Current
+                </th>
+                <th
+                  className="text-left font-mono text-xs text-[var(--text-dim)] uppercase hidden sm:table-cell"
+                  style={{ padding: '12px 16px' }}
+                >
+                  Description
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.map((metric, index) => (
+                <tr key={index} className="border-b border-[var(--border-subtle)]">
+                  <td
+                    className="text-[var(--text)] font-medium"
+                    style={{ padding: '16px', paddingLeft: '0' }}
+                  >
+                    {metric.name}
+                  </td>
+                  <td
+                    className="text-[var(--green)] font-mono"
+                    style={{ padding: '16px' }}
+                  >
+                    {metric.current}
+                  </td>
+                  <td
+                    className="text-[var(--text-dim)] text-sm hidden sm:table-cell"
+                    style={{ padding: '16px' }}
+                  >
+                    {metric.description}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Per-Platform Visibility Gauges */}
       <div className="card" style={{ padding: '32px' }}>
         <h3
           className="text-[var(--text-dim)] font-mono uppercase tracking-wider"
-          style={{ fontSize: '11px', marginBottom: '24px', letterSpacing: '0.1em' }}
+          style={{ fontSize: '11px', marginBottom: '8px', letterSpacing: '0.1em' }}
         >
-          Visibility by Platform
+          AI Visibility by Platform
         </h3>
+        <p className="text-[var(--text-ghost)] text-xs" style={{ marginBottom: '32px' }}>
+          How often each AI mentioned your brand when answering questions.
+        </p>
 
-        <div style={{ display: 'grid', gap: '20px' }}>
-          {Object.entries(platformScores).map(([platform, score]) => (
-            <div key={platform} className="flex items-center" style={{ gap: '16px' }}>
-              <div
-                className="flex items-center gap-2 font-mono text-sm"
-                style={{ width: '100px' }}
-              >
-                <span
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    backgroundColor: platformColors[platform] || 'var(--text-dim)',
-                  }}
-                />
-                {platformNames[platform] || platform}
-              </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4" style={{ gap: '24px' }}>
+          {orderedPlatforms.map((platform) => {
+            // Use response stats if available, otherwise use platformScores from report
+            const stats = hasResponseStats ? platformStats[platform] : null
+            const score = stats
+              ? (stats.total > 0 ? Math.round((stats.mentioned / stats.total) * 100) : 0)
+              : (platformScores[platform] ?? 0)
+            const color = platformColors[platform] || 'var(--text-dim)'
 
+            return (
               <div
-                className="flex-1 bg-[var(--surface-elevated)] h-3"
-                style={{ position: 'relative' }}
+                key={platform}
+                style={{ textAlign: 'center' }}
               >
+                {/* Circular Gauge */}
                 <div
-                  style={{
-                    width: `${score}%`,
-                    height: '100%',
-                    backgroundColor: platformColors[platform] || 'var(--text-dim)',
-                    transition: 'width 1s ease-out',
-                  }}
-                />
-              </div>
+                  className="relative"
+                  style={{ width: '140px', height: '140px', marginBottom: '16px', marginLeft: 'auto', marginRight: 'auto' }}
+                >
+                  <svg viewBox="0 0 100 100" className="w-full h-full">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="none"
+                      stroke="var(--border)"
+                      strokeWidth="8"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="none"
+                      stroke={color}
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${score * 2.64} 264`}
+                      transform="rotate(-90 50 50)"
+                      style={{ transition: 'stroke-dasharray 1s ease-out' }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span
+                      className="font-mono font-medium"
+                      style={{ fontSize: '32px', color }}
+                    >
+                      {score}%
+                    </span>
+                  </div>
+                </div>
 
-              <span className="font-mono text-[var(--text-mid)]" style={{ width: '50px', textAlign: 'right' }}>
-                {score}%
-              </span>
-            </div>
-          ))}
+                {/* Platform Name */}
+                <div className="flex items-center justify-center gap-2" style={{ marginBottom: '8px' }}>
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      backgroundColor: color,
+                    }}
+                  />
+                  <span className="font-mono text-sm text-[var(--text)]">
+                    {platformNames[platform] || platform}
+                  </span>
+                </div>
+
+                {/* Mention Count */}
+                <p className="text-[var(--text-dim)] text-xs">
+                  {stats ? `${stats.mentioned}/${stats.total} questions mentioned` : `Score: ${score}%`}
+                </p>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -2044,12 +2300,6 @@ function LockedTab({
 // ============================================
 // UTILITIES
 // ============================================
-
-function getScoreColor(score: number): string {
-  if (score >= 70) return 'var(--green)'
-  if (score >= 40) return 'var(--amber)'
-  return 'var(--red)'
-}
 
 function calculateReadinessScore(analysis: Analysis | null): number {
   if (!analysis) return 0

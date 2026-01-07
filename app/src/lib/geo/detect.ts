@@ -2,6 +2,56 @@
  * Enhanced geographic detection combining TLD analysis and website content
  */
 
+// Country name to ISO 3166-1 alpha-2 code mapping
+const COUNTRY_TO_ISO: Record<string, string> = {
+  'Australia': 'AU',
+  'New Zealand': 'NZ',
+  'United Kingdom': 'GB',
+  'Germany': 'DE',
+  'France': 'FR',
+  'Spain': 'ES',
+  'Italy': 'IT',
+  'Netherlands': 'NL',
+  'Belgium': 'BE',
+  'Austria': 'AT',
+  'Switzerland': 'CH',
+  'Sweden': 'SE',
+  'Norway': 'NO',
+  'Denmark': 'DK',
+  'Finland': 'FI',
+  'Ireland': 'IE',
+  'Poland': 'PL',
+  'Portugal': 'PT',
+  'Czech Republic': 'CZ',
+  'Greece': 'GR',
+  'Canada': 'CA',
+  'Mexico': 'MX',
+  'Brazil': 'BR',
+  'Argentina': 'AR',
+  'Colombia': 'CO',
+  'Chile': 'CL',
+  'Japan': 'JP',
+  'China': 'CN',
+  'South Korea': 'KR',
+  'India': 'IN',
+  'Singapore': 'SG',
+  'Hong Kong': 'HK',
+  'Taiwan': 'TW',
+  'Malaysia': 'MY',
+  'Thailand': 'TH',
+  'Philippines': 'PH',
+  'Indonesia': 'ID',
+  'Vietnam': 'VN',
+  'United Arab Emirates': 'AE',
+  'Saudi Arabia': 'SA',
+  'Israel': 'IL',
+  'South Africa': 'ZA',
+  'Egypt': 'EG',
+  'Nigeria': 'NG',
+  'Kenya': 'KE',
+  'United States': 'US',
+};
+
 // Country code top-level domains mapped to country names
 const TLD_COUNTRIES: Record<string, string> = {
   // Oceania
@@ -99,6 +149,14 @@ export interface GeoDetectionResult {
   tldCountry: string | null;
   contentCountry: string | null;
   signals: string[];
+}
+
+/**
+ * Convert country name to ISO 3166-1 alpha-2 code
+ */
+export function countryToIsoCode(countryName: string | null): string | null {
+  if (!countryName) return null;
+  return COUNTRY_TO_ISO[countryName] || null;
 }
 
 /**

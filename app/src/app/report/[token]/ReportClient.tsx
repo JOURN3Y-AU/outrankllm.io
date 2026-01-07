@@ -187,7 +187,7 @@ export function ReportClient({ data }: ReportClientProps) {
               </h2>
               <p
                 className="text-[var(--text-mid)]"
-                style={{ fontSize: '15px', lineHeight: '1.7', maxWidth: '720px' }}
+                style={{ fontSize: '15px', lineHeight: '1.7' }}
               >
                 {report.summary}
               </p>

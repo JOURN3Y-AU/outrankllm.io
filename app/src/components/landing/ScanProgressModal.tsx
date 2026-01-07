@@ -148,7 +148,8 @@ function ProgressContent({
         className="text-2xl font-medium text-[var(--text)]"
         style={{ fontFamily: 'var(--font-display)', marginBottom: '12px' }}
       >
-        Analyzing {domain}
+        Analyzing<br />
+        <span className="text-[var(--green)]">{domain}</span>
       </h2>
 
       <p className="text-[var(--text-mid)] text-sm" style={{ marginBottom: '32px', lineHeight: '1.6' }}>

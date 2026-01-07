@@ -37,6 +37,16 @@ export function Platforms() {
           />
           Gemini
         </div>
+        <div className="platform">
+          <Image
+            src="/images/perplexity-color.png"
+            alt="Perplexity"
+            width={20}
+            height={20}
+            className="object-contain"
+          />
+          Perplexity
+        </div>
       </div>
     </div>
   )

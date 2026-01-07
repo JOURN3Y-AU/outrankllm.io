@@ -11,7 +11,7 @@ const gateway = createGateway({
   apiKey: process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '',
 })
 
-export type Platform = 'chatgpt' | 'claude' | 'gemini'
+export type Platform = 'chatgpt' | 'claude' | 'gemini' | 'perplexity'
 
 export interface QueryResult {
   platform: Platform
@@ -45,6 +45,7 @@ async function queryPlatform(
       chatgpt: 'openai/gpt-4o',
       claude: 'anthropic/claude-sonnet-4-20250514',
       gemini: 'google/gemini-2.0-flash',
+      perplexity: 'perplexity/sonar-pro',
     }
 
     const modelString = modelMap[platform]
@@ -277,6 +278,7 @@ export function calculateVisibilityScore(
     chatgpt: { mentioned: 0, total: 0 },
     claude: { mentioned: 0, total: 0 },
     gemini: { mentioned: 0, total: 0 },
+    perplexity: { mentioned: 0, total: 0 },
   }
 
   for (const { results: queryResults } of results) {
@@ -298,6 +300,9 @@ export function calculateVisibilityScore(
     ),
     gemini: Math.round(
       (platformMentions.gemini.mentioned / Math.max(platformMentions.gemini.total, 1)) * 100
+    ),
+    perplexity: Math.round(
+      (platformMentions.perplexity.mentioned / Math.max(platformMentions.perplexity.total, 1)) * 100
     ),
   }
 
