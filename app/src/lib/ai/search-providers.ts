@@ -2,15 +2,14 @@
  * Search-Enabled Query Providers
  * Executes queries with web search capabilities for each AI platform
  *
- * Uses DIRECT API calls with native web search for visibility queries:
+ * Uses DIRECT API calls (bypasses Vercel AI Gateway to avoid rate limits):
  * - OpenAI: web_search_preview tool for real-time search
- * - Claude: Native web search tool (with Tavily fallback)
+ * - Claude: Tavily search + Claude for response
  * - Gemini: Google Search grounding
- *
- * Uses Vercel AI Gateway for auxiliary tasks (competitor extraction)
+ * - Perplexity: Native search (sonar-pro)
  */
 
-import { generateText, createGateway } from 'ai'
+import { generateText } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
@@ -18,12 +17,7 @@ import { createPerplexity } from '@ai-sdk/perplexity'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
 
-// Initialize Vercel AI Gateway (for auxiliary tasks only)
-const gateway = createGateway({
-  apiKey: process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '',
-})
-
-// Initialize direct API clients for native web search
+// Initialize direct API clients (bypasses Vercel AI Gateway rate limits)
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 })
@@ -110,8 +104,9 @@ async function extractCompetitorsFromResponse(
       .replace('{domain}', domain)
       .replace('{response}', response.slice(0, 2000))
 
+    // Use direct OpenAI API instead of Vercel AI Gateway to avoid rate limits
     const result = await generateText({
-      model: gateway('openai/gpt-4o-mini'),
+      model: openai('gpt-4o-mini'),
       prompt,
       maxOutputTokens: 200,
     })
