@@ -833,6 +833,13 @@ export async function queryWithSearch(
 
 /**
  * Query all platforms with search enabled
+ *
+ * Strategy: Run all queries in parallel, grouped by platform to avoid rate limits.
+ * This is much faster than sequential query-by-query execution.
+ *
+ * For 7 queries × 4 platforms:
+ * - Old: ~7 × 60s (ChatGPT) = 7 minutes sequential
+ * - New: ~60s (longest ChatGPT query) + small overhead = ~2-3 minutes parallel
  */
 export async function queryAllPlatformsWithSearch(
   queries: Array<{ id: string; text: string; category?: string }>,
@@ -842,40 +849,86 @@ export async function queryAllPlatformsWithSearch(
   locationContext?: LocationContext
 ): Promise<Array<{ promptId: string; results: SearchQueryResult[] }>> {
   const platforms: SearchPlatform[] = ['chatgpt', 'claude', 'gemini', 'perplexity']
-  const allResults: Array<{ promptId: string; results: SearchQueryResult[] }> = []
   const total = queries.length * platforms.length
   let completed = 0
 
   // Log all questions at the start
   log.questions(runId, 'AI Visibility Queries', queries.map(q => q.text))
 
+  // Create all query-platform combinations
+  const allTasks: Array<{
+    queryIndex: number
+    promptId: string
+    queryText: string
+    platform: SearchPlatform
+  }> = []
+
   for (let i = 0; i < queries.length; i++) {
-    const query = queries[i]
+    for (const platform of platforms) {
+      allTasks.push({
+        queryIndex: i,
+        promptId: queries[i].id,
+        queryText: queries[i].text,
+        platform,
+      })
+    }
+  }
 
-    // Log which question we're starting
-    log.questionStart(runId, i, queries.length, query.text)
+  // Run all tasks in parallel, but limit concurrency per platform to avoid rate limits
+  // Group tasks by platform and run each platform's queries in parallel
+  const platformTasks = new Map<SearchPlatform, typeof allTasks>()
+  for (const task of allTasks) {
+    if (!platformTasks.has(task.platform)) {
+      platformTasks.set(task.platform, [])
+    }
+    platformTasks.get(task.platform)!.push(task)
+  }
 
-    // Query all platforms in parallel for each query
+  // Execute all platforms in parallel, each platform runs its queries in parallel
+  const platformPromises = Array.from(platformTasks.entries()).map(async ([_platform, tasks]) => {
+    // Run all queries for this platform in parallel (API handles rate limits)
     const platformResults = await Promise.all(
-      platforms.map(platform => queryWithSearch(platform, query.text, domain, runId, locationContext))
+      tasks.map(async (task) => {
+        const result = await queryWithSearch(task.platform, task.queryText, domain, runId, locationContext)
+        completed++
+        onProgress?.(completed, total)
+        return {
+          promptId: task.promptId,
+          queryIndex: task.queryIndex,
+          result,
+        }
+      })
     )
 
-    allResults.push({
-      promptId: query.id,
-      results: platformResults,
-    })
+    return platformResults
+  })
 
-    // Log question completion with platform results
-    log.questionDone(runId, i, queries.length, platformResults.map(r => ({
+  const allPlatformResults = await Promise.all(platformPromises)
+
+  // Flatten and group results by promptId
+  const resultsByPrompt = new Map<string, { promptId: string; queryIndex: number; results: SearchQueryResult[] }>()
+
+  for (const platformResults of allPlatformResults) {
+    for (const { promptId, queryIndex, result } of platformResults) {
+      if (!resultsByPrompt.has(promptId)) {
+        resultsByPrompt.set(promptId, { promptId, queryIndex, results: [] })
+      }
+      resultsByPrompt.get(promptId)!.results.push(result)
+    }
+  }
+
+  // Convert to array and sort by original query order
+  const allResults = Array.from(resultsByPrompt.values())
+    .sort((a, b) => a.queryIndex - b.queryIndex)
+    .map(({ promptId, results }) => ({ promptId, results }))
+
+  // Log summary for each query
+  for (let i = 0; i < allResults.length; i++) {
+    const queryResult = allResults[i]
+    log.questionDone(runId, i, queries.length, queryResult.results.map(r => ({
       name: r.platform,
       mentioned: r.domainMentioned,
     })))
-
-    completed += platforms.length
-    onProgress?.(completed, total)
-
-    // Small delay between queries to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, 500))
   }
 
   return allResults
