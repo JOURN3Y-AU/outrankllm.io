@@ -93,7 +93,8 @@ export async function POST(request: NextRequest) {
 
     // Trigger background processing (true fire-and-forget)
     // Use AbortController to not wait for response - /api/process takes ~5 minutes
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     const controller = new AbortController()
 
     // Abort after 5 seconds - enough time to establish connection and send request
