@@ -4,18 +4,28 @@
  * compared to what the website claims
  */
 
-import { generateText, createGateway } from 'ai'
+import { generateText } from 'ai'
+import { createOpenAI } from '@ai-sdk/openai'
+import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createPerplexity } from '@ai-sdk/perplexity'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
 import type { BusinessAnalysis } from './analyze'
 
-// Initialize Vercel AI Gateway
-const gateway = createGateway({
-  apiKey: process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '',
+// Initialize direct API clients (bypasses Vercel AI Gateway rate limits)
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY || '',
 })
 
-// Initialize Perplexity directly (not through gateway)
+const anthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
+})
+
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
+})
+
 const perplexity = createPerplexity({
   apiKey: process.env.PERPLEXITY_API_KEY || '',
 })
@@ -123,21 +133,30 @@ async function runQueryOnPlatform(
 ): Promise<BrandAwarenessResult> {
   const startTime = Date.now()
 
-  // Map platform to Vercel AI Gateway model string (except Perplexity which uses direct SDK)
-  const modelMap: Record<Platform, string> = {
+  // Model strings for cost tracking
+  const modelStringMap: Record<Platform, string> = {
     chatgpt: 'openai/gpt-4o',
     claude: 'anthropic/claude-sonnet-4-20250514',
     gemini: 'google/gemini-2.0-flash',
     perplexity: 'perplexity/sonar-pro',
   }
 
-  const modelString = modelMap[platform]
+  const modelString = modelStringMap[platform]
 
   try {
-    // Use direct Perplexity SDK, gateway for others
-    const model = platform === 'perplexity'
-      ? perplexity('sonar-pro')
-      : gateway(modelString)
+    // Use direct API clients (bypasses Vercel AI Gateway rate limits)
+    const model = (() => {
+      switch (platform) {
+        case 'chatgpt':
+          return openai('gpt-4o')
+        case 'claude':
+          return anthropic('claude-sonnet-4-20250514')
+        case 'gemini':
+          return google('gemini-2.0-flash')
+        case 'perplexity':
+          return perplexity('sonar-pro')
+      }
+    })()
 
     const result = await generateText({
       model,
@@ -346,6 +365,7 @@ function analyzePositioning(
 
 /**
  * Run all brand awareness queries across all platforms
+ * Now fully parallelized - all queries run simultaneously grouped by platform
  */
 export async function runBrandAwarenessQueries(
   queries: BrandAwarenessQuery[],
@@ -353,40 +373,63 @@ export async function runBrandAwarenessQueries(
   onProgress?: (completed: number, total: number) => void
 ): Promise<BrandAwarenessResult[]> {
   const platforms: Platform[] = ['chatgpt', 'claude', 'gemini', 'perplexity']
-  const results: BrandAwarenessResult[] = []
   const total = queries.length * platforms.length
   let completed = 0
 
   // Log all questions at the start
   log.questions(runId, 'Brand Awareness Queries', queries.map(q => q.prompt))
 
-  // Run queries sequentially to avoid rate limits
+  // Build all tasks upfront
+  interface BrandTask {
+    query: BrandAwarenessQuery
+    queryIndex: number
+    platform: Platform
+  }
+
+  const allTasks: BrandTask[] = []
   for (let i = 0; i < queries.length; i++) {
-    const query = queries[i]
+    for (const platform of platforms) {
+      allTasks.push({ query: queries[i], queryIndex: i, platform })
+    }
+  }
 
-    // Log which question we're starting
-    log.questionStart(runId, i, queries.length, query.prompt)
+  // Group tasks by platform for parallel execution
+  const platformTasks = new Map<Platform, BrandTask[]>()
+  for (const task of allTasks) {
+    const existing = platformTasks.get(task.platform) || []
+    existing.push(task)
+    platformTasks.set(task.platform, existing)
+  }
 
-    // Run each query on all platforms in parallel
+  // Execute all platforms in parallel, each platform runs its queries in parallel too
+  const platformPromises = Array.from(platformTasks.entries()).map(async ([_platform, tasks]) => {
     const platformResults = await Promise.all(
-      platforms.map(platform => runQueryOnPlatform(query, platform, runId))
+      tasks.map(async (task) => {
+        const result = await runQueryOnPlatform(task.query, task.platform, runId)
+        completed++
+        onProgress?.(completed, total)
+        return { queryIndex: task.queryIndex, result }
+      })
     )
-    results.push(...platformResults)
+    return platformResults
+  })
 
-    // Log question completion with platform results
-    log.questionDone(runId, i, queries.length, platformResults.map(r => ({
+  const allPlatformResults = await Promise.all(platformPromises)
+
+  // Flatten and sort results by query index to maintain order
+  const flatResults = allPlatformResults.flat()
+  flatResults.sort((a, b) => a.queryIndex - b.queryIndex)
+
+  // Log completion for each query (grouped logging)
+  for (let i = 0; i < queries.length; i++) {
+    const queryResults = flatResults.filter(r => r.queryIndex === i).map(r => r.result)
+    log.questionDone(runId, i, queries.length, queryResults.map(r => ({
       name: r.platform,
       mentioned: r.recognized,
     })))
-
-    completed += platforms.length
-    onProgress?.(completed, total)
-
-    // Small delay between query types to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, 300))
   }
 
-  return results
+  return flatResults.map(r => r.result)
 }
 
 /**
