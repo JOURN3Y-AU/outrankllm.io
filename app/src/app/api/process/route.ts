@@ -22,10 +22,10 @@ import { detectGeography, extractTldCountry, countryToIsoCode } from '@/lib/geo/
 import { log } from '@/lib/logger'
 import crypto from 'crypto'
 
-// Allow up to 15 minutes for processing (requires Vercel Pro)
+// Allow up to ~13 minutes for processing (Vercel Pro max is 800s)
 // With parallel queries, 7 queries should complete in ~2-3 minutes
 // Extra buffer for brand awareness + retries
-export const maxDuration = 900
+export const maxDuration = 800
 
 interface ProcessRequest {
   scanId: string
