@@ -216,11 +216,30 @@ export function detectLocationFromContent(content: string): { country: string | 
   }
 
   // Check for major city mentions
+  // Common words that match city names but aren't locations
+  const cityFalsePositives: Record<string, string[]> = {
+    'Nice': ['nice to', 'nice work', 'nice job', 'very nice', 'a nice', 'be nice', 'how nice', 'really nice', 'so nice'],
+    'Reading': ['reading the', 'reading this', 'reading our', 'reading more', 'keep reading', 'continue reading'],
+    'Mobile': ['mobile app', 'mobile phone', 'mobile device', 'mobile friendly', 'mobile version', 'mobile responsive'],
+    'Orange': ['orange color', 'orange button', 'orange text'],
+  };
+
   for (const [country, cities] of Object.entries(MAJOR_CITIES)) {
     for (const city of cities) {
       // More specific matching - look for city in context
       const cityPattern = new RegExp(`\\b${city}\\b`, 'i');
       if (cityPattern.test(content)) {
+        // Check for false positives (common words that aren't location references)
+        const falsePositivePatterns = cityFalsePositives[city] || [];
+        const isFalsePositive = falsePositivePatterns.some(fp =>
+          contentLower.includes(fp.toLowerCase())
+        );
+
+        if (isFalsePositive) {
+          // Skip this city, it's likely a common word usage
+          continue;
+        }
+
         // Verify it's in a location context (not just a person named Sydney, etc.)
         const contextPatterns = [
           new RegExp(`(in|at|near|around|serving|based in|located in|office in)\\s+${city}`, 'i'),
@@ -234,12 +253,9 @@ export function detectLocationFromContent(content: string): { country: string | 
           detectedCity = city;
           if (!detectedCountry) detectedCountry = country;
           break;
-        } else {
-          // Still note it but with lower confidence
-          signals.push(`City "${city}" mentioned (no explicit location context)`);
-          if (!detectedCity) detectedCity = city;
-          if (!detectedCountry) detectedCountry = country;
         }
+        // Without explicit location context, DON'T set the city
+        // This prevents false positives like "nice" being detected as Nice, France
       }
     }
     if (detectedCity) break;
