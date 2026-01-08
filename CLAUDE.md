@@ -81,10 +81,32 @@ When users click pricing CTAs and return via back button, scroll position and ac
 ## Key Files
 
 - `src/app/globals.css` - CSS variables (colors, fonts)
-- `src/components/report/ReportTabs.tsx` - Main report UI
 - `src/lib/ai/search-providers.ts` - LLM queries + scoring
 - `supabase/migrations/` - Database schema
 - `.env.example` - Required env vars
+
+## Report Component Structure
+
+```
+src/components/report/
+├── ReportTabs.tsx           # Tab navigation (207 lines)
+├── shared/
+│   ├── types.ts             # Type definitions
+│   ├── constants.ts         # Tab config, platformColors, platformNames
+│   ├── utils.tsx            # formatResponseText, calculateReadinessScore
+│   └── FilterButton.tsx     # Reusable filter button
+└── tabs/
+    ├── StartHereTab.tsx     # Persona selection + guide
+    ├── SetupTab.tsx         # Business identity, services
+    ├── AIReadinessTab.tsx   # Technical checks
+    ├── ResponsesTab.tsx     # LLM responses
+    ├── MeasurementsTab.tsx  # Score gauges
+    ├── CompetitorsTab.tsx   # Competitor analysis
+    ├── BrandAwarenessTab.tsx # Brand recognition
+    └── LockedTab.tsx        # Generic locked state
+```
+
+Each tab is 200-600 lines. Import from `./shared` for types/constants/utils.
 
 ## Design Notes
 
