@@ -76,6 +76,18 @@ export function ReportClient({ data }: ReportClientProps) {
   const { report, analysis, crawlData, responses, prompts, brandAwareness, email, domain, runId, isVerified } = data
   const [showModal, setShowModal] = useState(false)
 
+  // Restore scroll position when returning from pricing page
+  useEffect(() => {
+    const savedPosition = sessionStorage.getItem('report_scroll_position')
+    if (savedPosition) {
+      // Small delay to ensure page is rendered before scrolling
+      requestAnimationFrame(() => {
+        window.scrollTo(0, parseInt(savedPosition, 10))
+        sessionStorage.removeItem('report_scroll_position')
+      })
+    }
+  }, [])
+
   // Show modal after a brief delay on first view
   useEffect(() => {
     const modalShown = localStorage.getItem(`modal_shown_${domain}`)
@@ -97,7 +109,13 @@ export function ReportClient({ data }: ReportClientProps) {
   }
 
   const handleUpgradeClick = () => {
+    saveScrollPosition()
     window.location.href = '/pricing?from=report'
+  }
+
+  // Save scroll position before navigating to pricing page
+  const saveScrollPosition = () => {
+    sessionStorage.setItem('report_scroll_position', String(window.scrollY))
   }
 
   // Wrap content in verification gate
@@ -204,6 +222,7 @@ export function ReportClient({ data }: ReportClientProps) {
             </p>
             <Link
               href="/pricing?from=report"
+              onClick={saveScrollPosition}
               className="form-button inline-flex items-center gap-2"
               style={{ width: 'auto', padding: '18px 32px' }}
             >

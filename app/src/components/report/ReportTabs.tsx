@@ -33,6 +33,15 @@ import {
 } from 'lucide-react'
 import { ScoreGauge } from './ScoreGauge'
 import Link from 'next/link'
+/**
+ * Save scroll position before navigating to pricing page
+ * This allows restoring position when user returns via back button
+ */
+function handlePricingClick() {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('report_scroll_position', String(window.scrollY))
+  }
+}
 
 /**
  * Format AI response text by converting markdown-style formatting to styled content
@@ -333,10 +342,30 @@ export function ReportTabs({
   domain,
   onUpgradeClick
 }: ReportTabsProps) {
+  // Always start with default tab on server/initial render to avoid hydration mismatch
   const [activeTab, setActiveTab] = useState<TabId>('startHere')
+  const [isTabRestored, setIsTabRestored] = useState(false)
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [brandPlatformFilter, setBrandPlatformFilter] = useState<string>('all')
   const tabsRef = useRef<HTMLDivElement>(null)
+
+  // Restore active tab from sessionStorage after hydration (for back button restoration)
+  useEffect(() => {
+    const savedTab = sessionStorage.getItem('report_active_tab')
+    if (savedTab && tabs.some(t => t.id === savedTab)) {
+      setActiveTab(savedTab as TabId)
+      // Clear the saved tab after restoring (one-time use)
+      sessionStorage.removeItem('report_active_tab')
+    }
+    setIsTabRestored(true)
+  }, [])
+
+  // Save active tab to sessionStorage whenever it changes (but only after initial restoration)
+  useEffect(() => {
+    if (isTabRestored) {
+      sessionStorage.setItem('report_active_tab', activeTab)
+    }
+  }, [activeTab, isTabRestored])
 
   const scrollToTabsAndNavigate = (tabId: TabId) => {
     setActiveTab(tabId)
@@ -983,6 +1012,7 @@ function SetupTab({
             {/* Subscribe to add more button */}
             <Link
               href="/pricing?from=report"
+              onClick={handlePricingClick}
               className="flex items-center gap-2 transition-all hover:opacity-80"
               style={{
                 padding: '10px 16px',
@@ -1125,6 +1155,7 @@ function SetupTab({
             </div>
             <a
               href="/pricing?from=report"
+              onClick={handlePricingClick}
               className="flex-shrink-0 font-mono text-xs flex items-center gap-2 transition-all hover:opacity-80"
               style={{
                 padding: '10px 18px',
@@ -1484,6 +1515,7 @@ function AIReadinessTab({
 
             <Link
               href="/pricing?from=report"
+              onClick={handlePricingClick}
               className="font-mono text-sm flex items-center gap-2 transition-all hover:scale-105"
               style={{
                 padding: '12px 24px',
@@ -2829,7 +2861,9 @@ function ResponsesTab({
                 </div>
               </div>
 
-              <button
+              <a
+                href="/pricing?from=report"
+                onClick={handlePricingClick}
                 className="font-mono text-sm flex items-center gap-2 transition-all hover:scale-105"
                 style={{
                   padding: '12px 24px',
@@ -2838,11 +2872,12 @@ function ResponsesTab({
                   border: 'none',
                   cursor: 'pointer',
                   fontWeight: '600',
+                  textDecoration: 'none',
                 }}
               >
                 <Sparkles size={16} />
                 Get Fixes & Action Plans
-              </button>
+              </a>
             </div>
           </div>
         )
@@ -3335,6 +3370,7 @@ function MeasurementsTab({
             </p>
             <a
               href="/pricing?from=report"
+              onClick={handlePricingClick}
               className="font-mono text-sm flex items-center gap-2 transition-all hover:opacity-90"
               style={{
                 padding: '12px 24px',
@@ -3425,6 +3461,7 @@ function MeasurementsTab({
 
               <a
                 href="/pricing?from=report"
+                onClick={handlePricingClick}
                 className="font-mono text-sm flex items-center gap-2 transition-all hover:scale-105"
                 style={{
                   padding: '12px 24px',
