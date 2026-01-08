@@ -224,11 +224,16 @@ async function queryOpenAIWithSearch(
       },
       system: SYSTEM_PROMPT,
       prompt: query,
-      maxOutputTokens: 2000,
+      maxOutputTokens: 4000, // Increased for web search responses which can be long
     })
 
     const responseTimeMs = Date.now() - startTime
     const responseText = result.text
+
+    // Log if response was truncated due to length limit
+    if (result.finishReason === 'length') {
+      log.warn(runId, `ChatGPT response truncated (hit token limit): "${query.slice(0, 40)}..."`)
+    }
 
     // Check for empty response (API succeeded but returned nothing)
     if (!responseText || responseText.trim() === '') {
