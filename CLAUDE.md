@@ -60,6 +60,16 @@ Sticky CTAs on report tabs link to `/pricing?from=report`:
 
 Pricing page shows "Back to Report" button when `?from=report` param present.
 
+## Scroll/Tab Preservation
+
+When users click pricing CTAs and return via back button, scroll position and active tab are restored:
+
+- `sessionStorage.report_scroll_position` - Saved on CTA click, restored on mount
+- `sessionStorage.report_active_tab` - Saved on tab change, restored after hydration
+- Both cleared after one-time use to prevent stale state
+
+**Hydration note**: Tab restoration must happen in `useEffect`, not `useState` initializer, to avoid SSR mismatch.
+
 ## API Routes
 
 - `POST /api/scan` - Initiate scan
