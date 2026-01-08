@@ -7,8 +7,13 @@
 import { generateText, createGateway } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { trackCost } from './costs'
+
+// Initialize Google with explicit API key (supports multiple env var names)
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
+})
 import type { BusinessAnalysis } from './analyze'
 
 // Check if gateway API key is available
