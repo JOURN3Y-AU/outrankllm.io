@@ -19,13 +19,13 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   title: "outrankllm.io | AI Visibility for Vibe Coders",
   description:
-    "Your vibe-coded business is invisible to ChatGPT. We fix that. Get your free AI visibility report.",
+    "Your business is invisible to AI. We fix that. Get your free AI visibility report.",
   keywords: [
     "AI visibility",
     "ChatGPT SEO",
     "Claude SEO",
     "Gemini SEO",
-    "vibe coding",
+    "AI visibility",
     "GEO",
     "generative engine optimization",
   ],
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "outrankllm.io | AI Visibility for Vibe Coders",
-    description: "Your vibe-coded business is invisible to ChatGPT. We fix that.",
+    description: "Your business is invisible to AI. We fix that.",
     url: "https://outrankllm.io",
     siteName: "outrankllm.io",
     type: "website",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "outrankllm.io | AI Visibility for Vibe Coders",
-    description: "Your vibe-coded business is invisible to ChatGPT. We fix that.",
+    description: "Your business is invisible to AI. We fix that.",
   },
 };
 

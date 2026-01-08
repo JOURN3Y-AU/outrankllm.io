@@ -54,17 +54,8 @@ export function Platforms() {
 
 export function WorksWith() {
   return (
-    <div className="flex items-center gap-4 font-mono text-[0.7rem] text-[var(--text-dim)]">
-      Works with{' '}
-      <span className="text-[var(--text-mid)]">Bolt.new</span>
-      <span>·</span>
-      <span className="text-[var(--text-mid)]">Lovable</span>
-      <span>·</span>
-      <span className="text-[var(--text-mid)]">Cursor</span>
-      <span>·</span>
-      <span className="text-[var(--text-mid)]">Replit</span>
-      <span>·</span>
-      <span className="text-[var(--text-mid)]">v0</span>
+    <div className="font-mono text-[0.7rem] text-[var(--text-dim)] text-center">
+      Trusted by business owners, developers, vibe coders and agencies
     </div>
   )
 }

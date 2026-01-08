@@ -39,8 +39,8 @@ export default function Home() {
 
           {/* Tagline */}
           <p className="tagline max-w-[420px] text-center" style={{ marginBottom: '28px' }}>
-            Turn AI blindspots into <strong className="text-[var(--text-mid)]">ready-to-ship PRDs</strong> for
-            Cursor, Claude Code, and Windsurf.
+            Discover what AI says about your business<br />
+            and how to <strong className="text-[var(--text-mid)]">fix it</strong>.
           </p>
 
           {/* Email form */}

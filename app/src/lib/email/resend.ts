@@ -182,7 +182,7 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
                 outrank<span style="color: #22c55e;">llm</span>
               </div>
               <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
-                GEO FOR VIBE CODERS
+                AI VISIBILITY REPORTS
               </div>
             </td>
           </tr>
@@ -255,7 +255,7 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
 
 function generateVerificationEmailText(domain: string, verificationUrl: string): string {
   return `
-outrankllm - GEO for Vibe Coders
+outrankllm - AI Visibility Reports
 
 Your AI visibility report is almost ready
 
