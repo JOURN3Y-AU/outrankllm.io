@@ -45,10 +45,12 @@ export const categoryLabels: Record<string, string> = {
   comparison: 'Comparison',
   review: 'Reviews & Ratings',
   how_to: 'How-To',
+  other: 'Other',
   // Legacy categories (for backward compatibility)
   general: 'General',
   location: 'Location-Based',
   recommendation: 'Recommendation',
+  custom: 'Custom',
 }
 
 export const categoryColors: Record<string, string> = {
@@ -59,8 +61,21 @@ export const categoryColors: Record<string, string> = {
   comparison: 'var(--red)',
   review: 'var(--text-mid)',
   how_to: 'var(--text-dim)',
+  other: 'var(--text-mid)',
   // Legacy categories
   general: 'var(--blue)',
   location: 'var(--green)',
   recommendation: 'var(--text-mid)',
+  custom: 'var(--text-mid)',
 }
+
+// Categories available for user selection when adding/editing questions
+export const selectableCategories = [
+  { value: 'finding_provider', label: 'Finding a Provider' },
+  { value: 'product_specific', label: 'Product Search' },
+  { value: 'service', label: 'Service Search' },
+  { value: 'comparison', label: 'Comparison' },
+  { value: 'review', label: 'Reviews & Ratings' },
+  { value: 'how_to', label: 'How-To' },
+  { value: 'other', label: 'Other' },
+]

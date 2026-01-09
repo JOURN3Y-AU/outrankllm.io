@@ -14,6 +14,8 @@ import {
   MeasurementsTab,
   CompetitorsTab,
   BrandAwarenessTab,
+  ActionsTab,
+  PrdTab,
   LockedTab,
 } from './tabs'
 
@@ -29,6 +31,8 @@ interface ReportTabsProps {
   domain: string
   onUpgradeClick: () => void
   isSubscriber?: boolean
+  customQuestionLimit?: number
+  currentRunId?: string
 }
 
 export function ReportTabs({
@@ -42,7 +46,9 @@ export function ReportTabs({
   crawlData,
   domain,
   onUpgradeClick,
-  isSubscriber = false
+  isSubscriber = false,
+  customQuestionLimit = 0,
+  currentRunId,
 }: ReportTabsProps) {
   // Always start with default tab on server/initial render to avoid hydration mismatch
   const [activeTab, setActiveTab] = useState<TabId>('startHere')
@@ -138,7 +144,13 @@ export function ReportTabs({
           />
         )}
         {activeTab === 'setup' && (
-          <SetupTab analysis={analysis} prompts={prompts} domain={domain} />
+          <SetupTab
+            analysis={analysis}
+            prompts={prompts}
+            domain={domain}
+            isSubscriber={isSubscriber}
+            customQuestionLimit={customQuestionLimit}
+          />
         )}
         {activeTab === 'responses' && (
           <ResponsesTab
@@ -157,6 +169,9 @@ export function ReportTabs({
             responses={responses}
             analysis={analysis}
             brandAwareness={brandAwareness}
+            isSubscriber={isSubscriber}
+            currentRunId={currentRunId}
+            domain={domain}
           />
         )}
         {activeTab === 'competitors' && (
@@ -178,32 +193,40 @@ export function ReportTabs({
           />
         )}
         {activeTab === 'actions' && (
-          <LockedTab
-            icon={Lightbulb}
-            title="Personalized Action Plans"
-            description="Get specific, prioritized recommendations to improve your AI visibility."
-            features={[
-              'Content gap recommendations',
-              'Technical SEO for AI crawlers',
-              'Schema markup suggestions',
-              'Citation-building strategies'
-            ]}
-            onUpgrade={onUpgradeClick}
-          />
+          isSubscriber ? (
+            <ActionsTab />
+          ) : (
+            <LockedTab
+              icon={Lightbulb}
+              title="Personalized Action Plans"
+              description="Get specific, prioritized recommendations to improve your AI visibility."
+              features={[
+                'Content gap recommendations',
+                'Technical SEO for AI crawlers',
+                'Schema markup suggestions',
+                'Citation-building strategies'
+              ]}
+              onUpgrade={onUpgradeClick}
+            />
+          )
         )}
         {activeTab === 'prd' && (
-          <LockedTab
-            icon={FileCode}
-            title="PRD & Technical Specs"
-            description="Ready-to-ship product requirements for your AI coding tools."
-            features={[
-              'Cursor/Claude Code ready PRDs',
-              'Implementation task breakdown',
-              'Code snippets and examples',
-              'Integration specifications'
-            ]}
-            onUpgrade={onUpgradeClick}
-          />
+          isSubscriber ? (
+            <PrdTab />
+          ) : (
+            <LockedTab
+              icon={FileCode}
+              title="PRD & Technical Specs"
+              description="Ready-to-ship product requirements for your AI coding tools."
+              features={[
+                'Cursor/Claude Code ready PRDs',
+                'Implementation task breakdown',
+                'Code snippets and examples',
+                'Integration specifications'
+              ]}
+              onUpgrade={onUpgradeClick}
+            />
+          )
         )}
       </div>
     </div>

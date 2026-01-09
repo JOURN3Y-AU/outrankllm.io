@@ -34,9 +34,11 @@ export type QueryCategory =
   | 'service'
   | 'comparison'
   | 'review'
-  // Legacy categories (for backward compatibility with existing data)
   | 'how_to'
+  | 'other'
+  // Legacy categories (for backward compatibility with existing data)
   | 'general'
+  | 'custom'
 
 export interface ResearchedQuery {
   query: string
@@ -303,13 +305,15 @@ function validateCategory(category: string): QueryCategory {
     'comparison',
     'review',
     'how_to',
+    'other',
     'general',
+    'custom',
   ]
 
   const normalized = category.toLowerCase().replace(/[^a-z_]/g, '')
   return validCategories.includes(normalized as QueryCategory)
     ? (normalized as QueryCategory)
-    : 'general'
+    : 'other'
 }
 
 /**

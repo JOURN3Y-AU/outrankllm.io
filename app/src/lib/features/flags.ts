@@ -8,6 +8,8 @@ export interface FeatureFlags {
   blurCompetitors: boolean
   showAllCompetitors: boolean
   editablePrompts: boolean
+  customQuestionLimit: number  // Max total questions: 0 (free - can't edit), 10 (starter), 20 (pro/agency)
+  showActionPlans: boolean     // Show full action plans (not teaser)
   showPrdTasks: boolean
   geoEnhancedPrompts: boolean
   unlimitedScans: boolean
@@ -22,6 +24,8 @@ const DEFAULT_FLAGS: FeatureFlags = {
   blurCompetitors: true,
   showAllCompetitors: false,
   editablePrompts: false,
+  customQuestionLimit: 0,
+  showActionPlans: false,
   showPrdTasks: false,
   geoEnhancedPrompts: true,
   unlimitedScans: false,
@@ -61,7 +65,9 @@ function getFlagsForTier(tier: Tier): FeatureFlags {
         tier: 'starter',
         blurCompetitors: false,
         showAllCompetitors: true,
-        editablePrompts: false,
+        editablePrompts: true,
+        customQuestionLimit: 10,
+        showActionPlans: true,
         showPrdTasks: false,
         geoEnhancedPrompts: true,
         unlimitedScans: false,
@@ -76,6 +82,8 @@ function getFlagsForTier(tier: Tier): FeatureFlags {
         blurCompetitors: false,
         showAllCompetitors: true,
         editablePrompts: true,
+        customQuestionLimit: 20,
+        showActionPlans: true,
         showPrdTasks: true,
         geoEnhancedPrompts: true,
         unlimitedScans: true,
@@ -90,6 +98,8 @@ function getFlagsForTier(tier: Tier): FeatureFlags {
         blurCompetitors: false,
         showAllCompetitors: true,
         editablePrompts: true,
+        customQuestionLimit: 20,
+        showActionPlans: true,
         showPrdTasks: true,
         geoEnhancedPrompts: true,
         unlimitedScans: true,
@@ -105,6 +115,8 @@ function getFlagsForTier(tier: Tier): FeatureFlags {
         blurCompetitors: true,
         showAllCompetitors: false,
         editablePrompts: false,
+        customQuestionLimit: 0,
+        showActionPlans: false,
         showPrdTasks: false,
         geoEnhancedPrompts: true,
         unlimitedScans: false,
@@ -114,12 +126,15 @@ function getFlagsForTier(tier: Tier): FeatureFlags {
   }
 }
 
+// Boolean feature flags (excludes tier, isSubscriber, and customQuestionLimit which is a number)
+type BooleanFeatureFlag = keyof Omit<FeatureFlags, 'isSubscriber' | 'tier' | 'customQuestionLimit'>
+
 /**
- * Check if a specific feature is enabled
+ * Check if a specific boolean feature is enabled
  */
 export function isFeatureEnabled(
   flags: FeatureFlags,
-  feature: keyof Omit<FeatureFlags, 'isSubscriber' | 'tier'>
+  feature: BooleanFeatureFlag
 ): boolean {
   return flags[feature] ?? false
 }

@@ -1,26 +1,161 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { BarChart3, Lock, AlertCircle, Sparkles, Info } from 'lucide-react'
+import { BarChart3, Lock, AlertCircle, Sparkles, Info, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { ScoreGauge } from '../ScoreGauge'
+import { MultiLineTrendChart, CompetitorMentionsTrendChart, type MultiLineSeries, type CompetitorMentionsSeries } from '../TrendChart'
 import type { Response, Analysis, BrandAwarenessResult } from '../shared'
 import { platformColors, platformNames, calculateReadinessScore, handlePricingClick } from '../shared'
+
+interface ScoreSnapshot {
+  id: string
+  run_id: string
+  visibility_score: number
+  chatgpt_score: number | null
+  claude_score: number | null
+  gemini_score: number | null
+  perplexity_score: number | null
+  chatgpt_mentions: number | null
+  claude_mentions: number | null
+  gemini_mentions: number | null
+  perplexity_mentions: number | null
+  query_coverage: number | null
+  total_mentions: number | null
+  recorded_at: string
+}
+
+interface CompetitorSnapshot {
+  run_id: string
+  recorded_at: string
+  domain_mentions: number
+  competitors: { name: string; count: number }[]
+}
 
 export function MeasurementsTab({
   visibilityScore,
   platformScores,
   responses,
   analysis,
-  brandAwareness
+  brandAwareness,
+  isSubscriber = false,
+  currentRunId,
+  domain,
 }: {
   visibilityScore: number
   platformScores: Record<string, number>
   responses: Response[] | null
   analysis: Analysis | null
   brandAwareness?: BrandAwarenessResult[] | null
+  isSubscriber?: boolean
+  currentRunId?: string
+  domain?: string
 }) {
   const [showStickyUpsell, setShowStickyUpsell] = useState(false)
+  const [rawTrendData, setRawTrendData] = useState<ScoreSnapshot[]>([])
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [rawCompetitorData, setRawCompetitorData] = useState<CompetitorSnapshot[]>([])
+  const [competitorTopNames, setCompetitorTopNames] = useState<string[]>([])
+  const [competitorLoading, setCompetitorLoading] = useState(false)
+
+  // Fetch trend data for subscribers
+  useEffect(() => {
+    if (!isSubscriber) return
+
+    const fetchTrends = async () => {
+      setTrendLoading(true)
+      try {
+        const res = await fetch('/api/trends?limit=12')
+        if (res.ok) {
+          const data = await res.json()
+          setRawTrendData(data.snapshots || [])
+        }
+      } catch (error) {
+        console.error('Error fetching trends:', error)
+      } finally {
+        setTrendLoading(false)
+      }
+    }
+
+    fetchTrends()
+  }, [isSubscriber])
+
+  // Fetch competitor trend data for subscribers
+  useEffect(() => {
+    if (!isSubscriber) return
+
+    const fetchCompetitorTrends = async () => {
+      setCompetitorLoading(true)
+      try {
+        const res = await fetch('/api/trends/competitors?limit=12')
+        if (res.ok) {
+          const data = await res.json()
+          setRawCompetitorData(data.snapshots || [])
+          setCompetitorTopNames(data.topCompetitors || [])
+        }
+      } catch (error) {
+        console.error('Error fetching competitor trends:', error)
+      } finally {
+        setCompetitorLoading(false)
+      }
+    }
+
+    fetchCompetitorTrends()
+  }, [isSubscriber])
+
+  // Filter trend data to only show data up to and including the current report
+  // This ensures the trend chart values match the gauges shown above it
+  const trendData = useMemo(() => {
+    if (!currentRunId || rawTrendData.length === 0) return rawTrendData
+
+    // Find the index of the current report in the trend data
+    const currentIndex = rawTrendData.findIndex(s => s.run_id === currentRunId)
+
+    // If current report not found in trend data, show all data
+    if (currentIndex === -1) return rawTrendData
+
+    // Return only data up to and including the current report
+    return rawTrendData.slice(0, currentIndex + 1)
+  }, [rawTrendData, currentRunId])
+
+  // Filter competitor data to only show data up to and including the current report
+  const competitorData = useMemo(() => {
+    if (!currentRunId || rawCompetitorData.length === 0) return rawCompetitorData
+
+    const currentIndex = rawCompetitorData.findIndex(s => s.run_id === currentRunId)
+    if (currentIndex === -1) return rawCompetitorData
+
+    return rawCompetitorData.slice(0, currentIndex + 1)
+  }, [rawCompetitorData, currentRunId])
+
+  // Build competitor chart series - domain + top 5 competitors
+  const competitorSeries = useMemo((): CompetitorMentionsSeries[] => {
+    if (competitorData.length === 0) return []
+
+    // Domain series
+    const domainSeries: CompetitorMentionsSeries = {
+      name: domain || 'Your Domain',
+      isDomain: true,
+      data: competitorData.map(s => ({
+        date: s.recorded_at,
+        value: s.domain_mentions,
+      })),
+    }
+
+    // Top 5 competitor series
+    const competitorSeriesList: CompetitorMentionsSeries[] = competitorTopNames.slice(0, 5).map(name => ({
+      name,
+      data: competitorData.map(s => {
+        const comp = s.competitors.find(c => c.name === name)
+        return {
+          date: s.recorded_at,
+          value: comp?.count || 0,
+        }
+      }),
+    }))
+
+    return [domainSeries, ...competitorSeriesList]
+  }, [competitorData, competitorTopNames, domain])
 
   // Track scroll to show sticky upsell as soon as user starts scrolling
   useEffect(() => {
@@ -290,194 +425,329 @@ export function MeasurementsTab({
         </div>
       </div>
 
-      {/* Trend Chart - Mocked with frosted overlay for free tier */}
+      {/* Trend Chart - Real data for subscribers, mocked preview for free */}
       <div className="card relative overflow-hidden" style={{ padding: '32px' }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: '24px' }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
           <h3
-            className="text-[var(--text-dim)] font-mono uppercase tracking-wider"
+            className="text-[var(--green)] font-mono uppercase tracking-wider"
             style={{ fontSize: '11px', letterSpacing: '0.1em' }}
           >
             Visibility Trends
           </h3>
-          <div className="flex items-center gap-2">
-            <Lock size={12} style={{ color: 'var(--gold)' }} />
-            <span
-              className="font-mono text-xs"
-              style={{ color: 'var(--gold)' }}
-            >
-              Subscribers Only
-            </span>
-          </div>
+          {!isSubscriber && (
+            <div className="flex items-center gap-2">
+              <Lock size={12} style={{ color: 'var(--gold)' }} />
+              <span
+                className="font-mono text-xs"
+                style={{ color: 'var(--gold)' }}
+              >
+                Subscribers Only
+              </span>
+            </div>
+          )}
         </div>
+        <p className="text-[var(--text-ghost)] text-xs" style={{ marginBottom: '24px' }}>
+          AI Visibility Score and total mentions over time
+        </p>
 
-        {/* Mocked Chart - Shows what subscribers see */}
-        <div
-          className="relative"
-          style={{ height: '260px', backgroundColor: 'var(--surface-elevated)', padding: '20px' }}
-        >
-          {/* Fake chart data visualization - Bright and visible */}
-          <svg
-            viewBox="0 0 400 180"
-            className="w-full h-full"
-            preserveAspectRatio="none"
-          >
-            {/* Background gradient */}
-            <defs>
-              <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="var(--green)" stopOpacity="0.1" />
-                <stop offset="100%" stopColor="var(--green)" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-
-            {/* Grid lines - more visible */}
-            {[20, 60, 100, 140].map((y) => (
-              <line
-                key={y}
-                x1="0"
-                y1={y}
-                x2="400"
-                y2={y}
-                stroke="#333"
-                strokeWidth="1"
-              />
-            ))}
-
-            {/* Y-axis labels */}
-            <text x="5" y="25" fontSize="10" fill="#666">100%</text>
-            <text x="5" y="65" fontSize="10" fill="#666">75%</text>
-            <text x="5" y="105" fontSize="10" fill="#666">50%</text>
-            <text x="5" y="145" fontSize="10" fill="#666">25%</text>
-
-            {/* Area fill under ChatGPT line */}
-            <polygon
-              points="40,130 90,110 140,118 190,95 240,100 290,80 340,65 390,55 390,160 40,160"
-              fill="url(#chartGradient)"
-            />
-
-            {/* ChatGPT trend line - BRIGHT */}
-            <polyline
-              points="40,130 90,110 140,118 190,95 240,100 290,80 340,65 390,55"
-              fill="none"
-              stroke="#ef4444"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {/* ChatGPT data points */}
-            <circle cx="40" cy="130" r="4" fill="#ef4444" />
-            <circle cx="90" cy="110" r="4" fill="#ef4444" />
-            <circle cx="140" cy="118" r="4" fill="#ef4444" />
-            <circle cx="190" cy="95" r="4" fill="#ef4444" />
-            <circle cx="240" cy="100" r="4" fill="#ef4444" />
-            <circle cx="290" cy="80" r="4" fill="#ef4444" />
-            <circle cx="340" cy="65" r="4" fill="#ef4444" />
-            <circle cx="390" cy="55" r="5" fill="#ef4444" stroke="#fff" strokeWidth="2" />
-
-            {/* Perplexity trend line - BRIGHT */}
-            <polyline
-              points="40,145 90,138 140,132 190,122 240,108 290,100 340,88 390,72"
-              fill="none"
-              stroke="#1FB8CD"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {/* Gemini trend line - BRIGHT */}
-            <polyline
-              points="40,152 90,148 140,142 190,138 240,130 290,122 340,108 390,100"
-              fill="none"
-              stroke="#3b82f6"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {/* Claude trend line - BRIGHT */}
-            <polyline
-              points="40,158 90,154 140,155 190,148 240,142 290,138 340,130 390,118"
-              fill="none"
-              stroke="#22c55e"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-
-          {/* X-axis labels */}
-          <div
-            className="absolute bottom-2 left-12 right-4 flex justify-between text-[var(--text-mid)] font-mono text-xs"
-          >
-            <span>Week 1</span>
-            <span>Week 2</span>
-            <span>Week 3</span>
-            <span>Week 4</span>
-            <span>Week 5</span>
+        {isSubscriber ? (
+          // Subscriber view: Real trend data
+          <div>
+            {trendLoading ? (
+              <div
+                className="flex items-center justify-center text-[var(--text-dim)]"
+                style={{ height: '200px' }}
+              >
+                Loading trends...
+              </div>
+            ) : trendData.length === 0 ? (
+              // No data yet - first scan
+              <div
+                className="flex flex-col items-center justify-center bg-[var(--surface-elevated)] border border-[var(--border)]"
+                style={{ padding: '40px 20px' }}
+              >
+                <TrendingUp size={32} className="text-[var(--green)]" style={{ marginBottom: '16px', opacity: 0.5 }} />
+                <p className="text-[var(--text)] font-medium" style={{ marginBottom: '8px' }}>
+                  Your First Scan
+                </p>
+                <p className="text-[var(--text-dim)] text-sm text-center" style={{ maxWidth: '320px' }}>
+                  Trend data will appear here after your next scheduled scan. Check back in a week to see how your visibility changes over time.
+                </p>
+              </div>
+            ) : (
+              // Real trend chart - full width with dual axes
+              // Left axis: Overall visibility score (0-100) | Right axis: Platform mentions (absolute count)
+              <div
+                className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+                style={{ padding: '24px' }}
+              >
+                <MultiLineTrendChart
+                  title="Visibility Over Time"
+                  height={300}
+                  rightAxisLabel="Mentions"
+                  rightAxisUnit=""
+                  series={[
+                    // Overall visibility score (left axis - 0-100)
+                    {
+                      key: 'overall',
+                      name: 'AI Visibility Score',
+                      color: '#ffffff',
+                      isOverall: true,
+                      data: trendData.map(s => ({
+                        date: s.recorded_at,
+                        value: Number(s.visibility_score),
+                      })),
+                    },
+                    // Per-platform mentions (right axis - absolute counts)
+                    {
+                      key: 'chatgpt',
+                      name: 'ChatGPT',
+                      color: '#ef4444',
+                      data: trendData.map(s => ({
+                        date: s.recorded_at,
+                        value: Number(s.chatgpt_mentions ?? 0),
+                      })),
+                    },
+                    {
+                      key: 'perplexity',
+                      name: 'Perplexity',
+                      color: '#1FB8CD',
+                      data: trendData.map(s => ({
+                        date: s.recorded_at,
+                        value: Number(s.perplexity_mentions ?? 0),
+                      })),
+                    },
+                    {
+                      key: 'gemini',
+                      name: 'Gemini',
+                      color: '#3b82f6',
+                      data: trendData.map(s => ({
+                        date: s.recorded_at,
+                        value: Number(s.gemini_mentions ?? 0),
+                      })),
+                    },
+                    {
+                      key: 'claude',
+                      name: 'Claude',
+                      color: '#22c55e',
+                      data: trendData.map(s => ({
+                        date: s.recorded_at,
+                        value: Number(s.claude_mentions ?? 0),
+                      })),
+                    },
+                  ]}
+                />
+              </div>
+            )}
           </div>
-
-          {/* Frosted overlay - lighter to show chart through */}
-          <div
-            className="absolute inset-0 flex flex-col items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, rgba(10,10,10,0.5) 0%, rgba(10,10,10,0.7) 100%)',
-              backdropFilter: 'blur(2px)',
-            }}
-          >
+        ) : (
+          // Free user view: Mocked chart with frosted overlay
+          <>
             <div
-              className="flex items-center justify-center"
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
-                marginBottom: '16px',
-              }}
+              className="relative"
+              style={{ height: '260px', backgroundColor: 'var(--surface-elevated)', padding: '20px' }}
             >
-              <Lock size={24} style={{ color: 'var(--bg)' }} />
-            </div>
-            <p className="text-[var(--text)] font-medium text-lg" style={{ marginBottom: '8px' }}>
-              Track Your Progress Over Time
-            </p>
-            <p className="text-[var(--text-dim)] text-sm text-center" style={{ maxWidth: '320px', marginBottom: '20px' }}>
-              Subscribers get weekly scans to track how your AI visibility changes over time
-            </p>
-            <a
-              href="/pricing?from=report"
-              onClick={handlePricingClick}
-              className="font-mono text-sm flex items-center gap-2 transition-all hover:opacity-90"
-              style={{
-                padding: '12px 24px',
-                background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
-                color: 'var(--bg)',
-                border: 'none',
-                cursor: 'pointer',
-                textDecoration: 'none',
-              }}
-            >
-              <Sparkles size={14} />
-              Unlock Tracking
-            </a>
-          </div>
-        </div>
+              {/* Fake chart data visualization */}
+              <svg
+                viewBox="0 0 400 180"
+                className="w-full h-full"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="var(--green)" stopOpacity="0.1" />
+                    <stop offset="100%" stopColor="var(--green)" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
 
-        {/* Legend */}
-        <div
-          className="flex flex-wrap items-center justify-center gap-4"
-          style={{ marginTop: '20px', opacity: 0.4 }}
-        >
-          {[
-            { name: 'ChatGPT', color: 'var(--red)' },
-            { name: 'Perplexity', color: '#1FB8CD' },
-            { name: 'Gemini', color: 'var(--blue)' },
-            { name: 'Claude', color: 'var(--green)' },
-          ].map(({ name, color }) => (
-            <div key={name} className="flex items-center gap-2">
-              <span style={{ width: '12px', height: '3px', backgroundColor: color }} />
-              <span className="font-mono text-xs text-[var(--text-dim)]">{name}</span>
+                {[20, 60, 100, 140].map((y) => (
+                  <line
+                    key={y}
+                    x1="0"
+                    y1={y}
+                    x2="400"
+                    y2={y}
+                    stroke="#333"
+                    strokeWidth="1"
+                  />
+                ))}
+
+                <text x="5" y="25" fontSize="10" fill="#666">100%</text>
+                <text x="5" y="65" fontSize="10" fill="#666">75%</text>
+                <text x="5" y="105" fontSize="10" fill="#666">50%</text>
+                <text x="5" y="145" fontSize="10" fill="#666">25%</text>
+
+                <polygon
+                  points="40,130 90,110 140,118 190,95 240,100 290,80 340,65 390,55 390,160 40,160"
+                  fill="url(#chartGradient)"
+                />
+
+                <polyline
+                  points="40,130 90,110 140,118 190,95 240,100 290,80 340,65 390,55"
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="390" cy="55" r="5" fill="#ef4444" stroke="#fff" strokeWidth="2" />
+
+                <polyline
+                  points="40,145 90,138 140,132 190,122 240,108 290,100 340,88 390,72"
+                  fill="none"
+                  stroke="#1FB8CD"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                <polyline
+                  points="40,152 90,148 140,142 190,138 240,130 290,122 340,108 390,100"
+                  fill="none"
+                  stroke="#3b82f6"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                <polyline
+                  points="40,158 90,154 140,155 190,148 240,142 290,138 340,130 390,118"
+                  fill="none"
+                  stroke="#22c55e"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+
+              <div
+                className="absolute bottom-2 left-12 right-4 flex justify-between text-[var(--text-mid)] font-mono text-xs"
+              >
+                <span>Week 1</span>
+                <span>Week 2</span>
+                <span>Week 3</span>
+                <span>Week 4</span>
+                <span>Week 5</span>
+              </div>
+
+              {/* Frosted overlay */}
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(10,10,10,0.5) 0%, rgba(10,10,10,0.7) 100%)',
+                  backdropFilter: 'blur(2px)',
+                }}
+              >
+                <div
+                  className="flex items-center justify-center"
+                  style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <Lock size={24} style={{ color: 'var(--bg)' }} />
+                </div>
+                <p className="text-[var(--text)] font-medium text-lg" style={{ marginBottom: '8px' }}>
+                  Track Your Progress Over Time
+                </p>
+                <p className="text-[var(--text-dim)] text-sm text-center" style={{ maxWidth: '320px', marginBottom: '20px' }}>
+                  Subscribers get weekly scans to track how your AI visibility changes over time
+                </p>
+                <a
+                  href="/pricing?from=report"
+                  onClick={handlePricingClick}
+                  className="font-mono text-sm flex items-center gap-2 transition-all hover:opacity-90"
+                  style={{
+                    padding: '12px 24px',
+                    background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+                    color: 'var(--bg)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <Sparkles size={14} />
+                  Unlock Tracking
+                </a>
+              </div>
             </div>
-          ))}
-        </div>
+          </>
+        )}
+
+        {/* Legend - only show for free users */}
+        {!isSubscriber && (
+          <div
+            className="flex flex-wrap items-center justify-center gap-4"
+            style={{ marginTop: '20px', opacity: 0.4 }}
+          >
+            {[
+              { name: 'ChatGPT', color: 'var(--red)' },
+              { name: 'Perplexity', color: '#1FB8CD' },
+              { name: 'Gemini', color: 'var(--blue)' },
+              { name: 'Claude', color: 'var(--green)' },
+            ].map(({ name, color }) => (
+              <div key={name} className="flex items-center gap-2">
+                <span style={{ width: '12px', height: '3px', backgroundColor: color }} />
+                <span className="font-mono text-xs text-[var(--text-dim)]">{name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Competitor Mentions Trend Chart - Subscribers only */}
+      {isSubscriber && (
+        <div className="card relative overflow-hidden" style={{ padding: '32px' }}>
+          <h3
+            className="text-[var(--green)] font-mono uppercase tracking-wider"
+            style={{ fontSize: '11px', marginBottom: '8px', letterSpacing: '0.1em' }}
+          >
+            Mentions vs Competitors
+          </h3>
+          <p className="text-[var(--text-ghost)] text-xs" style={{ marginBottom: '24px' }}>
+            Your domain compared to top 5 competitors by total mentions
+          </p>
+
+          {competitorLoading ? (
+            <div
+              className="flex items-center justify-center text-[var(--text-dim)]"
+              style={{ height: '200px' }}
+            >
+              Loading competitor data...
+            </div>
+          ) : competitorSeries.length === 0 || competitorData.length === 0 ? (
+            // No data yet
+            <div
+              className="flex flex-col items-center justify-center bg-[var(--surface-elevated)] border border-[var(--border)]"
+              style={{ padding: '40px 20px' }}
+            >
+              <TrendingUp size={32} className="text-[var(--green)]" style={{ marginBottom: '16px', opacity: 0.5 }} />
+              <p className="text-[var(--text)] font-medium" style={{ marginBottom: '8px' }}>
+                Competitor Tracking Coming Soon
+              </p>
+              <p className="text-[var(--text-dim)] text-sm text-center" style={{ maxWidth: '320px' }}>
+                See how your brand mentions compare to competitors over time. Data will appear after your next scan.
+              </p>
+            </div>
+          ) : (
+            // Real competitor trend chart
+            <div
+              className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+              style={{ padding: '24px' }}
+            >
+              <CompetitorMentionsTrendChart
+                domain={domain || 'Your Domain'}
+                series={competitorSeries}
+                height={280}
+                title="Absolute Mentions Over Time"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Sticky Floating Upsell - Shows when visibility is low and user has scrolled */}
       {(() => {

@@ -4,7 +4,8 @@ import { getSession } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { Nav } from '@/components/nav/Nav'
 import { Footer } from '@/components/landing/Footer'
-import { FileText, CreditCard, ExternalLink, Crown, Globe, Calendar, RefreshCw } from 'lucide-react'
+import { LocalDate } from '@/components/LocalDate'
+import { FileText, CreditCard, ExternalLink, Crown, Globe, Calendar, RefreshCw, Check } from 'lucide-react'
 
 interface Report {
   id: string
@@ -38,8 +39,8 @@ const platformConfig: Record<string, { name: string; color: string }> = {
   claude: { name: 'Claude', color: '#22c55e' },
 }
 
-// Number of questions per platform (standard scan)
-const QUESTIONS_PER_PLATFORM = 5
+// Number of questions per platform (standard scan uses 7 queries across all platforms)
+const QUESTIONS_PER_PLATFORM = 7
 
 async function getReports(leadId: string): Promise<Report[]> {
   const supabase = createServiceClient()
@@ -360,51 +361,78 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="border border-[var(--border)] divide-y divide-[var(--border)]">
-                {reports.map((report) => (
-                  <Link
-                    key={report.id}
-                    href={`/report/${report.url_token}`}
-                    className="flex items-center justify-between bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors"
-                    style={{ padding: '16px 20px' }}
-                  >
-                    <div>
-                      <div className="font-medium" style={{ marginBottom: '4px' }}>
-                        {report.domain}
-                      </div>
-                      <div className="text-sm text-[var(--text-dim)]">
-                        {new Date(report.created_at).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {/* Platform mention scores */}
-                      {report.platform_scores && (
-                        <div className="flex items-center gap-3">
-                          {Object.entries(platformConfig).map(([platform, config]) => {
-                            const score = report.platform_scores?.[platform]
-                            if (score === undefined) return null
-                            // Score is a percentage (0-100), convert to mentions out of 5
-                            const mentions = Math.round((score / 100) * QUESTIONS_PER_PLATFORM)
-                            return (
-                              <div
-                                key={platform}
-                                className="flex items-center gap-1 font-mono text-xs"
-                                title={`${config.name}: ${mentions}/${QUESTIONS_PER_PLATFORM} mentions`}
-                              >
-                                <span style={{ color: config.color }}>{config.name}</span>
-                                <span className="text-[var(--text-dim)]">{mentions}/{QUESTIONS_PER_PLATFORM}</span>
-                              </div>
-                            )
-                          })}
+                {reports.map((report, index) => {
+                  const isLatest = index === 0
+
+                  return (
+                    <Link
+                      key={report.id}
+                      href={`/report/${report.url_token}`}
+                      className={`flex items-center justify-between transition-colors ${
+                        isLatest
+                          ? 'bg-[var(--green)]/5 hover:bg-[var(--green)]/10'
+                          : 'bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
+                      }`}
+                      style={{ padding: '16px 20px' }}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Current indicator */}
+                        {isLatest && (
+                          <div
+                            className="flex items-center justify-center flex-shrink-0"
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              background: 'var(--green)',
+                            }}
+                            title="Current version"
+                          >
+                            <Check className="w-3 h-3 text-[var(--bg)]" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2" style={{ marginBottom: '4px' }}>
+                            <span className="font-medium">{report.domain}</span>
+                            {isLatest && (
+                              <span className="font-mono text-xs text-[var(--green)] uppercase">
+                                Current
+                              </span>
+                            )}
+                          </div>
+                          <LocalDate
+                            date={report.created_at}
+                            className="text-sm text-[var(--text-dim)]"
+                          />
                         </div>
-                      )}
-                      <ExternalLink className="w-4 h-4 text-[var(--text-dim)]" />
-                    </div>
-                  </Link>
-                ))}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {/* Platform mention scores */}
+                        {report.platform_scores && (
+                          <div className="flex items-center gap-3">
+                            {Object.entries(platformConfig).map(([platform, config]) => {
+                              const score = report.platform_scores?.[platform]
+                              if (score === undefined) return null
+                              // Score is a percentage (0-100), convert to mentions out of 5
+                              const mentions = Math.round((score / 100) * QUESTIONS_PER_PLATFORM)
+                              return (
+                                <div
+                                  key={platform}
+                                  className="flex items-center gap-1 font-mono text-xs"
+                                  title={`${config.name}: ${mentions}/${QUESTIONS_PER_PLATFORM} mentions`}
+                                >
+                                  <span style={{ color: config.color }}>{config.name}</span>
+                                  <span className="text-[var(--text-dim)]">{mentions}/{QUESTIONS_PER_PLATFORM}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                        <ExternalLink className="w-4 h-4 text-[var(--text-dim)]" />
+                      </div>
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </div>

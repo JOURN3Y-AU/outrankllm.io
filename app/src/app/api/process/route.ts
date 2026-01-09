@@ -18,9 +18,10 @@ import { extractTopCompetitors } from '@/lib/ai/query'
 //   generateBrandAwarenessQueries,
 //   runBrandAwarenessQueries,
 // } from '@/lib/ai/brand-awareness'
-import { sendVerificationEmail } from '@/lib/email/resend'
+import { sendVerificationEmail, sendScanCompleteEmail } from '@/lib/email/resend'
 import { detectGeography, extractTldCountry, countryToIsoCode } from '@/lib/geo/detect'
 import { log } from '@/lib/logger'
+import { getUserTier } from '@/lib/features/flags'
 import crypto from 'crypto'
 
 // Allow up to ~13 minutes for processing (Vercel Pro max is 800s)
@@ -37,6 +38,7 @@ interface ProcessRequest {
   email: string
   verificationToken?: string
   leadId?: string
+  skipEmail?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: ProcessRequest = await request.json()
-    const { scanId, domain, email, verificationToken, leadId } = body
+    const { scanId, domain, email, verificationToken, leadId, skipEmail } = body
 
     if (!scanId || !domain || !email) {
       return NextResponse.json(
@@ -117,8 +119,8 @@ export async function POST(request: NextRequest) {
     // Update status: researching queries
     await updateScanStatus(supabase, scanId, 'researching', 35)
 
-    // Step 3: Research what queries people actually use (NEW APPROACH)
-    log.step(scanId, 'Researching queries', analysis.businessType)
+    // Step 3: Get prompts - either from subscriber_questions or research new ones
+    log.step(scanId, 'Getting queries', analysis.businessType)
     const analysisWithEnhancedGeo = {
       ...analysis,
       location: finalLocation,
@@ -127,60 +129,158 @@ export async function POST(request: NextRequest) {
       country: geoResult.country,
     }
 
-    // Get key phrases for query research
-    const keyPhrases = analysis.keyPhrases || []
+    // Check if this lead has subscriber questions (subscribers get consistent questions)
+    let savedPrompts: { id: string; prompt_text: string; category: string }[] = []
+    let usedSubscriberQuestions = false
 
-    let researchedQueryList = await researchQueries(
-      analysisWithEnhancedGeo,
-      scanId,
-      (platform) => log.platform(scanId, platform, 'researching queries'),
-      keyPhrases
-    )
-
-    // Dedupe and rank, limit to 7 for free tier
-    // Pass keyPhrases to boost queries that contain relevant terms
-    let topQueries = dedupeAndRankQueries(researchedQueryList, 7, keyPhrases)
-    log.done(scanId, 'Query research', `${topQueries.length} unique queries`)
-
-    // Fallback if research failed
-    if (topQueries.length === 0) {
-      log.warn(scanId, 'Research failed, using fallback queries')
-      topQueries = generateFallbackQueries(analysisWithEnhancedGeo)
+    // Get lead ID to check for subscriber questions
+    let currentLeadId = leadId
+    if (!currentLeadId) {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('email', email)
+        .eq('domain', domain)
+        .single()
+      currentLeadId = lead?.id
     }
 
-    // Save researched queries to database
-    const researchInserts = researchedQueryList.map((q) => ({
-      run_id: scanId,
-      platform: q.platform,
-      suggested_query: q.query,
-      category: q.category,
-      selected_for_scan: topQueries.some((t) => t.query === q.query),
-    }))
+    if (currentLeadId) {
+      // Check if user is a subscriber with custom questions
+      const userTier = await getUserTier(currentLeadId)
 
-    if (researchInserts.length > 0) {
-      const { error: researchInsertError } = await supabase.from('query_research_results').insert(researchInserts)
-      if (researchInsertError) {
-        log.error(scanId, `Failed to insert query research results: ${researchInsertError.message}`)
-        console.error('Query research insert error:', researchInsertError)
+      if (userTier !== 'free') {
+        // Check for existing subscriber questions
+        const { data: subscriberQuestions } = await supabase
+          .from('subscriber_questions')
+          .select('id, prompt_text, category')
+          .eq('lead_id', currentLeadId)
+          .eq('is_active', true)
+          .eq('is_archived', false)
+          .order('sort_order', { ascending: true })
+
+        if (subscriberQuestions && subscriberQuestions.length > 0) {
+          log.info(scanId, `Using ${subscriberQuestions.length} subscriber questions (consistent scans)`)
+
+          // Save subscriber questions as scan_prompts for this run
+          const { data: insertedPrompts, error: insertError } = await supabase
+            .from('scan_prompts')
+            .insert(
+              subscriberQuestions.map((q: { id: string; prompt_text: string; category: string }) => ({
+                run_id: scanId,
+                prompt_text: q.prompt_text,
+                category: q.category,
+                source: 'subscriber',
+              }))
+            )
+            .select('id, prompt_text, category')
+
+          if (insertError) {
+            log.error(scanId, `Failed to insert subscriber questions as prompts: ${insertError.message}`)
+            console.error('Subscriber prompts insert error:', insertError)
+            // Don't set usedSubscriberQuestions - fall through to research flow
+          } else if (insertedPrompts && insertedPrompts.length > 0) {
+            savedPrompts = insertedPrompts
+            usedSubscriberQuestions = true
+          } else {
+            log.warn(scanId, 'Subscriber questions insert returned no data, falling back to research')
+          }
+        }
       }
     }
 
-    // Update status: generating prompts
-    await updateScanStatus(supabase, scanId, 'generating', 45)
+    // If no subscriber questions, research new queries (free users or first-time subscribers)
+    if (!usedSubscriberQuestions) {
+      // Get key phrases for query research
+      const keyPhrases = analysis.keyPhrases || []
 
-    // Save selected queries as prompts
-    log.info(scanId, `Saving ${topQueries.length} prompts`)
-    const { data: savedPrompts } = await supabase
-      .from('scan_prompts')
-      .insert(
-        topQueries.map((q) => ({
-          run_id: scanId,
-          prompt_text: q.query,
-          category: q.category,
-          source: 'researched',
-        }))
+      let researchedQueryList = await researchQueries(
+        analysisWithEnhancedGeo,
+        scanId,
+        (platform) => log.platform(scanId, platform, 'researching queries'),
+        keyPhrases
       )
-      .select('id, prompt_text, category')
+
+      // Dedupe and rank, limit to 7 for free tier
+      // Pass keyPhrases to boost queries that contain relevant terms
+      let topQueries = dedupeAndRankQueries(researchedQueryList, 7, keyPhrases)
+      log.done(scanId, 'Query research', `${topQueries.length} unique queries`)
+
+      // Fallback if research failed
+      if (topQueries.length === 0) {
+        log.warn(scanId, 'Research failed, using fallback queries')
+        topQueries = generateFallbackQueries(analysisWithEnhancedGeo)
+      }
+
+      // Save researched queries to database
+      const researchInserts = researchedQueryList.map((q) => ({
+        run_id: scanId,
+        platform: q.platform,
+        suggested_query: q.query,
+        category: q.category,
+        selected_for_scan: topQueries.some((t) => t.query === q.query),
+      }))
+
+      if (researchInserts.length > 0) {
+        const { error: researchInsertError } = await supabase.from('query_research_results').insert(researchInserts)
+        if (researchInsertError) {
+          log.error(scanId, `Failed to insert query research results: ${researchInsertError.message}`)
+          console.error('Query research insert error:', researchInsertError)
+        }
+      }
+
+      // Update status: generating prompts
+      await updateScanStatus(supabase, scanId, 'generating', 45)
+
+      // Save selected queries as prompts
+      log.info(scanId, `Saving ${topQueries.length} prompts`)
+      const { data: insertedPrompts } = await supabase
+        .from('scan_prompts')
+        .insert(
+          topQueries.map((q) => ({
+            run_id: scanId,
+            prompt_text: q.query,
+            category: q.category,
+            source: 'researched',
+          }))
+        )
+        .select('id, prompt_text, category')
+
+      if (insertedPrompts && insertedPrompts.length > 0) {
+        savedPrompts = insertedPrompts
+
+        // For subscribers without questions yet, seed their subscriber_questions
+        if (currentLeadId) {
+          const userTier = await getUserTier(currentLeadId)
+          if (userTier !== 'free') {
+            // Check if they already have subscriber questions
+            const { count } = await supabase
+              .from('subscriber_questions')
+              .select('id', { count: 'exact', head: true })
+              .eq('lead_id', currentLeadId)
+
+            if (!count || count === 0) {
+              log.info(scanId, 'Seeding subscriber questions for first-time subscriber')
+              await supabase
+                .from('subscriber_questions')
+                .insert(
+                  insertedPrompts.map((p: { id: string; prompt_text: string; category: string }, index: number) => ({
+                    lead_id: currentLeadId,
+                    prompt_text: p.prompt_text,
+                    category: p.category,
+                    source: 'ai_generated',
+                    is_active: true,
+                    is_archived: false,
+                    sort_order: index,
+                    original_prompt_id: p.id,
+                    source_run_id: scanId,
+                  }))
+                )
+            }
+          }
+        }
+      }
+    }
 
     if (!savedPrompts || savedPrompts.length === 0) {
       throw new Error('Failed to save prompts')
@@ -254,6 +354,12 @@ export async function POST(request: NextRequest) {
         claude: searchScores.byPlatform.claude.score,
         gemini: searchScores.byPlatform.gemini.score,
         perplexity: searchScores.byPlatform.perplexity.score,
+      },
+      platformMentions: {
+        chatgpt: searchScores.byPlatform.chatgpt.mentioned,
+        claude: searchScores.byPlatform.claude.mentioned,
+        gemini: searchScores.byPlatform.gemini.mentioned,
+        perplexity: searchScores.byPlatform.perplexity.mentioned,
       },
       totalMentions: Object.values(searchScores.byPlatform).reduce((sum, p) => sum + p.mentioned, 0),
       totalQueries: Object.values(searchScores.byPlatform).reduce((sum, p) => sum + p.total, 0),
@@ -366,65 +472,149 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', scanId)
 
-    // Step 6: Send verification email (instead of report-ready email)
+    // Record score snapshot for trend tracking (if subscriber)
+    // This is best-effort - don't fail the scan if it errors
+    try {
+      if (leadId) {
+        const queryCoverage = scores.totalQueries > 0
+          ? (scores.totalMentions / scores.totalQueries) * 100
+          : 0
+
+        await supabase.from('score_history').upsert({
+          lead_id: leadId,
+          run_id: scanId,
+          visibility_score: scores.overallScore,
+          chatgpt_score: scores.platformScores.chatgpt,
+          claude_score: scores.platformScores.claude,
+          gemini_score: scores.platformScores.gemini,
+          perplexity_score: scores.platformScores.perplexity,
+          chatgpt_mentions: scores.platformMentions.chatgpt,
+          claude_mentions: scores.platformMentions.claude,
+          gemini_mentions: scores.platformMentions.gemini,
+          perplexity_mentions: scores.platformMentions.perplexity,
+          query_coverage: queryCoverage,
+          total_queries: scores.totalQueries,
+          total_mentions: scores.totalMentions,
+          recorded_at: new Date().toISOString(),
+        }, {
+          onConflict: 'run_id',
+        })
+      }
+    } catch (scoreError) {
+      console.error('Failed to record score history:', scoreError)
+      // Don't throw - this is non-critical
+    }
+
+    // Step 6: Send email notification
     log.step(scanId, 'Sending email', email)
 
-    // Use provided token or generate a new one
-    let tokenToUse = verificationToken
-    if (!tokenToUse) {
-      tokenToUse = crypto.randomBytes(32).toString('hex')
-      const expiresAt = new Date()
-      expiresAt.setHours(expiresAt.getHours() + 24)
+    // Check if user is a subscriber - they get a different email
+    const userTierForEmail = currentLeadId ? await getUserTier(currentLeadId) : 'free'
+    const isSubscriberForEmail = userTierForEmail !== 'free'
 
-      // Get lead ID if not provided
-      let leadIdToUse = leadId
-      if (!leadIdToUse) {
-        const { data: lead } = await supabase
-          .from('leads')
-          .select('id')
-          .eq('email', email)
-          .eq('domain', domain)
-          .single()
-        leadIdToUse = lead?.id
+    // Skip email for admin rescans
+    if (!skipEmail) {
+      let emailResult: { success: boolean; messageId?: string; error?: string }
+
+      if (isSubscriberForEmail) {
+        // Subscriber: Send scan complete email with direct report link
+        // Get previous score for comparison
+        let previousScore: number | undefined
+        if (currentLeadId) {
+          const { data: prevScores } = await supabase
+            .from('score_history')
+            .select('visibility_score')
+            .eq('lead_id', currentLeadId)
+            .neq('run_id', scanId)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+
+          if (prevScores && prevScores.length > 0) {
+            previousScore = prevScores[0].visibility_score
+          }
+        }
+
+        log.info(scanId, `Sending scan complete email to subscriber (prev score: ${previousScore ?? 'none'})`)
+        emailResult = await sendScanCompleteEmail(
+          email,
+          report.url_token,
+          domain,
+          scores.overallScore,
+          previousScore
+        )
+
+        if (emailResult.success && currentLeadId) {
+          await supabase.from('email_logs').insert({
+            lead_id: currentLeadId,
+            run_id: scanId,
+            email_type: 'scan_complete',
+            recipient: email,
+            resend_id: emailResult.messageId,
+            status: 'sent'
+          })
+        }
+      } else {
+        // Free user: Send verification email
+        let tokenToUse = verificationToken
+        if (!tokenToUse) {
+          tokenToUse = crypto.randomBytes(32).toString('hex')
+          const tokenExpiresAt = new Date()
+          tokenExpiresAt.setHours(tokenExpiresAt.getHours() + 24)
+
+          // Get lead ID if not provided
+          let leadIdToUse = leadId
+          if (!leadIdToUse) {
+            const { data: lead } = await supabase
+              .from('leads')
+              .select('id')
+              .eq('email', email)
+              .eq('domain', domain)
+              .single()
+            leadIdToUse = lead?.id
+          }
+
+          if (leadIdToUse) {
+            await supabase.from('email_verification_tokens').insert({
+              lead_id: leadIdToUse,
+              run_id: scanId,
+              token: tokenToUse,
+              email: email,
+              expires_at: tokenExpiresAt.toISOString()
+            })
+          }
+        }
+
+        emailResult = await sendVerificationEmail(email, tokenToUse, domain)
+
+        if (emailResult.success) {
+          const { data: lead } = await supabase
+            .from('leads')
+            .select('id')
+            .eq('email', email)
+            .eq('domain', domain)
+            .single()
+
+          if (lead) {
+            await supabase.from('email_logs').insert({
+              lead_id: lead.id,
+              run_id: scanId,
+              email_type: 'verification',
+              recipient: email,
+              resend_id: emailResult.messageId,
+              status: 'sent'
+            })
+          }
+        }
       }
 
-      if (leadIdToUse) {
-        await supabase.from('email_verification_tokens').insert({
-          lead_id: leadIdToUse,
-          run_id: scanId,
-          token: tokenToUse,
-          email: email,
-          expires_at: expiresAt.toISOString()
-        })
-      }
-    }
-
-    const emailResult = await sendVerificationEmail(email, tokenToUse, domain)
-
-    if (emailResult.success) {
-      // Log the email
-      const { data: lead } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('email', email)
-        .eq('domain', domain)
-        .single()
-
-      if (lead) {
-        await supabase.from('email_logs').insert({
-          lead_id: lead.id,
-          run_id: scanId,
-          email_type: 'verification',
-          recipient: email,
-          resend_id: emailResult.messageId,
-          status: 'sent'
-        })
+      if (!emailResult.success) {
+        log.error(scanId, 'Failed to send email', emailResult.error)
+      } else {
+        log.done(scanId, 'Email sent')
       }
     } else {
-      log.error(scanId, 'Failed to send verification email', emailResult.error)
+      log.info(scanId, 'Skipping email (admin rescan)')
     }
-
-    log.done(scanId, 'Email sent')
     log.end(scanId, true)
 
     return NextResponse.json({

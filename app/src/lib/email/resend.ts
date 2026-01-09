@@ -500,3 +500,190 @@ Your password will remain unchanged.
 outrankllm.io
   `.trim();
 }
+
+/**
+ * Send scan complete email to subscribers
+ * Different messaging than free verification email - emphasizes new data to review
+ */
+export async function sendScanCompleteEmail(
+  email: string,
+  reportToken: string,
+  domain: string,
+  score: number,
+  previousScore?: number
+): Promise<EmailResult> {
+  const reportUrl = `${APP_URL}/report/${reportToken}`;
+  const scoreChange = previousScore !== undefined ? score - previousScore : undefined;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: `outrankllm <${FROM_EMAIL}>`,
+      to: email,
+      subject: `New scan complete for ${domain} - ${score}% visibility`,
+      html: generateScanCompleteEmailHtml(domain, reportUrl, score, scoreChange),
+      text: generateScanCompleteEmailText(domain, reportUrl, score, scoreChange),
+    });
+
+    if (error) {
+      console.error('[Email] Resend error:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[Email] Scan complete email sent:', data?.id);
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    console.error('[Email] Failed to send scan complete email:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error'
+    };
+  }
+}
+
+function generateScanCompleteEmailHtml(
+  domain: string,
+  reportUrl: string,
+  score: number,
+  scoreChange?: number
+): string {
+  const scoreColor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+
+  // Build score change indicator
+  let changeHtml = '';
+  if (scoreChange !== undefined && scoreChange !== 0) {
+    const changeColor = scoreChange > 0 ? '#22c55e' : '#ef4444';
+    const changeIcon = scoreChange > 0 ? '↑' : '↓';
+    changeHtml = `
+      <div style="margin-top: 8px; font-size: 14px; color: ${changeColor};">
+        ${changeIcon} ${Math.abs(scoreChange)}% from last scan
+      </div>
+    `;
+  }
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Scan Complete - outrankllm</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+              <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
+                outrank<span style="color: #22c55e;">llm</span>
+              </div>
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+                NEW SCAN COMPLETE
+              </div>
+            </td>
+          </tr>
+
+          <!-- Score display -->
+          <tr>
+            <td style="padding: 32px; text-align: center;">
+              <p style="margin: 0 0 16px; font-size: 14px; color: #d4d4d4;">
+                Your weekly AI visibility scan for <strong style="color: #fafafa;">${domain}</strong> is complete.
+              </p>
+              <div style="margin-bottom: 8px;">
+                <span style="font-size: 48px; font-weight: 600; color: ${scoreColor};">${score}</span>
+                <span style="font-size: 24px; color: #8a8a8a;">/100</span>
+              </div>
+              <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #8a8a8a; letter-spacing: 0.1em;">
+                AI VISIBILITY SCORE
+              </div>
+              ${changeHtml}
+            </td>
+          </tr>
+
+          <!-- What's new section -->
+          <tr>
+            <td style="padding: 0 32px 32px;">
+              <div style="background-color: #1a1a1a; border: 1px solid #262626; border-radius: 6px; padding: 20px;">
+                <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; letter-spacing: 0.1em; margin-bottom: 12px;">
+                  WHAT TO CHECK
+                </div>
+                <ul style="margin: 0; padding: 0 0 0 16px; color: #d4d4d4; font-size: 13px; line-height: 1.8;">
+                  <li>Updated visibility trends over time</li>
+                  <li>New AI responses from ChatGPT, Claude &amp; Gemini</li>
+                  <li>Competitor mention changes</li>
+                  <li>Platform-by-platform breakdown</li>
+                </ul>
+              </div>
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding: 0 32px 32px; text-align: center;">
+              <a href="${reportUrl}"
+                 style="display: inline-block; padding: 14px 32px; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
+                View Your Report →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #525252;">
+                You're receiving this because you have an active outrankllm subscription.<br>
+                <a href="${APP_URL}/dashboard" style="color: #8a8a8a; text-decoration: underline;">Manage your account</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Bottom link -->
+        <p style="margin: 24px 0 0; font-size: 11px; color: #525252;">
+          <a href="${APP_URL}" style="color: #525252; text-decoration: none;">outrankllm.io</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+
+function generateScanCompleteEmailText(
+  domain: string,
+  reportUrl: string,
+  score: number,
+  scoreChange?: number
+): string {
+  let changeText = '';
+  if (scoreChange !== undefined && scoreChange !== 0) {
+    const direction = scoreChange > 0 ? 'up' : 'down';
+    changeText = `\n(${direction} ${Math.abs(scoreChange)}% from last scan)`;
+  }
+
+  return `
+outrankllm - New Scan Complete
+
+Your weekly AI visibility scan for ${domain} is complete.
+
+AI Visibility Score: ${score}/100${changeText}
+
+What to check:
+- Updated visibility trends over time
+- New AI responses from ChatGPT, Claude & Gemini
+- Competitor mention changes
+- Platform-by-platform breakdown
+
+View your report:
+${reportUrl}
+
+---
+You're receiving this because you have an active outrankllm subscription.
+Manage your account: ${APP_URL}/dashboard
+
+outrankllm.io
+  `.trim();
+}

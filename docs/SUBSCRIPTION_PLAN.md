@@ -1,6 +1,6 @@
 # Subscription System Implementation Plan
 
-**Status:** Sprint 2 Complete (Auth & Accounts)
+**Status:** Sprint 3 In Progress (5B Trend Charts Complete)
 **Last Updated:** 2026-01-09
 
 ## Overview
@@ -230,24 +230,29 @@ scan_queue
 
 ---
 
-### 5B: Trend Charts (Measurements & Competitors)
+### 5B: Trend Charts (Measurements) ✅ COMPLETE
 
-**Goal:** Show historical data over time.
+**Goal:** Show historical visibility data over time.
 
-- Line charts showing score trends
-- Compare current vs previous scans
-- Competitor mention trends
+### Implementation ✅
+Dual-axis trend chart in Measurements tab:
+- **Left axis**: AI Visibility Score (0-100)
+- **Right axis**: Per-platform mention counts (ChatGPT, Perplexity, Gemini, Claude)
+- **Legend**: Grouped by axis type for clarity
+- **Free users**: Locked "Subscribers Only" overlay
 
-### Implementation
-- Query historical `scan_runs` for lead
-- Aggregate scores by date
-- Recharts or similar for visualization
+### Database ✅
+- `score_history` table stores per-run snapshots
+- Migration `019_add_platform_mentions.sql` adds per-platform columns
+- Backfill query populates existing data from `llm_responses`
 
-### Files
-- `src/lib/trends.ts` (data aggregation)
-- `src/components/charts/TrendChart.tsx`
-- `src/components/report/tabs/MeasurementsTab.tsx` (add trends)
-- `src/components/report/tabs/CompetitorsTab.tsx` (add trends)
+### Files ✅
+- `supabase/migrations/013_score_history.sql` (base schema)
+- `supabase/migrations/019_add_platform_mentions.sql` (platform mentions)
+- `src/app/api/trends/route.ts` (GET/POST endpoints)
+- `src/app/api/process/route.ts` (records platform mentions)
+- `src/components/report/TrendChart.tsx` (dual-axis chart)
+- `src/components/report/tabs/MeasurementsTab.tsx` (integration)
 
 ---
 
@@ -343,9 +348,9 @@ interface PRDTask {
 
 *Outcome: Full login system, account management, report protection*
 
-### Sprint 3: Subscriber Value ⏳ NEXT
-4. Phase 5A: Editable Questions
-5. Phase 5B: Trend Charts
+### Sprint 3: Subscriber Value ⏳ IN PROGRESS
+4. Phase 5A: Editable Questions ⏳ PENDING
+5. Phase 5B: Trend Charts ✅ COMPLETE
 
 *Outcome: Subscribers get ongoing value*
 
@@ -383,6 +388,10 @@ CREATE TABLE scan_queue (...);
 
 -- Phase 5A: Questions (pending)
 CREATE TABLE subscriber_questions (...);
+
+-- Phase 5B: Trend Charts ✅
+CREATE TABLE score_history (...);
+-- Migration 019 adds: chatgpt_mentions, claude_mentions, gemini_mentions, perplexity_mentions
 
 -- Phase 5C: Action Plans (pending)
 CREATE TABLE action_plans (...);

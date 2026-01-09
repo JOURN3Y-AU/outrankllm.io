@@ -19,6 +19,7 @@ interface ReportData {
     top_competitors: { name: string; count: number }[]
     summary: string
     run_id: string
+    created_at: string
     requires_verification: boolean
     expires_at: string | null
     subscriber_only: boolean
@@ -83,6 +84,7 @@ async function getReport(token: string): Promise<ReportData | null> {
       *,
       run:scan_runs(
         id,
+        created_at,
         lead:leads(id, email, domain, email_verified, tier)
       )
     `)
@@ -95,6 +97,7 @@ async function getReport(token: string): Promise<ReportData | null> {
 
   const lead = report.run?.lead as { id: string; email: string; domain: string; email_verified: boolean; tier: string } | null
   const runId = report.run?.id as string
+  const runCreatedAt = report.run?.created_at as string
 
   if (!lead) {
     return null
@@ -173,6 +176,7 @@ async function getReport(token: string): Promise<ReportData | null> {
       top_competitors: report.top_competitors || [],
       summary: report.summary || '',
       run_id: runId,
+      created_at: runCreatedAt,
       requires_verification: report.requires_verification ?? true,
       expires_at: isSubscriber ? null : (report.expires_at || null),
       subscriber_only: report.subscriber_only ?? false,

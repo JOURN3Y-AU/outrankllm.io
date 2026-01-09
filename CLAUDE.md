@@ -129,6 +129,7 @@ When users click pricing CTAs and return via back button, scroll position and ac
 - `POST /api/process` - Process scan (crawl, analyze, query LLMs)
 - `GET /api/scan/status` - Poll progress
 - `GET /api/verify` - Email verification (magic link)
+- `GET /api/trends` - Get score history for trend charts (subscribers only)
 
 ### Authentication
 - `POST /api/auth/login` - Email/password login
@@ -171,12 +172,36 @@ STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
 ```
 
+## Trend Charts (Subscribers Only)
+
+Subscribers see historical visibility trends in the Measurements tab:
+
+- **Left axis**: AI Visibility Score (0-100)
+- **Right axis**: Per-platform mention counts (ChatGPT, Perplexity, Gemini, Claude)
+- **Data source**: `score_history` table with per-run snapshots
+- **API**: `GET /api/trends` returns historical snapshots
+
+### Score History Schema
+
+```sql
+score_history
+├── visibility_score     -- Overall score (left axis)
+├── chatgpt_mentions     -- Per-platform mention counts (right axis)
+├── claude_mentions
+├── gemini_mentions
+├── perplexity_mentions
+└── recorded_at          -- Timestamp for x-axis
+```
+
+Free users see a locked "Subscribers Only" overlay on the trend chart.
+
 ## Report Component Structure
 
 ```
 src/components/report/
 ├── ReportTabs.tsx           # Tab navigation
 ├── ExpiryCountdown.tsx      # Free user countdown timer
+├── TrendChart.tsx           # Multi-line trend chart (dual axis)
 ├── shared/
 │   ├── types.ts             # Type definitions
 │   ├── constants.ts         # Tab config, platformColors, platformNames
@@ -187,7 +212,7 @@ src/components/report/
     ├── SetupTab.tsx         # Business identity, services
     ├── AIReadinessTab.tsx   # Technical checks
     ├── ResponsesTab.tsx     # LLM responses
-    ├── MeasurementsTab.tsx  # Score gauges
+    ├── MeasurementsTab.tsx  # Score gauges + trend charts
     ├── CompetitorsTab.tsx   # Competitor analysis
     ├── BrandAwarenessTab.tsx # Brand recognition
     └── LockedTab.tsx        # Generic locked state

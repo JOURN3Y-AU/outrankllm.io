@@ -145,6 +145,7 @@ interface ReportData {
     top_competitors: { name: string; count: number }[]
     summary: string
     run_id: string
+    created_at: string
     requires_verification: boolean
     expires_at: string | null
     subscriber_only: boolean
@@ -308,15 +309,27 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
               {domain}
               <ExternalLink className="w-4 h-4" />
             </a>
-            {analysis?.business_type && analysis.business_type !== 'Business website' && (
-              <p
-                className="text-[var(--text-dim)] font-mono"
-                style={{ marginTop: '12px', fontSize: '13px' }}
-              >
-                {analysis.business_type}
-                {analysis.location && ` • ${analysis.location}`}
-              </p>
-            )}
+            <p
+              className="text-[var(--text-dim)] font-mono"
+              style={{ marginTop: '12px', fontSize: '13px' }}
+            >
+              {analysis?.business_type && analysis.business_type !== 'Business website' && (
+                <>
+                  {analysis.business_type}
+                  {analysis.location && ` • ${analysis.location}`}
+                  {' • '}
+                </>
+              )}
+              Scanned {new Date(report.created_at).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })} at {new Date(report.created_at).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              })}
+            </p>
           </div>
 
           {/* Expiry countdown for free users only */}
@@ -340,6 +353,8 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
             domain={domain}
             onUpgradeClick={handleUpgradeClick}
             isSubscriber={isSubscriber}
+            customQuestionLimit={featureFlags.customQuestionLimit}
+            currentRunId={report.run_id}
           />
 
           {/* CTA section - only for non-subscribers */}
