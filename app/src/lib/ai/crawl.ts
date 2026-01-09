@@ -67,7 +67,35 @@ export interface CrawlResult {
 }
 
 /**
- * Try to fetch and parse a sitemap
+ * Parse URLs from a sitemap XML string
+ */
+function parseSitemapUrls(xml: string): string[] {
+  const urls: string[] = []
+  const locMatches = xml.matchAll(/<loc>(.*?)<\/loc>/g)
+  for (const match of locMatches) {
+    const loc = match[1].trim()
+    urls.push(loc)
+  }
+  return urls
+}
+
+/**
+ * Fetch a single sitemap and return its content
+ */
+async function fetchSingleSitemap(url: string): Promise<string | null> {
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: { 'User-Agent': 'outrankllm-crawler/1.0' },
+    }, 8000)
+    if (!response.ok) return null
+    return await response.text()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Try to fetch and parse a sitemap, handling sitemap indexes recursively
  */
 async function fetchSitemap(domain: string): Promise<{ urls: string[]; found: boolean }> {
   const sitemapUrls = [
@@ -77,31 +105,60 @@ async function fetchSitemap(domain: string): Promise<{ urls: string[]; found: bo
   ]
 
   for (const url of sitemapUrls) {
-    try {
-      const response = await fetchWithTimeout(url, {
-        headers: { 'User-Agent': 'outrankllm-crawler/1.0' },
-      }, 8000)
+    const xml = await fetchSingleSitemap(url)
+    if (!xml) continue
 
-      if (!response.ok) continue
+    const allUrls = parseSitemapUrls(xml)
+    if (allUrls.length === 0) continue
 
-      const xml = await response.text()
-      const urls: string[] = []
+    // Check if this is a sitemap index (Yoast, etc.)
+    // Sitemap indexes contain URLs ending in .xml pointing to child sitemaps
+    const childSitemapUrls = allUrls.filter(u => u.endsWith('.xml') || u.includes('sitemap'))
+    const pageUrls = allUrls.filter(u => !u.endsWith('.xml') && !u.includes('sitemap'))
 
-      // Simple regex parsing for sitemap URLs
-      const locMatches = xml.matchAll(/<loc>(.*?)<\/loc>/g)
-      for (const match of locMatches) {
-        const loc = match[1].trim()
-        // Skip non-HTML resources
-        if (!loc.match(/\.(jpg|jpeg|png|gif|pdf|css|js|ico|svg|woff|woff2)$/i)) {
-          urls.push(loc)
+    // If most URLs look like sitemaps, fetch them recursively
+    if (childSitemapUrls.length > 0 && childSitemapUrls.length >= pageUrls.length) {
+      const collectedUrls: string[] = [...pageUrls]
+
+      // Fetch child sitemaps (limit to first 5 to avoid too many requests)
+      // Prioritize page-sitemap over tag/author/category sitemaps
+      const prioritizedSitemaps = childSitemapUrls.sort((a, b) => {
+        const priority = (url: string) => {
+          if (url.includes('page-sitemap')) return 0
+          if (url.includes('post-sitemap')) return 1
+          if (url.includes('product-sitemap')) return 2
+          if (url.includes('service-sitemap')) return 3
+          return 10 // category, tag, author sitemaps are less useful
         }
+        return priority(a) - priority(b)
+      })
+
+      for (const childUrl of prioritizedSitemaps.slice(0, 5)) {
+        const childXml = await fetchSingleSitemap(childUrl)
+        if (childXml) {
+          const childUrls = parseSitemapUrls(childXml)
+          // Filter to actual page URLs
+          for (const loc of childUrls) {
+            if (!loc.endsWith('.xml') && !loc.match(/\.(jpg|jpeg|png|gif|pdf|css|js|ico|svg|woff|woff2)$/i)) {
+              collectedUrls.push(loc)
+            }
+          }
+        }
+        if (collectedUrls.length >= 20) break
       }
 
-      if (urls.length > 0) {
-        return { urls: urls.slice(0, 20), found: true } // Max 20 pages
+      if (collectedUrls.length > 0) {
+        return { urls: collectedUrls.slice(0, 20), found: true }
       }
-    } catch {
-      // Try next sitemap URL
+    }
+
+    // Not a sitemap index - filter to HTML pages
+    const htmlUrls = allUrls.filter(
+      loc => !loc.match(/\.(jpg|jpeg|png|gif|pdf|css|js|ico|svg|woff|woff2|xml)$/i)
+    )
+
+    if (htmlUrls.length > 0) {
+      return { urls: htmlUrls.slice(0, 20), found: true }
     }
   }
 

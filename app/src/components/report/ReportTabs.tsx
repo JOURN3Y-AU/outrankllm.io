@@ -28,6 +28,7 @@ interface ReportTabsProps {
   crawlData?: CrawlData
   domain: string
   onUpgradeClick: () => void
+  isSubscriber?: boolean
 }
 
 export function ReportTabs({
@@ -40,7 +41,8 @@ export function ReportTabs({
   competitors = [],
   crawlData,
   domain,
-  onUpgradeClick
+  onUpgradeClick,
+  isSubscriber = false
 }: ReportTabsProps) {
   // Always start with default tab on server/initial render to avoid hydration mismatch
   const [activeTab, setActiveTab] = useState<TabId>('startHere')
@@ -161,6 +163,7 @@ export function ReportTabs({
           <CompetitorsTab
             competitors={competitors}
             onUpgradeClick={onUpgradeClick}
+            isSubscriber={isSubscriber}
           />
         )}
         {activeTab === 'brandAwareness' && (
@@ -171,6 +174,7 @@ export function ReportTabs({
             platformFilter={brandPlatformFilter}
             onFilterChange={setBrandPlatformFilter}
             onUpgradeClick={onUpgradeClick}
+            isSubscriber={isSubscriber}
           />
         )}
         {activeTab === 'actions' && (

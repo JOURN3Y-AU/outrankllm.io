@@ -3,25 +3,119 @@
 import { Nav } from '@/components/nav/Nav'
 import { Footer } from '@/components/landing/Footer'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
+import { login } from '@/lib/auth-client'
 
-export default function LoginPage() {
+function LoginForm() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const redirectTo = searchParams.get('redirect') || '/dashboard'
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement authentication
-    console.log('Login attempt:', { email })
+    setError(null)
+    setLoading(true)
+
+    const result = await login(email, password)
+
+    if (result.success) {
+      router.push(redirectTo)
+    } else {
+      setError(result.error || 'Login failed')
+      setLoading(false)
+    }
   }
 
+  return (
+    <form onSubmit={handleSubmit} style={{ marginBottom: '24px' }}>
+      {error && (
+        <div
+          className="border border-red-500/50 bg-red-500/10 text-red-400 text-sm"
+          style={{ padding: '12px 16px', marginBottom: '16px' }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div style={{ marginBottom: '16px' }}>
+        <label
+          htmlFor="email"
+          className="block font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider"
+          style={{ marginBottom: '8px' }}
+        >
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@company.com"
+          required
+          disabled={loading}
+          className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] font-mono text-sm placeholder:text-[var(--text-dim)] focus:border-[var(--green)] focus:outline-none transition-colors disabled:opacity-50"
+          style={{ padding: '12px 16px' }}
+        />
+      </div>
+
+      <div style={{ marginBottom: '24px' }}>
+        <label
+          htmlFor="password"
+          className="block font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider"
+          style={{ marginBottom: '8px' }}
+        >
+          Password
+        </label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter your password"
+          required
+          disabled={loading}
+          className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] font-mono text-sm placeholder:text-[var(--text-dim)] focus:border-[var(--green)] focus:outline-none transition-colors disabled:opacity-50"
+          style={{ padding: '12px 16px' }}
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-[var(--green)] text-[var(--bg)] font-mono text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        style={{ padding: '14px' }}
+      >
+        {loading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Signing in...
+          </>
+        ) : (
+          'Sign In'
+        )}
+      </button>
+    </form>
+  )
+}
+
+export default function LoginPage() {
   return (
     <>
       <div className="grid-bg" />
       <Nav />
 
-      <main className="relative z-10 min-h-screen flex items-center justify-center px-6">
-        <div className="w-full max-w-sm">
+      <main
+        className="relative z-10 min-h-screen flex items-center justify-center"
+        style={{ padding: '24px' }}
+      >
+        <div className="w-full" style={{ maxWidth: '384px' }}>
           {/* Header */}
           <div className="text-center" style={{ marginBottom: '32px' }}>
             <h1 className="text-2xl font-medium" style={{ marginBottom: '8px' }}>
@@ -33,47 +127,23 @@ export default function LoginPage() {
           </div>
 
           {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-4" style={{ marginBottom: '24px' }}>
-            <div>
-              <label htmlFor="email" className="block font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '8px' }}>
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                required
-                className="w-full px-4 py-3 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] font-mono text-sm placeholder:text-[var(--text-dim)] focus:border-[var(--green)] focus:outline-none transition-colors"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '8px' }}>
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                className="w-full px-4 py-3 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] font-mono text-sm placeholder:text-[var(--text-dim)] focus:border-[var(--green)] focus:outline-none transition-colors"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3 bg-[var(--green)] text-[var(--bg)] font-mono text-sm hover:opacity-90 transition-opacity"
-            >
-              Sign In
-            </button>
-          </form>
+          <Suspense
+            fallback={
+              <div className="text-center" style={{ padding: '24px' }}>
+                <Loader2 className="w-6 h-6 animate-spin text-[var(--green)]" style={{ margin: '0 auto' }} />
+              </div>
+            }
+          >
+            <LoginForm />
+          </Suspense>
 
           {/* Links */}
-          <div className="text-center space-y-3">
+          <div className="text-center" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <p className="text-sm text-[var(--text-dim)]">
-              <Link href="/forgot-password" className="text-[var(--text-mid)] hover:text-[var(--text)]">
+              <Link
+                href="/forgot-password"
+                className="text-[var(--text-mid)] hover:text-[var(--text)]"
+              >
                 Forgot your password?
               </Link>
             </p>
@@ -83,31 +153,6 @@ export default function LoginPage() {
                 Get started free
               </Link>
             </p>
-          </div>
-
-          {/* Divider */}
-          <div className="flex items-center gap-4 my-8">
-            <div className="flex-1 h-px bg-[var(--border)]" />
-            <span className="font-mono text-xs text-[var(--text-dim)]">or</span>
-            <div className="flex-1 h-px bg-[var(--border)]" />
-          </div>
-
-          {/* Social Login Placeholder */}
-          <div className="space-y-3">
-            <button
-              type="button"
-              disabled
-              className="w-full py-3 border border-[var(--border)] text-[var(--text-dim)] font-mono text-sm cursor-not-allowed opacity-50"
-            >
-              Continue with Google (Coming Soon)
-            </button>
-            <button
-              type="button"
-              disabled
-              className="w-full py-3 border border-[var(--border)] text-[var(--text-dim)] font-mono text-sm cursor-not-allowed opacity-50"
-            >
-              Continue with GitHub (Coming Soon)
-            </button>
           </div>
         </div>
       </main>

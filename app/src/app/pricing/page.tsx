@@ -2,14 +2,28 @@
 
 import { Nav } from '@/components/nav/Nav'
 import { Footer } from '@/components/landing/Footer'
-import { Check, ArrowLeft } from 'lucide-react'
+import { Check, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { Suspense, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useState, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 
-const plans = [
+type TierKey = 'starter' | 'pro' | 'agency'
+
+interface Plan {
+  name: string
+  tier: TierKey
+  description: string
+  price: number
+  highlight: boolean
+  features: string[]
+  cta: string
+  contactOnly?: boolean
+}
+
+const plans: Plan[] = [
   {
     name: 'Starter',
+    tier: 'starter',
     description: 'For Business Owners',
     price: 49,
     highlight: false,
@@ -21,11 +35,11 @@ const plans = [
       'Email alerts on changes',
       'Basic recommendations',
     ],
-    cta: 'Start Free Trial',
-    ctaLink: '/',
+    cta: 'Subscribe',
   },
   {
     name: 'Pro',
+    tier: 'pro',
     description: 'For Developers',
     price: 79,
     highlight: true,
@@ -37,11 +51,11 @@ const plans = [
       'Priority prompt testing',
       'API access (coming soon)',
     ],
-    cta: 'Start Free Trial',
-    ctaLink: '/',
+    cta: 'Subscribe',
   },
   {
     name: 'Agency',
+    tier: 'agency',
     description: 'For Agencies',
     price: 199,
     highlight: false,
@@ -54,7 +68,7 @@ const plans = [
       'Dedicated support',
     ],
     cta: 'Contact Us',
-    ctaLink: 'mailto:hello@outrankllm.io',
+    contactOnly: true,
   },
 ]
 
@@ -98,6 +112,166 @@ function BackButton() {
   )
 }
 
+// Pricing cards with checkout functionality
+function PricingCards() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const [loadingTier, setLoadingTier] = useState<TierKey | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [checkoutContext, setCheckoutContext] = useState<{
+    leadId: string | null
+    reportToken: string | null
+    fromReport: boolean
+  }>({ leadId: null, reportToken: null, fromReport: false })
+
+  useEffect(() => {
+    // Get checkout context from session storage (set by report page)
+    const leadId = sessionStorage.getItem('checkout_lead_id')
+    const reportToken = sessionStorage.getItem('checkout_report_token')
+    const fromReport = searchParams.get('from') === 'report'
+
+    setCheckoutContext({ leadId, reportToken, fromReport })
+  }, [searchParams])
+
+  const handleSubscribe = useCallback(async (tier: TierKey) => {
+    setError(null)
+
+    // Check if we have a lead ID (user came from report)
+    if (!checkoutContext.leadId) {
+      // No lead ID - redirect to home to start a scan first
+      router.push('/?subscribe=' + tier)
+      return
+    }
+
+    setLoadingTier(tier)
+
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier,
+          leadId: checkoutContext.leadId,
+          reportToken: checkoutContext.reportToken,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout session')
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (err) {
+      console.error('Checkout error:', err)
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setLoadingTier(null)
+    }
+  }, [checkoutContext, router])
+
+  return (
+    <div className="px-6 w-full" style={{ marginBottom: '80px' }}>
+      <div style={{ maxWidth: '1024px', marginLeft: 'auto', marginRight: 'auto' }}>
+        {error && (
+          <div
+            className="border border-red-500/50 bg-red-500/10 text-red-400 font-mono text-sm text-center"
+            style={{ padding: '12px 16px', marginBottom: '24px' }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div className="grid md:grid-cols-3 gap-6">
+          {plans.map((plan, index) => (
+            <div
+              key={plan.name}
+              className={`relative flex flex-col border ${
+                plan.highlight
+                  ? 'border-[var(--green)] bg-[var(--surface)]'
+                  : 'border-[var(--border)] bg-[var(--surface)]'
+              }`}
+              style={{
+                animationDelay: `${index * 100}ms`,
+              }}
+            >
+              {plan.highlight && (
+                <div className="absolute -top-px left-0 right-0 h-px bg-[var(--green)]" />
+              )}
+
+              {plan.highlight && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-[var(--green)] text-[var(--bg)] font-mono text-xs uppercase tracking-wider">
+                  Most Popular
+                </div>
+              )}
+
+              {/* Plan Header */}
+              <div className="border-b border-[var(--border)]" style={{ padding: '28px 28px 24px' }}>
+                <div className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '10px' }}>
+                  {plan.description}
+                </div>
+                <h2 className="text-2xl font-medium" style={{ marginBottom: '16px' }}>
+                  {plan.name}
+                </h2>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-5xl font-medium">${plan.price}</span>
+                  <span className="text-[var(--text-dim)] font-mono text-sm">/month</span>
+                </div>
+              </div>
+
+              {/* Features */}
+              <div className="flex-1" style={{ padding: '28px' }}>
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm" style={{ lineHeight: '1.5' }}>
+                      <Check className="w-4 h-4 text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+                      <span className="text-[var(--text-mid)]">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* CTA */}
+              <div style={{ padding: '0 28px 28px' }}>
+                {plan.contactOnly ? (
+                  <a
+                    href="mailto:hello@outrankllm.io?subject=Agency Plan Inquiry"
+                    className="block w-full py-4 font-mono text-sm text-center transition-all border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]"
+                  >
+                    {plan.cta}
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => handleSubscribe(plan.tier)}
+                    disabled={loadingTier !== null}
+                    className={`block w-full py-4 font-mono text-sm text-center transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      plan.highlight
+                        ? 'bg-[var(--green)] text-[var(--bg)] hover:opacity-90'
+                        : 'border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]'
+                    }`}
+                  >
+                    {loadingTier === plan.tier ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading...
+                      </span>
+                    ) : (
+                      plan.cta
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PricingPage() {
   return (
     <>
@@ -131,75 +305,23 @@ export default function PricingPage() {
         </div>
 
           {/* Pricing Cards */}
-          <div className="px-6 w-full" style={{ marginBottom: '80px' }}>
-            <div style={{ maxWidth: '1024px', marginLeft: 'auto', marginRight: 'auto' }}>
-            <div className="grid md:grid-cols-3 gap-6">
-              {plans.map((plan, index) => (
-                <div
-                  key={plan.name}
-                  className={`relative flex flex-col border ${
-                    plan.highlight
-                      ? 'border-[var(--green)] bg-[var(--surface)]'
-                      : 'border-[var(--border)] bg-[var(--surface)]'
-                  }`}
-                  style={{
-                    animationDelay: `${index * 100}ms`,
-                  }}
-                >
-                  {plan.highlight && (
-                    <div className="absolute -top-px left-0 right-0 h-px bg-[var(--green)]" />
-                  )}
-
-                  {plan.highlight && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-[var(--green)] text-[var(--bg)] font-mono text-xs uppercase tracking-wider">
-                      Most Popular
-                    </div>
-                  )}
-
-                  {/* Plan Header */}
-                  <div className="border-b border-[var(--border)]" style={{ padding: '28px 28px 24px' }}>
-                    <div className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '10px' }}>
-                      {plan.description}
-                    </div>
-                    <h2 className="text-2xl font-medium" style={{ marginBottom: '16px' }}>
-                      {plan.name}
-                    </h2>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-5xl font-medium">${plan.price}</span>
-                      <span className="text-[var(--text-dim)] font-mono text-sm">/month</span>
-                    </div>
-                  </div>
-
-                  {/* Features */}
-                  <div className="flex-1" style={{ padding: '28px' }}>
-                    <ul style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {plan.features.map((feature, i) => (
-                        <li key={i} className="flex items-start gap-3 text-sm" style={{ lineHeight: '1.5' }}>
-                          <Check className="w-4 h-4 text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
-                          <span className="text-[var(--text-mid)]">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* CTA */}
-                  <div style={{ padding: '0 28px 28px' }}>
-                    <Link
-                      href={plan.ctaLink}
-                      className={`block w-full py-4 font-mono text-sm text-center transition-all ${
-                        plan.highlight
-                          ? 'bg-[var(--green)] text-[var(--bg)] hover:opacity-90'
-                          : 'border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      {plan.cta}
-                    </Link>
-                  </div>
+          <Suspense fallback={
+            <div className="px-6 w-full" style={{ marginBottom: '80px' }}>
+              <div style={{ maxWidth: '1024px', marginLeft: 'auto', marginRight: 'auto' }}>
+                <div className="grid md:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="border border-[var(--border)] bg-[var(--surface)] animate-pulse"
+                      style={{ height: '400px' }}
+                    />
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-        </div>
+          }>
+            <PricingCards />
+          </Suspense>
 
           {/* FAQ Teaser */}
           <div className="text-center px-6 w-full">

@@ -1,11 +1,13 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getFeatureFlagsForLead, type FeatureFlags } from '@/lib/features/flags'
+import { getSession } from '@/lib/auth'
 import { ReportClient } from './ReportClient'
 
 interface ReportPageProps {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ locked?: string }>
 }
 
 interface ReportData {
@@ -18,6 +20,8 @@ interface ReportData {
     summary: string
     run_id: string
     requires_verification: boolean
+    expires_at: string | null
+    subscriber_only: boolean
   }
   analysis: {
     business_type: string
@@ -157,6 +161,9 @@ async function getReport(token: string): Promise<ReportData | null> {
   // Check if sitemap was used
   const sitemapUsed = analysis?.has_sitemap ?? (analysis?.pages_crawled || 0) > 5
 
+  // Check if user is a subscriber (no expiry for subscribers)
+  const isSubscriber = lead.tier !== 'free'
+
   return {
     report: {
       id: report.id,
@@ -167,6 +174,8 @@ async function getReport(token: string): Promise<ReportData | null> {
       summary: report.summary || '',
       run_id: runId,
       requires_verification: report.requires_verification ?? true,
+      expires_at: isSubscriber ? null : (report.expires_at || null),
+      subscriber_only: report.subscriber_only ?? false,
     },
     analysis: analysis ? {
       business_type: analysis.business_type,
@@ -197,15 +206,36 @@ async function getReport(token: string): Promise<ReportData | null> {
   }
 }
 
-export default async function ReportPage({ params }: ReportPageProps) {
+export default async function ReportPage({ params, searchParams }: ReportPageProps) {
   const { token } = await params
+  const { locked } = await searchParams
   const data = await getReport(token)
 
   if (!data) {
     notFound()
   }
 
-  return <ReportClient data={data} />
+  // If report owner is a subscriber, require login to view
+  // This protects paid reports from being accessed by anyone with the link
+  if (data.featureFlags.isSubscriber) {
+    const session = await getSession()
+
+    // Not logged in - redirect to login
+    if (!session) {
+      redirect(`/login?redirect=/report/${token}`)
+    }
+
+    // Logged in but not the report owner - show not found
+    // (prevents other users from accessing someone else's report)
+    if (session.lead_id !== data.leadId) {
+      notFound()
+    }
+  }
+
+  // Show locked modal if user tried to request another free report
+  const showLockedModal = locked === 'true' && !data.featureFlags.isSubscriber
+
+  return <ReportClient data={data} showLockedModal={showLockedModal} />
 }
 
 // Metadata

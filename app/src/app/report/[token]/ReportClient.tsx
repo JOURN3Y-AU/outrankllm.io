@@ -5,9 +5,136 @@ import { FloatingPixels } from '@/components/landing/FloatingPixels'
 import { ReportTabs } from '@/components/report/ReportTabs'
 import { VerificationGate } from '@/components/report/VerificationGate'
 import { OptInModal } from '@/components/report/OptInModal'
-import { ArrowLeft, ExternalLink, Sparkles } from 'lucide-react'
+import { ExpiryCountdown } from '@/components/report/ExpiryCountdown'
+import { Nav } from '@/components/nav/Nav'
+import { ArrowLeft, ExternalLink, Sparkles, Lock, Crown, Check } from 'lucide-react'
 import Link from 'next/link'
 import type { FeatureFlags } from '@/lib/features/flags'
+
+// Locked report modal for users who already used their free report
+function LockedReportModal({
+  domain,
+  onUpgrade
+}: {
+  domain: string
+  onUpgrade: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ padding: '24px' }}
+    >
+      {/* Frosted backdrop */}
+      <div
+        className="absolute inset-0 bg-[var(--bg)]/80"
+        style={{ backdropFilter: 'blur(8px)' }}
+      />
+
+      {/* Modal */}
+      <div
+        className="relative bg-[var(--surface)] border border-[var(--border)] w-full"
+        style={{ maxWidth: '480px', padding: '48px 32px' }}
+      >
+        {/* Lock icon */}
+        <div
+          className="flex items-center justify-center mx-auto"
+          style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+            marginBottom: '24px',
+          }}
+        >
+          <Lock size={32} style={{ color: 'var(--bg)' }} />
+        </div>
+
+        {/* Title */}
+        <h2
+          className="text-center font-medium text-[var(--text)]"
+          style={{ fontSize: '1.5rem', marginBottom: '12px' }}
+        >
+          Your Report is Ready
+        </h2>
+
+        {/* Domain */}
+        <p
+          className="text-center font-mono text-[var(--green)]"
+          style={{ fontSize: '15px', marginBottom: '24px' }}
+        >
+          {domain}
+        </p>
+
+        {/* Message */}
+        <p
+          className="text-center text-[var(--text-mid)]"
+          style={{ lineHeight: '1.6', marginBottom: '32px' }}
+        >
+          You&apos;ve already used your free report. Subscribe now to unlock full access
+          and get weekly AI visibility updates with personalized action plans.
+        </p>
+
+        {/* Benefits */}
+        <div
+          className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+          style={{ padding: '20px', marginBottom: '32px' }}
+        >
+          <div className="flex items-center gap-2" style={{ marginBottom: '16px' }}>
+            <Crown size={16} className="text-[var(--gold)]" />
+            <span className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider">
+              What you&apos;ll unlock
+            </span>
+          </div>
+          <ul style={{ display: 'grid', gap: '12px' }}>
+            {[
+              'Full access to your AI visibility report',
+              'Weekly automated scans & trend tracking',
+              'Competitor analysis & benchmarking',
+              'Personalized action plans to improve',
+            ].map((benefit, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm text-[var(--text-mid)]">
+                <Check size={16} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+                <span>{benefit}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* CTA */}
+        <button
+          onClick={onUpgrade}
+          className="w-full font-mono text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90"
+          style={{
+            padding: '16px 24px',
+            background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+            color: 'var(--bg)',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <Sparkles size={16} />
+          Subscribe to Unlock
+        </button>
+
+        {/* Login link */}
+        <p className="text-center text-sm text-[var(--text-dim)]" style={{ marginTop: '16px' }}>
+          Already subscribed?{' '}
+          <Link href="/login" className="text-[var(--green)] hover:underline">
+            Log in
+          </Link>
+        </p>
+
+        {/* Help link */}
+        <p className="text-center text-sm text-[var(--text-dim)]" style={{ marginTop: '12px' }}>
+          Wrong domain or need help?{' '}
+          <a href="mailto:help@outrankllm.io" className="text-[var(--text-mid)] hover:text-[var(--text)] hover:underline">
+            Contact us
+          </a>
+        </p>
+      </div>
+    </div>
+  )
+}
 
 interface ReportData {
   report: {
@@ -19,6 +146,8 @@ interface ReportData {
     summary: string
     run_id: string
     requires_verification: boolean
+    expires_at: string | null
+    subscriber_only: boolean
   }
   analysis: {
     business_type: string
@@ -70,11 +199,14 @@ interface ReportData {
 
 interface ReportClientProps {
   data: ReportData
+  showLockedModal?: boolean
 }
 
-export function ReportClient({ data }: ReportClientProps) {
-  const { report, analysis, crawlData, responses, prompts, brandAwareness, email, domain, runId, isVerified } = data
+export function ReportClient({ data, showLockedModal = false }: ReportClientProps) {
+  const { report, analysis, crawlData, responses, prompts, brandAwareness, email, domain, runId, isVerified, featureFlags } = data
   const [showModal, setShowModal] = useState(false)
+  const [showLocked, setShowLocked] = useState(showLockedModal)
+  const isSubscriber = featureFlags.isSubscriber
 
   // Restore scroll position when returning from pricing page
   useEffect(() => {
@@ -110,6 +242,9 @@ export function ReportClient({ data }: ReportClientProps) {
 
   const handleUpgradeClick = () => {
     saveScrollPosition()
+    // Store lead info for checkout process
+    sessionStorage.setItem('checkout_lead_id', data.leadId)
+    sessionStorage.setItem('checkout_report_token', report.url_token)
     window.location.href = '/pricing?from=report'
   }
 
@@ -130,25 +265,30 @@ export function ReportClient({ data }: ReportClientProps) {
       <div className="grid-bg" />
       <FloatingPixels />
 
-      {/* Main content */}
-      <main className="relative z-10 min-h-screen" style={{ padding: '48px 24px 80px' }}>
-        <div style={{ maxWidth: '960px', marginLeft: 'auto', marginRight: 'auto' }}>
-          {/* Header */}
-          <header className="flex items-center justify-between" style={{ marginBottom: '56px' }}>
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="font-mono text-sm">Back</span>
-            </Link>
+      {/* Show Nav for subscribers, simple header for free users */}
+      {isSubscriber && <Nav />}
 
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-lg">
-                outrank<span className="text-[var(--green)]">llm</span>
-              </span>
-            </div>
-          </header>
+      {/* Main content */}
+      <main className="relative z-10 min-h-screen" style={{ padding: isSubscriber ? '120px 24px 80px' : '48px 24px 80px' }}>
+        <div style={{ maxWidth: '960px', marginLeft: 'auto', marginRight: 'auto' }}>
+          {/* Header - only show for non-subscribers */}
+          {!isSubscriber && (
+            <header className="flex items-center justify-between" style={{ marginBottom: '56px' }}>
+              <Link
+                href="/"
+                className="flex items-center gap-2 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="font-mono text-sm">Back</span>
+              </Link>
+
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-lg">
+                  outrank<span className="text-[var(--green)]">llm</span>
+                </span>
+              </div>
+            </header>
+          )}
 
           {/* Report header */}
           <div className="text-center stagger-children" style={{ marginBottom: '48px' }}>
@@ -179,6 +319,14 @@ export function ReportClient({ data }: ReportClientProps) {
             )}
           </div>
 
+          {/* Expiry countdown for free users only */}
+          {!isSubscriber && (
+            <ExpiryCountdown
+              expiresAt={report.expires_at}
+              onUpgradeClick={handleUpgradeClick}
+            />
+          )}
+
           {/* Tabbed Content */}
           <ReportTabs
             analysis={analysis}
@@ -191,61 +339,71 @@ export function ReportClient({ data }: ReportClientProps) {
             competitors={report.top_competitors}
             domain={domain}
             onUpgradeClick={handleUpgradeClick}
+            isSubscriber={isSubscriber}
           />
 
-          {/* CTA section */}
-          <section
-            className="text-center border-t border-[var(--border)]"
-            style={{ paddingTop: '56px', marginTop: '56px' }}
-          >
-            <div className="flex justify-center" style={{ marginBottom: '20px' }}>
-              <Sparkles size={36} className="text-[var(--green)]" />
-            </div>
-            <h2
-              className="font-medium text-[var(--text)]"
-              style={{ fontSize: '1.375rem', marginBottom: '16px' }}
+          {/* CTA section - only for non-subscribers */}
+          {!isSubscriber && (
+            <section
+              className="text-center border-t border-[var(--border)]"
+              style={{ paddingTop: '56px', marginTop: '56px' }}
             >
-              Want to outrank your competitors?
-            </h2>
-            <p
-              className="text-[var(--text-mid)]"
-              style={{
-                marginBottom: '28px',
-                maxWidth: '480px',
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                lineHeight: '1.6'
-              }}
-            >
-              Unlock competitor analysis, personalized action plans, and
-              ready-to-ship PRDs for your AI coding tools.
-            </p>
-            <Link
-              href="/pricing?from=report"
-              onClick={saveScrollPosition}
-              className="form-button inline-flex items-center gap-2"
-              style={{ width: 'auto', padding: '18px 32px' }}
-            >
-              <Sparkles size={16} />
-              Upgrade for Full Access
-            </Link>
-          </section>
+              <div className="flex justify-center" style={{ marginBottom: '20px' }}>
+                <Sparkles size={36} className="text-[var(--green)]" />
+              </div>
+              <h2
+                className="font-medium text-[var(--text)]"
+                style={{ fontSize: '1.375rem', marginBottom: '16px' }}
+              >
+                Want to outrank your competitors?
+              </h2>
+              <p
+                className="text-[var(--text-mid)]"
+                style={{
+                  marginBottom: '28px',
+                  maxWidth: '480px',
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                  lineHeight: '1.6'
+                }}
+              >
+                Unlock competitor analysis, personalized action plans, and
+                ready-to-ship PRDs for your AI coding tools.
+              </p>
+              <button
+                onClick={handleUpgradeClick}
+                className="form-button inline-flex items-center gap-2"
+                style={{ width: 'auto', padding: '18px 32px' }}
+              >
+                <Sparkles size={16} />
+                Upgrade for Full Access
+              </button>
+            </section>
+          )}
 
           {/* Footer */}
           <footer className="text-center" style={{ paddingTop: '48px', paddingBottom: '24px' }}>
             <p className="font-mono text-xs text-[var(--text-dim)]">
-              outrankllm.io — GEO for Vibe Coders
+              outrankllm.io — GEO for Business owners, developers, vibe coders and agencies
             </p>
           </footer>
         </div>
       </main>
 
       {/* Opt-in modal */}
-      {showModal && (
+      {showModal && !showLocked && (
         <OptInModal
           email={email}
           onClose={handleModalClose}
           onOptIn={handleOptIn}
+        />
+      )}
+
+      {/* Locked report modal - shown when user already used their free report */}
+      {showLocked && (
+        <LockedReportModal
+          domain={domain}
+          onUpgrade={handleUpgradeClick}
         />
       )}
     </VerificationGate>

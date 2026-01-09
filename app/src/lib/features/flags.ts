@@ -1,8 +1,10 @@
 import { createServiceClient } from '@/lib/supabase/server'
 
-export type Tier = 'free' | 'pro' | 'enterprise'
+export type Tier = 'free' | 'starter' | 'pro' | 'agency'
 
 export interface FeatureFlags {
+  isSubscriber: boolean
+  tier: Tier
   blurCompetitors: boolean
   showAllCompetitors: boolean
   editablePrompts: boolean
@@ -10,10 +12,13 @@ export interface FeatureFlags {
   geoEnhancedPrompts: boolean
   unlimitedScans: boolean
   exportReports: boolean
+  multiDomain: boolean  // Agency only - multiple domains
 }
 
-// Default flags if database is unavailable
+// Default flags for free tier
 const DEFAULT_FLAGS: FeatureFlags = {
+  isSubscriber: false,
+  tier: 'free',
   blurCompetitors: true,
   showAllCompetitors: false,
   editablePrompts: false,
@@ -21,6 +26,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   geoEnhancedPrompts: true,
   unlimitedScans: false,
   exportReports: false,
+  multiDomain: false,
 }
 
 // Map database flag names to TypeScript property names
@@ -32,119 +38,80 @@ const FLAG_NAME_MAP: Record<string, keyof FeatureFlags> = {
   'geo_enhanced_prompts': 'geoEnhancedPrompts',
   'unlimited_scans': 'unlimitedScans',
   'export_reports': 'exportReports',
+  'multi_domain': 'multiDomain',
 }
-
-// Cache feature flags for performance (5 minute TTL)
-let flagsCache: { flags: FeatureFlags; timestamp: number } | null = null
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
  * Get feature flags for a specific tier
  */
 export async function getFeatureFlags(tier: Tier = 'free'): Promise<FeatureFlags> {
-  try {
-    // Check cache first
-    if (flagsCache && Date.now() - flagsCache.timestamp < CACHE_TTL) {
-      return applyTierToFlags(flagsCache.flags, tier)
-    }
+  return getFlagsForTier(tier)
+}
 
-    const supabase = createServiceClient()
+/**
+ * Get flags based on tier
+ */
+function getFlagsForTier(tier: Tier): FeatureFlags {
+  const isSubscriber = tier !== 'free'
 
-    const { data: flags, error } = await supabase
-      .from('feature_flags')
-      .select('name, enabled_for_tiers')
-
-    if (error || !flags) {
-      console.error('Failed to fetch feature flags:', error)
-      return applyTierToFlags(DEFAULT_FLAGS, tier)
-    }
-
-    // Build flags object from database
-    const dbFlags: Partial<Record<keyof FeatureFlags, string[]>> = {}
-
-    for (const flag of flags) {
-      const propName = FLAG_NAME_MAP[flag.name]
-      if (propName) {
-        dbFlags[propName] = flag.enabled_for_tiers || []
+  switch (tier) {
+    case 'starter':
+      return {
+        isSubscriber: true,
+        tier: 'starter',
+        blurCompetitors: false,
+        showAllCompetitors: true,
+        editablePrompts: false,
+        showPrdTasks: false,
+        geoEnhancedPrompts: true,
+        unlimitedScans: false,
+        exportReports: false,
+        multiDomain: false,
       }
-    }
 
-    // Cache the raw flags
-    flagsCache = {
-      flags: buildFlagsFromDb(dbFlags),
-      timestamp: Date.now()
-    }
+    case 'pro':
+      return {
+        isSubscriber: true,
+        tier: 'pro',
+        blurCompetitors: false,
+        showAllCompetitors: true,
+        editablePrompts: true,
+        showPrdTasks: true,
+        geoEnhancedPrompts: true,
+        unlimitedScans: true,
+        exportReports: true,
+        multiDomain: false,
+      }
 
-    return applyTierToFlags(flagsCache.flags, tier)
+    case 'agency':
+      return {
+        isSubscriber: true,
+        tier: 'agency',
+        blurCompetitors: false,
+        showAllCompetitors: true,
+        editablePrompts: true,
+        showPrdTasks: true,
+        geoEnhancedPrompts: true,
+        unlimitedScans: true,
+        exportReports: true,
+        multiDomain: true,
+      }
 
-  } catch (error) {
-    console.error('Feature flags error:', error)
-    return applyTierToFlags(DEFAULT_FLAGS, tier)
+    case 'free':
+    default:
+      return {
+        isSubscriber: false,
+        tier: 'free',
+        blurCompetitors: true,
+        showAllCompetitors: false,
+        editablePrompts: false,
+        showPrdTasks: false,
+        geoEnhancedPrompts: true,
+        unlimitedScans: false,
+        exportReports: false,
+        multiDomain: false,
+      }
   }
-}
-
-/**
- * Build flags object from database data
- * This stores which tiers have access to each flag
- */
-function buildFlagsFromDb(dbFlags: Partial<Record<keyof FeatureFlags, string[]>>): FeatureFlags {
-  // Store tier arrays as serialized flags for later tier-specific resolution
-  // For now, we'll store the actual boolean values for 'free' tier as default
-  return {
-    blurCompetitors: (dbFlags.blurCompetitors || ['free']).includes('free'),
-    showAllCompetitors: (dbFlags.showAllCompetitors || []).includes('free'),
-    editablePrompts: (dbFlags.editablePrompts || []).includes('free'),
-    showPrdTasks: (dbFlags.showPrdTasks || []).includes('free'),
-    geoEnhancedPrompts: (dbFlags.geoEnhancedPrompts || ['free']).includes('free'),
-    unlimitedScans: (dbFlags.unlimitedScans || []).includes('free'),
-    exportReports: (dbFlags.exportReports || []).includes('free'),
-  }
-}
-
-/**
- * Apply tier-specific logic to flags
- */
-function applyTierToFlags(baseFlags: FeatureFlags, tier: Tier): FeatureFlags {
-  // Free tier gets default flags
-  if (tier === 'free') {
-    return {
-      blurCompetitors: true,
-      showAllCompetitors: false,
-      editablePrompts: false,
-      showPrdTasks: false,
-      geoEnhancedPrompts: true,
-      unlimitedScans: false,
-      exportReports: false,
-    }
-  }
-
-  // Pro tier
-  if (tier === 'pro') {
-    return {
-      blurCompetitors: false,
-      showAllCompetitors: true,
-      editablePrompts: true,
-      showPrdTasks: true,
-      geoEnhancedPrompts: true,
-      unlimitedScans: true,
-      exportReports: true,
-    }
-  }
-
-  // Enterprise tier (all features)
-  if (tier === 'enterprise') {
-    return {
-      blurCompetitors: false,
-      showAllCompetitors: true,
-      editablePrompts: true,
-      showPrdTasks: true,
-      geoEnhancedPrompts: true,
-      unlimitedScans: true,
-      exportReports: true,
-    }
-  }
-
-  return baseFlags
 }
 
 /**
@@ -152,7 +119,7 @@ function applyTierToFlags(baseFlags: FeatureFlags, tier: Tier): FeatureFlags {
  */
 export function isFeatureEnabled(
   flags: FeatureFlags,
-  feature: keyof FeatureFlags
+  feature: keyof Omit<FeatureFlags, 'isSubscriber' | 'tier'>
 ): boolean {
   return flags[feature] ?? false
 }
@@ -196,11 +163,4 @@ export async function getUserTier(leadId: string): Promise<Tier> {
 export async function getFeatureFlagsForLead(leadId: string): Promise<FeatureFlags> {
   const tier = await getUserTier(leadId)
   return getFeatureFlags(tier)
-}
-
-/**
- * Clear the feature flags cache (useful for testing or admin updates)
- */
-export function clearFlagsCache(): void {
-  flagsCache = null
 }

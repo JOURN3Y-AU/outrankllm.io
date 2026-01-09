@@ -28,6 +28,9 @@ import crypto from 'crypto'
 // Extra buffer for brand awareness + retries
 export const maxDuration = 800
 
+// Free report expiry (days from creation) - configurable via env var
+const FREE_REPORT_EXPIRY_DAYS = parseInt(process.env.FREE_REPORT_EXPIRY_DAYS || '7', 10)
+
 interface ProcessRequest {
   scanId: string
   domain: string
@@ -329,6 +332,10 @@ export async function POST(request: NextRequest) {
     // Generate URL token (use crypto for better randomness)
     const urlToken = crypto.randomBytes(8).toString('hex')
 
+    // Set expiry date for free reports
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + FREE_REPORT_EXPIRY_DAYS)
+
     // Create report
     const { data: report, error: reportError } = await supabase
       .from('reports')
@@ -340,6 +347,7 @@ export async function POST(request: NextRequest) {
         top_competitors: topCompetitors,
         summary,
         requires_verification: true,
+        expires_at: expiresAt.toISOString(),
       })
       .select('id, url_token')
       .single()

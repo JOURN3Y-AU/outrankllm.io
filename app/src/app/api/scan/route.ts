@@ -24,6 +24,9 @@ export async function POST(request: NextRequest) {
 
     const { email, domain } = result.data
 
+    // Normalize email to lowercase for consistent matching
+    const normalizedEmail = email.toLowerCase().trim()
+
     // Clean domain
     let cleanDomain = domain.toLowerCase().trim()
     cleanDomain = cleanDomain.replace(/^https?:\/\//, '')
@@ -33,11 +36,93 @@ export async function POST(request: NextRequest) {
     // Get Supabase client
     const supabase = createServiceClient()
 
-    // Upsert lead record
+    // Check if this email already has a completed scan (free report limit)
+    // Use ilike for case-insensitive matching
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id, tier')
+      .ilike('email', normalizedEmail)
+      .limit(1)
+      .single()
+
+    if (existingLead) {
+      // Check if they're a paid subscriber (subscribers can run new scans based on tier)
+      const isAgency = existingLead.tier === 'agency'
+      const isFree = existingLead.tier === 'free'
+
+      if (isFree) {
+        // Free users: check for any completed scan
+        const { data: existingRun } = await supabase
+          .from('scan_runs')
+          .select(`
+            id,
+            created_at,
+            reports (url_token)
+          `)
+          .eq('lead_id', existingLead.id)
+          .eq('status', 'complete')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (existingRun?.reports) {
+          // Handle both array and single object cases
+          const reportData = Array.isArray(existingRun.reports)
+            ? existingRun.reports[0]
+            : existingRun.reports as { url_token: string }
+
+          if (reportData?.url_token) {
+            // User already has a free report - return existing report with locked flag
+            return NextResponse.json({
+              success: false,
+              alreadyScanned: true,
+              reportToken: reportData.url_token,
+              scannedAt: existingRun.created_at,
+              message: 'You have already used your free report. Subscribe to access your report and get weekly updates.',
+            })
+          }
+        }
+      } else if (!isAgency) {
+        // Starter/Pro users: can only have one domain, show existing report
+        const { data: existingRun } = await supabase
+          .from('scan_runs')
+          .select(`
+            id,
+            created_at,
+            reports (url_token)
+          `)
+          .eq('lead_id', existingLead.id)
+          .eq('status', 'complete')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (existingRun?.reports) {
+          const reportData = Array.isArray(existingRun.reports)
+            ? existingRun.reports[0]
+            : existingRun.reports as { url_token: string }
+
+          if (reportData?.url_token) {
+            // Redirect to their existing report (not locked since they're paid)
+            return NextResponse.json({
+              success: false,
+              alreadyScanned: true,
+              reportToken: reportData.url_token,
+              scannedAt: existingRun.created_at,
+              isSubscriber: true,
+              message: 'You already have a tracked domain. View your latest report.',
+            })
+          }
+        }
+      }
+      // Agency tier: allow multiple domains, fall through to create new scan
+    }
+
+    // Upsert lead record (use normalized email for consistency)
     const { data: lead, error: leadError } = await supabase
       .from('leads')
       .upsert(
-        { email, domain: cleanDomain },
+        { email: normalizedEmail, domain: cleanDomain },
         { onConflict: 'email,domain', ignoreDuplicates: false }
       )
       .select('id, email_verified')
@@ -82,7 +167,7 @@ export async function POST(request: NextRequest) {
         lead_id: lead.id,
         run_id: scanRun.id,
         token: verificationToken,
-        email: email,
+        email: normalizedEmail,
         expires_at: expiresAt.toISOString()
       })
 
@@ -116,7 +201,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         scanId: scanRun.id,
         domain: cleanDomain,
-        email,
+        email: normalizedEmail,
         verificationToken, // Pass token for email sending
         leadId: lead.id,
       }),

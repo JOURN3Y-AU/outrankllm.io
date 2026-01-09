@@ -36,7 +36,8 @@ export function BrandAwarenessTab({
   domain,
   platformFilter,
   onFilterChange,
-  onUpgradeClick
+  onUpgradeClick,
+  isSubscriber = false
 }: {
   brandAwareness?: BrandAwarenessResult[] | null
   analysis: Analysis | null
@@ -44,11 +45,10 @@ export function BrandAwarenessTab({
   platformFilter: string
   onFilterChange: (filter: string) => void
   onUpgradeClick: () => void
+  isSubscriber?: boolean
 }) {
   // For free tier, show teaser instead of actual data
-  const isFreeUser = true // TODO: Get from subscription context
-
-  if (isFreeUser) {
+  if (!isSubscriber) {
     return (
       <div style={{ display: 'grid', gap: '32px' }}>
         {/* Methodology Explainer */}
@@ -625,29 +625,6 @@ export function BrandAwarenessTab({
             })}
           </div>
 
-          {/* Upgrade CTA for full competitor analysis */}
-          <div
-            className="flex items-center justify-between bg-[var(--surface)] border border-dashed border-[var(--border)]"
-            style={{ marginTop: '24px', padding: '20px 24px', gap: '16px' }}
-          >
-            <div className="flex items-center" style={{ gap: '12px' }}>
-              <Lock size={18} className="text-[var(--text-ghost)]" />
-              <div>
-                <p className="text-[var(--text-mid)] text-sm font-medium">
-                  Want analysis for all competitors?
-                </p>
-                <p className="text-[var(--text-dim)] text-xs" style={{ marginTop: '4px' }}>
-                  Get brand awareness comparisons for every competitor detected in your report.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onUpgradeClick}
-              className="flex-shrink-0 text-[var(--green)] font-mono text-xs cursor-pointer hover:underline"
-            >
-              Upgrade →
-            </button>
-          </div>
         </div>
       )}
 

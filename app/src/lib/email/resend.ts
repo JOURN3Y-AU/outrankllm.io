@@ -367,3 +367,136 @@ Your report includes:
 outrankllm.io
   `.trim();
 }
+
+/**
+ * Send password reset email
+ */
+export async function sendPasswordResetEmail(
+  email: string,
+  token: string
+): Promise<EmailResult> {
+  const resetUrl = `${APP_URL}/reset-password?token=${token}`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: `outrankllm <${FROM_EMAIL}>`,
+      to: email,
+      subject: 'Reset your password - outrankllm',
+      html: generatePasswordResetEmailHtml(resetUrl),
+      text: generatePasswordResetEmailText(resetUrl),
+    });
+
+    if (error) {
+      console.error('[Email] Resend error:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[Email] Password reset email sent:', data?.id);
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    console.error('[Email] Failed to send password reset email:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error'
+    };
+  }
+}
+
+function generatePasswordResetEmailHtml(resetUrl: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your password - outrankllm</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+              <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
+                outrank<span style="color: #22c55e;">llm</span>
+              </div>
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+                PASSWORD RESET
+              </div>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 32px;">
+              <h1 style="margin: 0 0 16px; font-size: 20px; font-weight: 500; color: #fafafa; line-height: 1.4;">
+                Reset your password
+              </h1>
+
+              <p style="margin: 0 0 24px; font-size: 14px; color: #d4d4d4; line-height: 1.6;">
+                Click the button below to set a new password for your outrankllm account.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding: 8px 0 24px;">
+                    <a href="${resetUrl}"
+                       style="display: inline-block; padding: 14px 32px; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
+                      Reset Password →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Expiry notice -->
+              <p style="margin: 0; font-size: 12px; color: #8a8a8a; text-align: center;">
+                This link expires in 1 hour
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #525252;">
+                If you didn't request this password reset, you can safely ignore this email.<br>
+                Your password will remain unchanged.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Bottom link -->
+        <p style="margin: 24px 0 0; font-size: 11px; color: #525252;">
+          <a href="${APP_URL}" style="color: #525252; text-decoration: none;">outrankllm.io</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+
+function generatePasswordResetEmailText(resetUrl: string): string {
+  return `
+outrankllm - Password Reset
+
+Reset your password
+
+Click the link below to set a new password for your outrankllm account:
+
+${resetUrl}
+
+This link expires in 1 hour.
+
+---
+If you didn't request this password reset, you can safely ignore this email.
+Your password will remain unchanged.
+
+outrankllm.io
+  `.trim();
+}
