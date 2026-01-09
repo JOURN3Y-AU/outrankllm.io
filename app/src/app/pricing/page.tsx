@@ -238,7 +238,7 @@ function PricingCards() {
               <div style={{ padding: '0 28px 28px' }}>
                 {plan.contactOnly ? (
                   <a
-                    href="mailto:hello@outrankllm.io?subject=Agency Plan Inquiry"
+                    href="mailto:help@outrankllm.io?subject=Agency Plan Inquiry"
                     className="block w-full py-4 font-mono text-sm text-center transition-all border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]"
                   >
                     {plan.cta}

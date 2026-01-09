@@ -1,6 +1,6 @@
 # Subscription System Implementation Plan
 
-**Status:** Sprint 1 Complete
+**Status:** Sprint 2 Complete (Auth & Accounts)
 **Last Updated:** 2026-01-09
 
 ## Overview
@@ -13,7 +13,7 @@ Transform outrankLLM from a free report tool into a full SaaS with subscriptions
 
 | Decision | Choice |
 |----------|--------|
-| Authentication | Password-based (after email verification) |
+| Authentication | Password-based (after Stripe checkout) |
 | CRON hosting | Vercel Cron (with chunking strategy) |
 | AI generation | Hybrid (generate once, allow regenerate) |
 | Currency | AUD |
@@ -30,17 +30,16 @@ Transform outrankLLM from a free report tool into a full SaaS with subscriptions
 - [x] Timer disappears for subscribed users
 - [x] After expiry: report locked, prompt to subscribe
 
-### Implementation
-1. Add `expires_at` column to `reports` table (default: `created_at + 3 days`)
-2. Create `<ExpiryCountdown />` component
-3. Add expiry check middleware to report page
-4. Create expired report UI with subscribe CTA
+### Implementation Notes
+- `ExpiryCountdown.tsx` component shows live countdown
+- Expiry is set in `process/route.ts` when report is created
+- Timer hidden when `featureFlags.isSubscriber` is true
+- Locked state shows subscribe CTA overlay
 
-### Files to Create/Modify
-- `supabase/migrations/XXX_add_report_expiry.sql`
-- `src/components/report/ExpiryCountdown.tsx`
-- `src/app/report/[token]/page.tsx` (add expiry logic)
-- `src/app/report/expired/page.tsx` (expired state UI)
+### Files Created/Modified
+- `src/components/report/ExpiryCountdown.tsx` ✅
+- `src/app/report/[token]/ReportClient.tsx` (added expiry logic) ✅
+- `supabase/migrations/010_subscription_enhancements.sql` (expires_at column) ✅
 
 ---
 
@@ -55,52 +54,30 @@ Transform outrankLLM from a free report tool into a full SaaS with subscriptions
 | Pro | `prod_TjsvNttBDEeReB` | $79/mo |
 | Agency | `prod_Tjsw1pXBrPPFo3` | $199/mo |
 
-### Stripe Setup Steps (Test Mode)
-1. Log into Stripe Dashboard → toggle "Test mode" (top-right)
-2. Get test API keys from Developers → API keys:
-   - `STRIPE_SECRET_KEY` (starts with `sk_test_`)
-   - `STRIPE_PUBLISHABLE_KEY` (starts with `pk_test_`)
-3. Create webhook endpoint in Stripe Dashboard:
-   - URL: `https://yourdomain.com/api/stripe/webhook`
-   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
-   - Copy `STRIPE_WEBHOOK_SECRET` (starts with `whsec_`)
-4. For each product, create a Price (monthly recurring, AUD)
-5. Store Price IDs for checkout
+### Implementation Notes
+- Checkout creates session with `leadId` in metadata
+- Webhook handles `checkout.session.completed` to update tier
+- Success page prompts user to set password (account creation)
+- Billing portal accessible from dashboard
 
-### Environment Variables
+### Files Created
+- `src/lib/stripe.ts` ✅
+- `src/app/api/stripe/checkout/route.ts` ✅
+- `src/app/api/stripe/webhook/route.ts` ✅
+- `src/app/api/stripe/portal/route.ts` ✅
+- `src/app/api/stripe/verify-session/route.ts` ✅
+- `src/app/subscribe/success/page.tsx` ✅
+- `src/app/subscribe/cancel/page.tsx` ✅
+- `src/app/pricing/page.tsx` (updated CTAs) ✅
+
+### Environment Variables (Vercel)
 ```env
-# Stripe (Test Mode)
 STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-
-# Stripe Price IDs (created in dashboard)
 STRIPE_PRICE_STARTER=price_...
 STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
 ```
-
-### Implementation
-1. Install Stripe SDK: `npm install stripe`
-2. Create checkout session API (redirects to Stripe)
-3. Create webhook handler (processes Stripe events)
-4. Update pricing page CTAs to initiate checkout
-5. Handle success/cancel redirects
-
-### Pricing Page Strategy
-**Recommendation:** Keep prices manually aligned, not dynamically fetched.
-- Simpler implementation
-- Prices change rarely
-- Avoid extra API calls on every page load
-- If prices change in Stripe, update `src/app/pricing/page.tsx`
-
-### Files to Create/Modify
-- `src/lib/stripe.ts` (Stripe client + helpers)
-- `src/app/api/stripe/checkout/route.ts` (create checkout session)
-- `src/app/api/stripe/webhook/route.ts` (handle Stripe events)
-- `src/app/pricing/page.tsx` (wire up CTAs)
-- `src/app/subscribe/success/page.tsx` (post-checkout success)
-- `src/app/subscribe/cancel/page.tsx` (checkout cancelled)
 
 ### Test Cards
 | Scenario | Card Number |
@@ -111,52 +88,66 @@ STRIPE_PRICE_AGENCY=price_...
 
 ---
 
-## Phase 3: Authentication & Accounts
+## Phase 3: Authentication & Accounts ✅ COMPLETE
 
 **Goal:** Password-based auth for subscribers with account management.
 
-### Auth Flow
-1. User has verified email (existing flow)
+### Auth Flow (Implemented)
+1. User gets free report (no account needed)
 2. User subscribes → Stripe checkout
-3. On success webhook: create password + send "Set your password" email
-4. User sets password → account created
+3. On success page → Prompt to set password (REQUIRED)
+4. Password set → Account created, logged in
 5. Future logins: email + password
+6. Forgot password → Email reset link
 
-### Account Features
-- View/change subscription tier
-- Cancel subscription (at period end)
-- Update notification preferences
-- Change alert frequency
+### Account Features (Implemented)
+- [x] Dashboard with subscription status
+- [x] View tracked domain and latest report
+- [x] Manage billing via Stripe portal
+- [x] Password reset flow
 
-### Report Security
-- After subscribing, report URL returns "subscriber-only" message
-- Must log in to view report
-- `reports.subscriber_only` boolean flag
+### Report Security (Implemented)
+- [x] Subscriber reports require login to view
+- [x] Must be the report owner (lead_id match)
+- [x] Non-owners get 404 (prevents snooping)
+- [x] Free reports remain public via URL
 
-### Implementation
-1. Add password fields to `leads` table (hashed)
-2. Create auth utilities (hash, verify, session management)
-3. Build login page
-4. Build account dashboard
-5. Create "set password" flow (email link)
-6. Add session middleware for protected routes
-7. Update report access logic
+### Homepage Smart Form (Implemented)
+- [x] Not logged in: Standard email + domain form
+- [x] Logged in (Free/Starter/Pro): "Welcome back!" + "View Your Report"
+- [x] Logged in (Agency): Form with locked email, "Scan New Domain"
 
-### Files to Create/Modify
-- `supabase/migrations/XXX_add_auth_fields.sql`
-- `src/lib/auth.ts` (password hashing, sessions)
-- `src/app/login/page.tsx`
-- `src/app/account/page.tsx` (dashboard)
-- `src/app/account/subscription/page.tsx`
-- `src/app/account/settings/page.tsx`
-- `src/app/set-password/page.tsx`
-- `src/middleware.ts` (protect account routes)
-- `src/app/report/[token]/page.tsx` (subscriber check)
-- `src/app/report/subscriber-only/page.tsx`
+### Files Created
+- `src/lib/auth.ts` (server-side session helpers) ✅
+- `src/lib/auth-client.ts` (client useSession hook) ✅
+- `src/app/api/auth/login/route.ts` ✅
+- `src/app/api/auth/logout/route.ts` ✅
+- `src/app/api/auth/session/route.ts` ✅
+- `src/app/api/auth/set-password/route.ts` ✅
+- `src/app/api/auth/forgot-password/route.ts` ✅
+- `src/app/api/auth/reset-password/route.ts` ✅
+- `src/app/api/user/report/route.ts` ✅
+- `src/app/dashboard/page.tsx` ✅
+- `src/app/forgot-password/page.tsx` ✅
+- `src/app/reset-password/page.tsx` ✅
+- `src/components/auth/SetPasswordForm.tsx` ✅
+- `supabase/migrations/011_password_auth.sql` ✅
+
+### Files Modified
+- `src/app/login/page.tsx` (wired to auth API) ✅
+- `src/app/report/[token]/page.tsx` (subscriber protection) ✅
+- `src/components/landing/EmailForm.tsx` (smart form) ✅
+- `src/components/nav/Nav.tsx` (login/account state) ✅
+- `src/middleware.ts` (protected routes) ✅
+
+### Environment Variables
+```env
+JWT_SECRET=<openssl rand -base64 32>
+```
 
 ---
 
-## Phase 4: Weekly CRON Updates
+## Phase 4: Weekly CRON Updates ⏳ PENDING
 
 **Goal:** Run weekly scans for subscribers with trend tracking.
 
@@ -217,7 +208,7 @@ scan_queue
 
 ---
 
-## Phase 5: Subscriber Features
+## Phase 5: Subscriber Features ⏳ PENDING
 
 ### 5A: Editable Questions (Setup Tab)
 
@@ -341,18 +332,18 @@ interface PRDTask {
 
 ## Implementation Order
 
-### Sprint 1: Foundation (Stripe + TTL)
-1. Phase 2: Stripe Integration
-2. Phase 1: Report TTL Timer
+### Sprint 1: Foundation (Stripe + TTL) ✅ COMPLETE
+1. Phase 2: Stripe Integration ✅
+2. Phase 1: Report TTL Timer ✅
 
 *Outcome: Users can subscribe and see urgency*
 
-### Sprint 2: Auth & Accounts
-3. Phase 3: Authentication & Accounts
+### Sprint 2: Auth & Accounts ✅ COMPLETE
+3. Phase 3: Authentication & Accounts ✅
 
-*Outcome: Full login system, account management*
+*Outcome: Full login system, account management, report protection*
 
-### Sprint 3: Subscriber Value
+### Sprint 3: Subscriber Value ⏳ NEXT
 4. Phase 5A: Editable Questions
 5. Phase 5B: Trend Charts
 
@@ -374,70 +365,93 @@ interface PRDTask {
 ## Database Schema Changes Summary
 
 ```sql
--- Phase 1: Report TTL
+-- Phase 1: Report TTL ✅
 ALTER TABLE reports ADD COLUMN expires_at TIMESTAMPTZ;
 ALTER TABLE reports ADD COLUMN subscriber_only BOOLEAN DEFAULT FALSE;
 
--- Phase 3: Auth
+-- Phase 2: Stripe ✅
+CREATE TABLE subscriptions (...);
+
+-- Phase 3: Auth ✅
 ALTER TABLE leads ADD COLUMN password_hash TEXT;
 ALTER TABLE leads ADD COLUMN password_set_at TIMESTAMPTZ;
-CREATE TABLE sessions (...);
+ALTER TABLE leads ADD COLUMN last_login_at TIMESTAMPTZ;
+CREATE TABLE password_reset_tokens (...);
 
--- Phase 4: CRON
+-- Phase 4: CRON (pending)
 CREATE TABLE scan_queue (...);
 
--- Phase 5A: Questions
+-- Phase 5A: Questions (pending)
 CREATE TABLE subscriber_questions (...);
 
--- Phase 5C: Action Plans
+-- Phase 5C: Action Plans (pending)
 CREATE TABLE action_plans (...);
 
--- Phase 5D: PRD
+-- Phase 5D: PRD (pending)
 ALTER TABLE action_plans ADD COLUMN prd_output JSONB;
 ```
 
 ---
 
-## Environment Variables Needed
+## Environment Variables Summary
 
 ```env
-# Stripe (add to .env.local)
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+# Auth
+JWT_SECRET=<openssl rand -base64 32>
+
+# Stripe
 STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STARTER=price_...
 STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
 
-# Auth
-SESSION_SECRET=... (generate 32-byte random string)
+# Email
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=reports@outrankllm.io
 
-# CRON
-CRON_SECRET=... (for manual testing)
+# App
+NEXT_PUBLIC_APP_URL=https://outrankllm.io
 ```
 
 ---
 
 ## Testing Checklist
 
-### Stripe Integration
-- [ ] Checkout flow works with test card
-- [ ] Webhook receives events
-- [ ] Subscription created in database
-- [ ] Feature flags update based on tier
+### Stripe Integration ✅
+- [x] Checkout flow works with test card
+- [x] Webhook receives events
+- [x] Subscription created in database
+- [x] Feature flags update based on tier
 
-### Authentication
-- [ ] Set password email sends
-- [ ] Login works
-- [ ] Session persists
-- [ ] Protected routes redirect to login
+### Authentication ✅
+- [x] Set password works on success page
+- [x] Login works
+- [x] Session persists (7-day cookie)
+- [x] Protected routes redirect to login
+- [x] Forgot/reset password flow works
 
-### Report TTL
-- [ ] Timer displays correctly
-- [ ] Expired reports show locked state
-- [ ] Timer hidden for subscribers
+### Report TTL ✅
+- [x] Timer displays correctly for free users
+- [x] Expired reports show locked state
+- [x] Timer hidden for subscribers
 
-### Weekly Updates
+### Report Protection ✅
+- [x] Free reports accessible via URL
+- [x] Subscriber reports require login
+- [x] Wrong user gets 404
+
+### Homepage Smart Form ✅
+- [x] Shows "Welcome back" for logged-in users
+- [x] Shows "View Your Report" button
+- [x] Agency users can scan new domains
+
+### Weekly Updates (pending)
 - [ ] CRON triggers correctly
 - [ ] Queue processes in chunks
 - [ ] Historical data stored
@@ -445,9 +459,19 @@ CRON_SECRET=... (for manual testing)
 
 ---
 
+## Known Issues / Tech Debt
+
+1. **ChatGPT token truncation**: Some long responses hit the 4000 token limit. Not critical - responses are still saved, just truncated. Could increase limit if needed.
+
+2. **Agency domain list**: Currently Agency users see the form but no list of their existing domains. Future enhancement: show domain picker/list.
+
+3. **Email templates**: Password reset email is basic. Could improve styling to match report email.
+
+---
+
 ## Notes
 
 - All prices in AUD
-- Test mode until launch-ready
-- Feature flags already exist - just need tier updates
+- Currently using Stripe test mode - switch to live mode when ready
+- Feature flags in `src/lib/features/flags.ts` control tier access
 - Reference implementation in `/reference sources/ai-monitor/` for action plans/PRD patterns
