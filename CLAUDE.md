@@ -6,7 +6,7 @@ SaaS platform for Generative Engine Optimization (GEO) - helping businesses impr
 
 ## Tech Stack
 
-Next.js 14+ (App Router) | Tailwind CSS v4 | Supabase | Vercel | Resend | Vercel AI SDK | Stripe
+Next.js 14+ (App Router) | Tailwind CSS v4 | Supabase | Vercel | Resend | Vercel AI SDK | Stripe | Inngest
 
 ## Critical: Tailwind CSS v4 Quirk
 
@@ -122,14 +122,52 @@ When users click pricing CTAs and return via back button, scroll position and ac
 
 **Hydration note**: Tab restoration must happen in `useEffect`, not `useState` initializer, to avoid SSR mismatch.
 
+## Background Jobs (Inngest)
+
+Inngest handles all background job processing with retries, monitoring, and reliable execution.
+
+### Key Files
+- `src/inngest/client.ts` - Inngest client singleton
+- `src/inngest/functions/process-scan.ts` - Main scan processing (8 steps)
+- `src/inngest/functions/hourly-scan-dispatcher.ts` - Weekly CRON scheduler
+- `src/app/api/inngest/route.ts` - Inngest webhook handler
+
+### How Scans Work
+1. `/api/scan` or `/api/admin/rescan` sends `scan/process` event to Inngest
+2. `process-scan` function runs 8 sequential steps (crawl, analyze, query each platform, finalize)
+3. Each step retries independently - if Claude fails, only Claude retries
+4. Progress updates written to `scan_runs` table for polling
+
+### Weekly CRON Scans
+- `hourly-scan-dispatcher` runs every hour (`0 * * * *`)
+- Checks which subscribers' local time matches their schedule
+- Dispatches `scan/process` events for due subscribers
+- Subscribers configure schedule in dashboard (day, time, timezone)
+
+### Local Development
+```bash
+# Terminal 1: Next.js
+npm run dev
+
+# Terminal 2: Inngest dev server
+npm run dev:inngest
+```
+
+Inngest dashboard: http://localhost:8288
+
+### Environment Variables (Vercel)
+- `INNGEST_SIGNING_KEY` - From Inngest dashboard
+- `INNGEST_EVENT_KEY` - From Inngest dashboard
+
 ## API Routes
 
 ### Scan & Processing
-- `POST /api/scan` - Initiate scan (enforces free report limit)
-- `POST /api/process` - Process scan (crawl, analyze, query LLMs)
+- `POST /api/scan` - Initiate scan (sends to Inngest)
+- `POST /api/process` - DEPRECATED: Use Inngest functions instead
 - `GET /api/scan/status` - Poll progress
 - `GET /api/verify` - Email verification (magic link)
 - `GET /api/trends` - Get score history for trend charts (subscribers only)
+- `GET /api/inngest` - Inngest webhook handler
 
 ### Authentication
 - `POST /api/auth/login` - Email/password login
@@ -146,6 +184,8 @@ When users click pricing CTAs and return via back button, scroll position and ac
 
 ### User
 - `GET /api/user/report` - Get user's latest report token
+- `GET /api/user/schedule` - Get scan schedule settings
+- `PATCH /api/user/schedule` - Update scan schedule (day, hour, timezone)
 
 ## Key Files
 
@@ -155,6 +195,9 @@ When users click pricing CTAs and return via back button, scroll position and ac
 - `src/lib/auth-client.ts` - Client auth hook
 - `src/lib/stripe.ts` - Stripe client
 - `src/lib/features/flags.ts` - Feature flags by tier
+- `src/inngest/client.ts` - Inngest client + event types
+- `src/inngest/functions/process-scan.ts` - Main scan processing
+- `src/inngest/functions/hourly-scan-dispatcher.ts` - Weekly CRON
 - `supabase/migrations/` - Database schema
 - `.env.example` - Required env vars
 
@@ -170,6 +213,10 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STARTER=price_...
 STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_AGENCY=price_...
+
+# Inngest (from https://app.inngest.com)
+INNGEST_SIGNING_KEY=signkey-...
+INNGEST_EVENT_KEY=...
 ```
 
 ## Trend Charts (Subscribers Only)

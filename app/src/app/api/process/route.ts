@@ -1,3 +1,18 @@
+/**
+ * DEPRECATED: This endpoint is being replaced by Inngest functions.
+ *
+ * Use Inngest scan/process events instead:
+ * - src/inngest/functions/process-scan.ts handles all scan processing
+ * - src/app/api/scan/route.ts and src/app/api/admin/rescan/route.ts
+ *   now use inngest.send() instead of calling this endpoint
+ *
+ * This endpoint is kept for:
+ * - Local development without Inngest dev server
+ * - Fallback if Inngest has issues
+ * - Reference for step logic
+ *
+ * TODO: Remove after confirming Inngest is stable in production
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { crawlSite, combineCrawledContent } from '@/lib/ai/crawl'

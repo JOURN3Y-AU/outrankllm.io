@@ -1039,6 +1039,24 @@ export const MAX_REACH_POINTS = Object.values(REACH_WEIGHTS).reduce((sum, w) => 
  * Uses reach-weighted scoring: platforms with more users are worth more points.
  * A 100% score means you're mentioned by all platforms on all queries.
  */
+// Re-export types for easier imports
+export type PlatformResult = SearchQueryResult
+
+/**
+ * Query a single platform with search enabled
+ * Wrapper around queryWithSearch for cleaner imports
+ */
+export async function queryPlatformWithSearch(
+  platform: SearchPlatform,
+  query: string,
+  domain: string,
+  locationContext?: LocationContext
+): Promise<SearchQueryResult> {
+  // Use a dummy runId for cost tracking - Inngest handles the real tracking
+  const dummyRunId = 'inngest-scan'
+  return queryWithSearch(platform, query, domain, dummyRunId, locationContext)
+}
+
 export function calculateSearchVisibilityScore(
   results: Array<{ promptId: string; results: SearchQueryResult[] }>
 ): {

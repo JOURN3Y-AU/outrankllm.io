@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { Nav } from '@/components/nav/Nav'
 import { Footer } from '@/components/landing/Footer'
 import { LocalDate } from '@/components/LocalDate'
+import { ScheduleSettings } from './ScheduleSettings'
 import { FileText, CreditCard, ExternalLink, Crown, Globe, Calendar, RefreshCw, Check } from 'lucide-react'
 
 interface Report {
@@ -118,16 +119,28 @@ async function getSubscription(leadId: string) {
   return subscription
 }
 
-async function getLeadDomain(leadId: string): Promise<string | null> {
+interface LeadData {
+  domain: string | null
+  scan_schedule_day: number | null
+  scan_schedule_hour: number | null
+  scan_timezone: string | null
+}
+
+async function getLeadData(leadId: string): Promise<LeadData> {
   const supabase = createServiceClient()
 
   const { data: lead } = await supabase
     .from('leads')
-    .select('domain')
+    .select('domain, scan_schedule_day, scan_schedule_hour, scan_timezone')
     .eq('id', leadId)
     .single()
 
-  return lead?.domain || null
+  return {
+    domain: lead?.domain || null,
+    scan_schedule_day: lead?.scan_schedule_day ?? null,
+    scan_schedule_hour: lead?.scan_schedule_hour ?? null,
+    scan_timezone: lead?.scan_timezone ?? null,
+  }
 }
 
 // Calculate next weekly analysis date (Mondays at 9am UTC)
@@ -150,15 +163,15 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const [reports, subscription, leadDomain] = await Promise.all([
+  const [reports, subscription, leadData] = await Promise.all([
     getReports(session.lead_id),
     getSubscription(session.lead_id),
-    getLeadDomain(session.lead_id),
+    getLeadData(session.lead_id),
   ])
 
   const isPaid = session.tier !== 'free'
   const isAgency = session.tier === 'agency'
-  const trackedDomain = leadDomain || (reports.length > 0 ? reports[0].domain : null)
+  const trackedDomain = leadData.domain || (reports.length > 0 ? reports[0].domain : null)
   const nextAnalysis = getNextAnalysisDate()
 
   return (
@@ -285,7 +298,7 @@ export default async function DashboardPage() {
           {subscription && (
             <div
               className="border border-[var(--border)] bg-[var(--surface)]"
-              style={{ padding: '24px', marginBottom: '48px' }}
+              style={{ padding: '24px', marginBottom: '32px' }}
             >
               <div className="flex items-center justify-between" style={{ marginBottom: '16px' }}>
                 <h2 className="font-mono text-sm text-[var(--text-dim)] uppercase tracking-wider">
@@ -307,6 +320,15 @@ export default async function DashboardPage() {
                 )}
               </p>
             </div>
+          )}
+
+          {/* Schedule Settings - for paid users */}
+          {isPaid && (
+            <ScheduleSettings
+              initialDay={leadData.scan_schedule_day ?? 1}
+              initialHour={leadData.scan_schedule_hour ?? 9}
+              initialTimezone={leadData.scan_timezone ?? 'Australia/Sydney'}
+            />
           )}
 
           {/* Upgrade Banner (for free users) */}

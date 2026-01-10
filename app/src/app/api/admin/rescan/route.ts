@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { inngest } from '@/inngest/client'
 
 // Admin endpoint to force a rescan
 // Requires ADMIN_SECRET header for authentication
@@ -111,39 +112,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Trigger background processing
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-
-    console.log('[Admin Rescan] Triggering process route:', {
+    // Trigger background processing via Inngest
+    console.log('[Admin Rescan] Sending to Inngest:', {
       scanId: scanRun.id,
       domain: targetDomain,
       email: targetEmail,
     })
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    fetch(`${appUrl}/api/process`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    await inngest.send({
+      name: 'scan/process',
+      data: {
         scanId: scanRun.id,
         domain: targetDomain,
         email: targetEmail,
         leadId: leadId,
         skipEmail, // Optionally skip email (defaults to false - subscribers get scan complete emails)
-      }),
-      signal: controller.signal,
+      },
     })
-      .then(() => clearTimeout(timeoutId))
-      .catch((err) => {
-        clearTimeout(timeoutId)
-        if (err.name === 'AbortError') {
-          return
-        }
-        console.error('Failed to trigger background processing:', err)
-      })
 
     return NextResponse.json({
       success: true,

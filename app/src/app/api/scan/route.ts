@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
+import { inngest } from '@/inngest/client'
 import crypto from 'crypto'
 
 // Validation schema
@@ -176,47 +177,24 @@ export async function POST(request: NextRequest) {
       // Continue anyway - we can still process the scan
     }
 
-    // Trigger background processing (true fire-and-forget)
-    // Use AbortController to not wait for response - /api/process takes ~5 minutes
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-
-    console.log('[Scan] Triggering process route:', {
-      appUrl,
-      processUrl: `${appUrl}/api/process`,
+    // Trigger background processing via Inngest
+    // Inngest handles retries, monitoring, and reliable execution
+    console.log('[Scan] Sending to Inngest:', {
       scanId: scanRun.id,
       domain: cleanDomain,
-      hasNextPublicAppUrl: !!process.env.NEXT_PUBLIC_APP_URL,
-      hasVercelUrl: !!process.env.VERCEL_URL,
+      leadId: lead.id,
     })
 
-    const controller = new AbortController()
-
-    // Abort after 5 seconds - enough time to establish connection and send request
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    fetch(`${appUrl}/api/process`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    await inngest.send({
+      name: 'scan/process',
+      data: {
         scanId: scanRun.id,
         domain: cleanDomain,
         email: normalizedEmail,
         verificationToken, // Pass token for email sending
         leadId: lead.id,
-      }),
-      signal: controller.signal,
+      },
     })
-      .then(() => clearTimeout(timeoutId))
-      .catch((err) => {
-        clearTimeout(timeoutId)
-        // AbortError is expected - we intentionally abort after 5s
-        if (err.name === 'AbortError') {
-          // This is expected - the request was sent and we aborted waiting for response
-          return
-        }
-        console.error('Failed to trigger background processing:', err)
-      })
 
     return NextResponse.json({
       success: true,
