@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Lock, Lightbulb, FileCode } from 'lucide-react'
 
 import { tabs } from './shared/constants'
-import type { TabId, Analysis, Response, Prompt, Competitor, CrawlData, BrandAwarenessResult } from './shared/types'
+import type { TabId, Analysis, Response, Prompt, Competitor, CrawlData, BrandAwarenessResult, CompetitiveSummary } from './shared/types'
 
 import {
   StartHereTab,
@@ -19,11 +19,14 @@ import {
   LockedTab,
 } from './tabs'
 
+type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
+
 interface ReportTabsProps {
   analysis: Analysis | null
   responses: Response[] | null
   prompts?: Prompt[] | null
   brandAwareness?: BrandAwarenessResult[] | null
+  competitiveSummary?: CompetitiveSummary | null
   visibilityScore: number
   platformScores: Record<string, number>
   competitors?: Competitor[]
@@ -33,6 +36,7 @@ interface ReportTabsProps {
   isSubscriber?: boolean
   customQuestionLimit?: number
   currentRunId?: string
+  enrichmentStatus?: EnrichmentStatus
 }
 
 export function ReportTabs({
@@ -40,6 +44,7 @@ export function ReportTabs({
   responses,
   prompts,
   brandAwareness,
+  competitiveSummary,
   visibilityScore,
   platformScores,
   competitors = [],
@@ -49,6 +54,7 @@ export function ReportTabs({
   isSubscriber = false,
   customQuestionLimit = 0,
   currentRunId,
+  enrichmentStatus = 'not_applicable',
 }: ReportTabsProps) {
   // Always start with default tab on server/initial render to avoid hydration mismatch
   const [activeTab, setActiveTab] = useState<TabId>('startHere')
@@ -157,6 +163,7 @@ export function ReportTabs({
             responses={responses}
             platformFilter={platformFilter}
             onFilterChange={setPlatformFilter}
+            domain={domain}
           />
         )}
         {activeTab === 'readiness' && (
@@ -177,6 +184,11 @@ export function ReportTabs({
         {activeTab === 'competitors' && (
           <CompetitorsTab
             competitors={competitors}
+            responses={responses}
+            brandAwareness={brandAwareness}
+            competitiveSummary={competitiveSummary}
+            analysis={analysis}
+            domain={domain}
             onUpgradeClick={onUpgradeClick}
             isSubscriber={isSubscriber}
           />
@@ -190,6 +202,7 @@ export function ReportTabs({
             onFilterChange={setBrandPlatformFilter}
             onUpgradeClick={onUpgradeClick}
             isSubscriber={isSubscriber}
+            enrichmentStatus={enrichmentStatus}
           />
         )}
         {activeTab === 'actions' && (

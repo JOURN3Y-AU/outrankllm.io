@@ -1,34 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Brain, Filter, CheckCircle2, XCircle, AlertCircle, Lock, Eye, Target, Users, Sparkles } from 'lucide-react'
+import { Brain, Filter, CheckCircle2, XCircle, AlertCircle, Lock, Eye, Target, Sparkles } from 'lucide-react'
 import type { Analysis, BrandAwarenessResult } from '../shared'
-import { platformColors, platformNames, formatResponseText, FilterButton } from '../shared'
+import { platformColors, platformNames, formatResponseText, FilterButton, EnrichmentLoading } from '../shared'
 
-function PositioningBadge({ positioning }: { positioning: string | null }) {
-  const config = {
-    stronger: { label: 'Stronger', color: 'var(--green)', bg: 'var(--green)' },
-    weaker: { label: 'Weaker', color: 'var(--red)', bg: 'var(--red)' },
-    equal: { label: 'Equal', color: 'var(--amber)', bg: 'var(--amber)' },
-    not_compared: { label: 'Not Compared', color: 'var(--text-ghost)', bg: 'var(--text-ghost)' },
-  }
-
-  const style = config[positioning as keyof typeof config] || config.not_compared
-
-  return (
-    <span
-      className="font-mono text-xs uppercase"
-      style={{
-        padding: '4px 10px',
-        backgroundColor: `${style.bg}15`,
-        color: style.color,
-        border: `1px solid ${style.bg}30`,
-      }}
-    >
-      {style.label}
-    </span>
-  )
-}
+type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
 
 export function BrandAwarenessTab({
   brandAwareness,
@@ -37,7 +14,8 @@ export function BrandAwarenessTab({
   platformFilter,
   onFilterChange,
   onUpgradeClick,
-  isSubscriber = false
+  isSubscriber = false,
+  enrichmentStatus = 'not_applicable',
 }: {
   brandAwareness?: BrandAwarenessResult[] | null
   analysis: Analysis | null
@@ -46,6 +24,7 @@ export function BrandAwarenessTab({
   onFilterChange: (filter: string) => void
   onUpgradeClick: () => void
   isSubscriber?: boolean
+  enrichmentStatus?: EnrichmentStatus
 }) {
   // For free tier, show teaser instead of actual data
   if (!isSubscriber) {
@@ -179,7 +158,7 @@ export function BrandAwarenessTab({
             What Subscribers Learn
           </h3>
 
-          <div className="grid sm:grid-cols-3" style={{ gap: '24px' }}>
+          <div className="grid sm:grid-cols-2" style={{ gap: '24px' }}>
             <div>
               <div className="flex items-center gap-2" style={{ marginBottom: '12px' }}>
                 <Eye size={18} className="text-[var(--green)]" />
@@ -196,15 +175,6 @@ export function BrandAwarenessTab({
               </div>
               <p className="text-[var(--text-dim)] text-sm">
                 Which of your services does AI know about? Find knowledge gaps.
-              </p>
-            </div>
-            <div>
-              <div className="flex items-center gap-2" style={{ marginBottom: '12px' }}>
-                <Users size={18} className="text-[var(--green)]" />
-                <span className="font-medium text-[var(--text)]">Competitive Position</span>
-              </div>
-              <p className="text-[var(--text-dim)] text-sm">
-                How does AI position you compared to your top competitor?
               </p>
             </div>
           </div>
@@ -229,6 +199,34 @@ export function BrandAwarenessTab({
   // Original code for subscribers follows...
   const [expandedResponse, setExpandedResponse] = useState<string | null>(null)
 
+  // Show loading state for enrichment in progress
+  if (enrichmentStatus === 'processing' || enrichmentStatus === 'pending') {
+    return (
+      <div className="card" style={{ padding: '32px' }}>
+        <EnrichmentLoading
+          status={enrichmentStatus}
+          title="Generating Brand Analysis"
+          description="We're asking AI assistants what they know about your brand. This helps identify recognition gaps and competitive positioning."
+          processingMessage="This usually takes about 1 minute."
+          pendingMessage="Your brand analysis will begin shortly. Refresh in a moment."
+        />
+      </div>
+    )
+  }
+
+  // Show error state if enrichment failed
+  if (enrichmentStatus === 'failed') {
+    return (
+      <div className="card" style={{ padding: '32px' }}>
+        <EnrichmentLoading
+          status="failed"
+          title="Brand Analysis"
+          description="We encountered an issue generating your brand analysis."
+        />
+      </div>
+    )
+  }
+
   if (!brandAwareness || brandAwareness.length === 0) {
     return (
       <div className="text-center text-[var(--text-dim)]" style={{ padding: '80px 0' }}>
@@ -249,7 +247,6 @@ export function BrandAwarenessTab({
   // Group results by type
   const brandRecallResults = filteredResults.filter(r => r.query_type === 'brand_recall')
   const serviceCheckResults = filteredResults.filter(r => r.query_type === 'service_check')
-  const competitorCompareResults = filteredResults.filter(r => r.query_type === 'competitor_compare')
 
   // Get unique platforms
   const platforms = [...new Set(brandAwareness.map(r => r.platform))]
@@ -272,12 +269,6 @@ export function BrandAwarenessTab({
   const knowledgeGaps = [...servicesByName.entries()]
     .filter(([_, results]) => !results.some(r => r.attribute_mentioned))
     .map(([service]) => service)
-
-  // Create a map of which platforms recognized the brand (for competitor comparison context)
-  const platformRecognition = new Map<string, boolean>()
-  for (const result of brandRecallResults) {
-    platformRecognition.set(result.platform, result.entity_recognized)
-  }
 
   return (
     <div style={{ display: 'grid', gap: '32px' }}>
@@ -522,109 +513,6 @@ export function BrandAwarenessTab({
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Competitor Positioning Section */}
-      {competitorCompareResults.length > 0 && (
-        <div className="card" style={{ padding: '32px' }}>
-          <h3
-            className="text-[var(--green)] font-mono uppercase tracking-wider"
-            style={{ fontSize: '11px', marginBottom: '12px', letterSpacing: '0.1em' }}
-          >
-            Competitive Positioning
-          </h3>
-          <p className="text-[var(--text-dim)] text-sm" style={{ marginBottom: '24px', lineHeight: '1.6' }}>
-            How AI compares you to: <strong className="text-[var(--text-mid)]">{competitorCompareResults[0]?.compared_to || 'competitors'}</strong>
-          </p>
-
-          <div style={{ display: 'grid', gap: '16px' }}>
-            {competitorCompareResults.map((result, index) => {
-              const brandRecognized = platformRecognition.get(result.platform) ?? false
-
-              return (
-                <div
-                  key={index}
-                  className="bg-[var(--surface-elevated)] border border-[var(--border)]"
-                  style={{ padding: '20px' }}
-                >
-                  <div className="flex items-center justify-between" style={{ marginBottom: '12px' }}>
-                    <div className="flex items-center" style={{ gap: '12px' }}>
-                      <span
-                        style={{
-                          width: '10px',
-                          height: '10px',
-                          backgroundColor: platformColors[result.platform] || 'var(--text-dim)',
-                        }}
-                      />
-                      <span className="font-mono text-sm text-[var(--text)]">
-                        {platformNames[result.platform] || result.platform}
-                      </span>
-                    </div>
-                    {brandRecognized ? (
-                      <PositioningBadge positioning={result.positioning} />
-                    ) : (
-                      <span
-                        className="font-mono text-xs"
-                        style={{
-                          padding: '4px 10px',
-                          backgroundColor: 'var(--text-ghost)15',
-                          color: 'var(--text-ghost)',
-                          border: '1px solid var(--text-ghost)30',
-                        }}
-                      >
-                        Brand Not Known
-                      </span>
-                    )}
-                  </div>
-
-                  {!brandRecognized ? (
-                    <div
-                      className="flex items-center text-[var(--text-ghost)] text-sm"
-                      style={{ gap: '8px' }}
-                    >
-                      <AlertCircle size={14} />
-                      <span>
-                        Unable to compare — {platformNames[result.platform] || result.platform} doesn&apos;t have your brand in its knowledge base
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        className="text-[var(--text-dim)] text-sm"
-                        style={{
-                          lineHeight: '1.6',
-                          maxHeight: expandedResponse === `compare-${index}` ? 'none' : '96px',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {result.response_text
-                          ? formatResponseText(
-                              expandedResponse === `compare-${index}`
-                                ? result.response_text
-                                : result.response_text.slice(0, 400) + ((result.response_text.length > 400) ? '...' : '')
-                            )
-                          : 'No response recorded'}
-                      </div>
-
-                      {(result.response_text?.length || 0) > 400 && (
-                        <button
-                          onClick={() => setExpandedResponse(
-                            expandedResponse === `compare-${index}` ? null : `compare-${index}`
-                          )}
-                          className="text-[var(--green)] font-mono text-xs hover:underline"
-                          style={{ marginTop: '8px' }}
-                        >
-                          {expandedResponse === `compare-${index}` ? 'Show less' : 'Show more'}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
         </div>
       )}
 

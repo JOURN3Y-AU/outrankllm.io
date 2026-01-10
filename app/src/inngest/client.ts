@@ -19,5 +19,13 @@ export type ScanProcessEvent = {
   }
 }
 
+export type SubscriberEnrichEvent = {
+  name: "subscriber/enrich"
+  data: {
+    leadId: string
+    scanRunId: string
+  }
+}
+
 // Union type of all events for type inference
-export type InngestEvents = ScanProcessEvent
+export type InngestEvents = ScanProcessEvent | SubscriberEnrichEvent

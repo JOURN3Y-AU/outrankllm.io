@@ -187,25 +187,67 @@ Subscribers can choose their preferred day and time for weekly report updates:
 
 ---
 
-## Phase 5: Subscriber Features ⏳ PENDING
+## Phase 5: Subscriber Features ⏳ IN PROGRESS
 
-### 5A: Editable Questions (Setup Tab)
+### 5A: Editable Questions (Setup Tab) ✅ COMPLETE
 
 **Goal:** Let subscribers customize scan questions.
 
 - Add/edit/delete questions
 - Archive old questions (can restore)
-- Questions stored per-lead
-
-### Implementation
-- `subscriber_questions` table (per-lead custom questions)
-- CRUD API routes
-- UI components in Setup tab
+- Questions stored per-lead in `subscriber_questions` table
+- Weekly scans automatically use subscriber's custom questions
 
 ### Files
-- `supabase/migrations/XXX_add_subscriber_questions.sql`
-- `src/app/api/questions/route.ts` (CRUD)
-- `src/components/report/tabs/SetupTab.tsx` (editable UI)
+- `supabase/migrations/021_subscriber_questions.sql` ✅
+- `src/app/api/questions/route.ts` ✅
+- `src/app/api/questions/[id]/route.ts` ✅
+- `src/components/report/tabs/SetupTab.tsx` ✅
+
+---
+
+### 5E: Brand Awareness (Pro+) ⏳ PENDING
+
+**Goal:** Test what AI assistants actually know about a business.
+
+Brand Awareness runs 5 queries across 4 platforms:
+- 1x Brand Recall: "What do you know about [Company]?"
+- 3x Service Check: "Does [Company] offer [service]?" (top 3 services)
+- 1x Competitor Compare: "How does [Company] compare to [competitor]?"
+
+**Status:** Logic fully built, disabled in pipeline to save API costs for free users.
+
+### Enrichment Pipeline Approach
+
+Brand Awareness (and Action Plans) use an **enrichment pipeline** separate from the main scan:
+
+1. **Free users**: Core scan only (no brand awareness)
+2. **Subscriber weekly scans**: Full pipeline including brand awareness
+3. **New subscriber (post-checkout)**: Trigger enrichment job on existing report
+4. **Manual rescan**: Include brand awareness for subscribers
+
+This keeps the free tier fast while giving subscribers premium insights.
+
+### Enrichment UX
+
+When enrichment is in progress, premium tabs show a loading state:
+
+```
+┌─────────────────────────────────────────┐
+│  ⏳ Generating Brand Analysis...        │
+│                                         │
+│  We're asking AI assistants what they   │
+│  know about your brand. ~1 minute.      │
+│                                         │
+│  [━━━━━━━━━━━━░░░░░░] 60%               │
+└─────────────────────────────────────────┘
+```
+
+### Files
+- `src/lib/ai/brand-awareness.ts` ✅ (logic complete)
+- `src/components/report/tabs/BrandAwarenessTab.tsx` ✅ (UI complete)
+- `src/inngest/functions/enrich-subscriber.ts` (pending - enrichment job)
+- `supabase/migrations/003_brand_awareness.sql` ✅ (needs perplexity fix)
 
 ---
 
@@ -235,7 +277,7 @@ Dual-axis trend chart in Measurements tab:
 
 ---
 
-### 5C: Action Plans (Actions Tab)
+### 5C: Action Plans (Actions Tab) ⏳ PENDING
 
 **Goal:** Generate actionable recommendations from analysis.
 
@@ -244,72 +286,64 @@ Based on reference implementation, action plans should:
 - Categorize by effort/impact
 - NOT invent work - only suggest fixes for detected issues
 
-### Structure
-```typescript
-interface ActionPlan {
-  quickWins: Action[]     // Low effort, high impact
-  strategic: Action[]     // Medium effort, high impact
-  backlog: Action[]       // Lower priority
-}
+**Access:** Starter, Pro, and Agency tiers (locked teaser for Free)
 
-interface Action {
-  title: string
-  category: 'seo' | 'geo' | 'content'
-  effort: 'low' | 'medium' | 'high'
-  impact: 'low' | 'medium' | 'high'
-  description: string
-  implementation: string[]  // Step-by-step
-  relatedIssue: string      // Link to specific finding
-}
-```
+### Structure
+
+See `docs/PHASE5_PLAN.md` for full schema. Key components:
+- Executive Summary
+- Top 10 Priority Actions (with effort/impact/consensus)
+- Page-by-Page Edit Guide
+- Content Creation Priorities
+- Keyword Integration Map
+- Key Takeaways
 
 ### Implementation
-- Generate from `site_analyses` + `llm_responses` data
-- Use Claude to synthesize (like reference implementation)
-- Store in `action_plans` table (hybrid: generate once, allow regenerate)
-- UI with filtering by category/effort
+- Generate from `site_analyses` + `llm_responses` + `brand_awareness_results` data
+- Use Claude to synthesize
+- Store in `action_plans` table
+- Generated via enrichment pipeline (same as brand awareness)
+- UI with collapsible sections
 
 ### Files
-- `supabase/migrations/XXX_add_action_plans.sql`
+- `supabase/migrations/022_action_plans.sql`
 - `src/lib/ai/generate-actions.ts`
-- `src/app/api/actions/generate/route.ts`
+- `src/app/api/actions/route.ts`
 - `src/components/report/tabs/ActionsTab.tsx`
 
 ---
 
-### 5D: PRD Generation (PRD Tab)
+### 5D: PRD Generation (PRD Tab) ⏳ PENDING
 
 **Goal:** Generate detailed specs for vibe coding platforms.
+
+**Access:** Pro and Agency tiers only (locked teaser for Starter/Free)
 
 Based on reference implementation:
 - Take action plan items
 - Generate rich PRD with acceptance criteria
-- Copy-paste ready format
+- Copy-paste ready format for Claude Code / Cursor
 
 ### Structure
-```typescript
-interface PRDTask {
-  title: string
-  summary: string
-  problem: string
-  solution: string
-  acceptanceCriteria: string[]
-  technicalNotes: string
-  estimatedEffort: string
-  relatedAction: string  // Link to action plan item
-}
-```
+
+See `docs/PHASE5_PLAN.md` for full schema. Key components:
+- Organized by priority (Quick Wins, Strategic, Backlog)
+- Problem/Solution format
+- Implementation steps with code snippets
+- Acceptance criteria checklist
+- Technical notes
 
 ### Implementation
 - Generate from action plans
 - Claude-powered generation
-- Store in `prd_outputs` table
-- Copy-to-clipboard functionality
+- Store in `action_plans.prd_outputs` JSONB column
+- Copy-to-clipboard with visual feedback
+- Generated on-demand per action (not batch)
 
 ### Files
-- `supabase/migrations/XXX_add_prd_outputs.sql`
 - `src/lib/ai/generate-prd.ts`
-- `src/app/api/prd/generate/route.ts`
+- `src/app/api/prd/route.ts`
+- `src/app/api/prd/[actionId]/route.ts`
 - `src/components/report/tabs/PRDTab.tsx`
 
 ---
@@ -338,11 +372,30 @@ interface PRDTask {
 
 *Outcome: Subscribers can customize their scan questions*
 
-### Sprint 5: Premium Features
-7. Phase 5C: Action Plans
-8. Phase 5D: PRD Generation
+### Sprint 5: Premium Features ⏳ IN PROGRESS
 
-*Outcome: Full premium feature set*
+**Enrichment Pipeline Architecture:**
+Premium features (Brand Awareness, Action Plans) run via a separate "enrichment" Inngest job:
+- Triggered after subscription checkout (enrich existing report)
+- Included in weekly subscriber scans
+- ~1-2 minutes additional processing
+- Tabs show loading state while enrichment runs
+
+7. Phase 5E: Brand Awareness + Enrichment Pipeline
+   - Create `enrich-subscriber` Inngest function
+   - Enable brand awareness for subscribers
+   - Fix database schema (add perplexity platform)
+   - Add loading state to BrandAwarenessTab
+
+8. Phase 5C: Action Plans
+   - Add action plan generation to enrichment pipeline
+   - Create ActionsTab UI
+
+9. Phase 5D: PRD Generation
+   - On-demand PRD generation from actions
+   - Create PRDTab UI
+
+*Outcome: Full premium feature set with smart cost optimization*
 
 ---
 

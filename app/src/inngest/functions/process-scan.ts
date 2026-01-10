@@ -14,6 +14,10 @@ import {
   type PlatformResult,
 } from "@/lib/ai/search-providers"
 import { extractTopCompetitors } from "@/lib/ai/query"
+import {
+  generateBrandAwarenessQueries,
+  runBrandAwarenessQueries,
+} from "@/lib/ai/brand-awareness"
 import { sendVerificationEmail, sendScanCompleteEmail } from "@/lib/email/resend"
 import { detectGeography, extractTldCountry, countryToIsoCode } from "@/lib/geo/detect"
 import { log } from "@/lib/logger"
@@ -516,10 +520,116 @@ export const processScan = inngest.createFunction(
       return {
         urlToken: reportData.url_token,
         scores,
+        topCompetitors,
       }
     })
 
-    // Step 10: Send email
+    // Step 10: Brand Awareness Enrichment (subscribers only - before email so report is complete)
+    const userTier = await getUserTier(leadId)
+    const isSubscriberForEnrichment = userTier !== "free"
+
+    if (isSubscriberForEnrichment) {
+      await step.run("brand-awareness-enrichment", async () => {
+        const supabase = createServiceClient()
+
+        log.step(scanId, "Running brand awareness (subscriber enrichment)")
+
+        // Mark enrichment as processing
+        await supabase
+          .from("scan_runs")
+          .update({
+            enrichment_status: "processing",
+            enrichment_started_at: new Date().toISOString(),
+          })
+          .eq("id", scanId)
+
+        try {
+          // Use top competitor from report we just created
+          const topCompetitor =
+            report.topCompetitors && report.topCompetitors.length > 0
+              ? report.topCompetitors[0].name
+              : undefined
+
+          // Generate brand awareness queries
+          const queries = generateBrandAwarenessQueries(
+            analysisResult.analysis,
+            domain,
+            topCompetitor
+          )
+
+          log.info(scanId, `Generated ${queries.length} brand awareness queries`)
+
+          // Run all queries across all platforms
+          const results = await runBrandAwarenessQueries(queries, scanId)
+
+          log.done(scanId, "Brand awareness", `${results.length} results`)
+
+          // Save results to database
+          const inserts = results.map((r) => ({
+            run_id: scanId,
+            platform: r.platform,
+            query_type: r.queryType,
+            tested_entity: r.testedEntity,
+            tested_attribute: r.testedAttribute || null,
+            entity_recognized: r.recognized,
+            attribute_mentioned: r.attributeMentioned,
+            response_text: r.responseText,
+            confidence_score: r.confidenceScore,
+            compared_to: r.comparedTo || null,
+            positioning: r.positioning || null,
+            response_time_ms: r.responseTimeMs,
+          }))
+
+          const { error } = await supabase.from("brand_awareness_results").insert(inserts)
+
+          if (error) {
+            log.error(scanId, "Failed to save brand awareness results", error.message)
+            throw error
+          }
+
+          // Mark enrichment as complete
+          await supabase
+            .from("scan_runs")
+            .update({
+              enrichment_status: "complete",
+              enrichment_completed_at: new Date().toISOString(),
+            })
+            .eq("id", scanId)
+
+          log.done(scanId, "Enrichment complete")
+
+          return {
+            totalQueries: queries.length,
+            totalResults: results.length,
+            recognized: results.filter((r) => r.recognized).length,
+          }
+        } catch (enrichmentError) {
+          // Mark enrichment as failed but don't fail the whole scan
+          await supabase
+            .from("scan_runs")
+            .update({
+              enrichment_status: "failed",
+              enrichment_error: enrichmentError instanceof Error ? enrichmentError.message : "Unknown error",
+            })
+            .eq("id", scanId)
+
+          log.error(scanId, "Enrichment failed", enrichmentError instanceof Error ? enrichmentError.message : "Unknown")
+          // Don't throw - enrichment failure shouldn't fail the scan
+          return { error: true }
+        }
+      })
+    } else {
+      // Mark as not applicable for free users
+      await step.run("mark-enrichment-not-applicable", async () => {
+        const supabase = createServiceClient()
+        await supabase
+          .from("scan_runs")
+          .update({ enrichment_status: "not_applicable" })
+          .eq("id", scanId)
+      })
+    }
+
+    // Step 11: Send email
     await step.run("send-email", async () => {
       if (skipEmail) {
         log.info(scanId, "Skipping email (admin rescan)")

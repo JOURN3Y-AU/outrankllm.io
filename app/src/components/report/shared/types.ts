@@ -61,6 +61,13 @@ export interface BrandAwarenessResult {
   positioning: string | null
 }
 
+export interface CompetitiveSummary {
+  strengths: string[]
+  weaknesses: string[]
+  opportunities: string[]
+  overallPosition: string
+}
+
 export interface ReadinessCheck {
   id: string
   label: string

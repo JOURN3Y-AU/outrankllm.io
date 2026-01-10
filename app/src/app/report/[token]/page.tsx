@@ -10,6 +10,8 @@ interface ReportPageProps {
   searchParams: Promise<{ locked?: string }>
 }
 
+type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
+
 interface ReportData {
   report: {
     id: string
@@ -23,6 +25,7 @@ interface ReportData {
     requires_verification: boolean
     expires_at: string | null
     subscriber_only: boolean
+    enrichment_status: EnrichmentStatus
   }
   analysis: {
     business_type: string
@@ -69,6 +72,12 @@ interface ReportData {
     compared_to: string | null
     positioning: string | null
   }[] | null
+  competitiveSummary: {
+    strengths: string[]
+    weaknesses: string[]
+    opportunities: string[]
+    overallPosition: string
+  } | null
   email: string
   domain: string
   leadId: string
@@ -88,9 +97,11 @@ async function getReport(token: string): Promise<ReportData | null> {
     .from('reports')
     .select(`
       *,
+      competitive_summary,
       run:scan_runs(
         id,
         created_at,
+        enrichment_status,
         lead:leads(id, email, domain, email_verified, tier)
       )
     `)
@@ -104,6 +115,7 @@ async function getReport(token: string): Promise<ReportData | null> {
   const lead = report.run?.lead as { id: string; email: string; domain: string; email_verified: boolean; tier: string } | null
   const runId = report.run?.id as string
   const runCreatedAt = report.run?.created_at as string
+  const enrichmentStatus = (report.run?.enrichment_status as EnrichmentStatus) || 'not_applicable'
 
   if (!lead) {
     return null
@@ -201,6 +213,7 @@ async function getReport(token: string): Promise<ReportData | null> {
       requires_verification: report.requires_verification ?? true,
       expires_at: isSubscriber ? null : (report.expires_at || null),
       subscriber_only: report.subscriber_only ?? false,
+      enrichment_status: enrichmentStatus,
     },
     analysis: analysis ? {
       business_type: analysis.business_type,
@@ -222,6 +235,7 @@ async function getReport(token: string): Promise<ReportData | null> {
     prompts: prompts as ReportData['prompts'],
     subscriberQuestions,
     brandAwareness: brandAwareness as ReportData['brandAwareness'],
+    competitiveSummary: report.competitive_summary as ReportData['competitiveSummary'],
     email: lead.email,
     domain: lead.domain,
     leadId: lead.id,

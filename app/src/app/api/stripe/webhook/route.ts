@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import Stripe from 'stripe'
 import { stripe, getTierFromPriceId } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
+import { inngest } from '@/inngest/client'
 
 // Use service role client for webhook operations (no user session)
 function createServiceClient() {
@@ -154,6 +155,26 @@ async function handleCheckoutCompleted(
       .from('reports')
       .update({ expires_at: null, subscriber_only: true })
       .in('run_id', runIds)
+
+    // Trigger enrichment for the latest scan (brand awareness, action plans)
+    const latestScanId = scanRuns[0].id
+
+    // Mark the scan as pending enrichment
+    await supabase
+      .from('scan_runs')
+      .update({ enrichment_status: 'pending' })
+      .eq('id', latestScanId)
+
+    // Dispatch enrichment job via Inngest
+    await inngest.send({
+      name: 'subscriber/enrich',
+      data: {
+        leadId,
+        scanRunId: latestScanId,
+      },
+    })
+
+    console.log(`Enrichment triggered for scan ${latestScanId}`)
   }
 
   console.log(`Subscription created for lead ${leadId}, tier: ${resolvedTier}`)

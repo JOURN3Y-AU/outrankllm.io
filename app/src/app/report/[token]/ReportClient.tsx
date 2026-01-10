@@ -136,6 +136,8 @@ function LockedReportModal({
   )
 }
 
+type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
+
 interface ReportData {
   report: {
     id: string
@@ -149,6 +151,7 @@ interface ReportData {
     requires_verification: boolean
     expires_at: string | null
     subscriber_only: boolean
+    enrichment_status: EnrichmentStatus
   }
   analysis: {
     business_type: string
@@ -195,6 +198,12 @@ interface ReportData {
     compared_to: string | null
     positioning: string | null
   }[] | null
+  competitiveSummary: {
+    strengths: string[]
+    weaknesses: string[]
+    opportunities: string[]
+    overallPosition: string
+  } | null
   email: string
   domain: string
   leadId: string
@@ -210,7 +219,7 @@ interface ReportClientProps {
 }
 
 export function ReportClient({ data, showLockedModal = false }: ReportClientProps) {
-  const { report, analysis, crawlData, responses, prompts, subscriberQuestions, brandAwareness, email, domain, runId, isVerified, featureFlags } = data
+  const { report, analysis, crawlData, responses, prompts, subscriberQuestions, brandAwareness, competitiveSummary, email, domain, runId, isVerified, featureFlags } = data
   const [showModal, setShowModal] = useState(false)
   const [showLocked, setShowLocked] = useState(showLockedModal)
   const isSubscriber = featureFlags.isSubscriber
@@ -352,6 +361,7 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
             responses={responses}
             prompts={isSubscriber && subscriberQuestions?.length ? subscriberQuestions : prompts}
             brandAwareness={brandAwareness}
+            competitiveSummary={competitiveSummary}
             crawlData={crawlData ?? undefined}
             visibilityScore={report.visibility_score}
             platformScores={report.platform_scores}
@@ -361,6 +371,7 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
             isSubscriber={isSubscriber}
             customQuestionLimit={featureFlags.customQuestionLimit}
             currentRunId={report.run_id}
+            enrichmentStatus={report.enrichment_status}
           />
 
           {/* CTA section - only for non-subscribers */}

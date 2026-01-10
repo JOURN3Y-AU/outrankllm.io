@@ -2,12 +2,82 @@
 
 **Status:** 5A Editable Questions Complete, 5B Trend Charts Complete, Weekly CRON via Inngest Complete
 **Last Updated:** 2026-01-10
+**Next Up:** 5E Brand Awareness + Enrichment Pipeline
 
 ---
 
 ## Overview
 
 Phase 5 adds the core subscriber features that differentiate paid tiers. The key principle is **tiered value** - both Starter and Pro should feel valuable, with Pro offering power-user capabilities.
+
+---
+
+## Enrichment Pipeline Architecture
+
+Premium features (Brand Awareness, Action Plans) are **cost-intensive** (~20 additional API calls). To optimize costs while delivering value:
+
+### How It Works
+
+1. **Free users**: Core scan only (no brand awareness, no action plans)
+2. **Subscriber weekly scans**: Full pipeline including all premium features
+3. **New subscriber (post-checkout)**: Trigger enrichment job on existing report
+4. **Manual rescan**: Include premium features for subscribers
+
+### Inngest Function: `enrich-subscriber`
+
+```
+Event: subscriber/enrich
+Data: { leadId, scanRunId, reportToken }
+
+Steps:
+1. Run brand awareness queries (5 queries × 4 platforms)
+2. Generate action plans from all scan data
+3. Update enrichment_status in scan_runs table
+```
+
+### Trigger Points
+
+| Trigger | When | What Happens |
+|---------|------|--------------|
+| Stripe webhook | `checkout.session.completed` | Dispatch `subscriber/enrich` for latest report |
+| Weekly CRON | Subscriber's scheduled time | Main scan includes enrichment steps |
+| Manual rescan | Admin triggers rescan | Main scan includes enrichment steps |
+
+### Database Tracking
+
+```sql
+-- Add to scan_runs table
+ALTER TABLE scan_runs ADD COLUMN enrichment_status TEXT DEFAULT 'pending';
+-- Values: 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
+ALTER TABLE scan_runs ADD COLUMN enrichment_started_at TIMESTAMPTZ;
+ALTER TABLE scan_runs ADD COLUMN enrichment_completed_at TIMESTAMPTZ;
+```
+
+### UX: Loading State for Premium Tabs
+
+When `enrichment_status = 'processing'`, premium tabs show:
+
+```
+┌─────────────────────────────────────────┐
+│  ⏳ Generating Brand Analysis...        │
+│                                         │
+│  We're asking AI assistants what they   │
+│  know about your brand. ~1 minute.      │
+│                                         │
+│  [━━━━━━━━━━━━░░░░░░] 60%               │
+└─────────────────────────────────────────┘
+```
+
+When `enrichment_status = 'pending'` (new subscriber, enrichment not yet triggered):
+
+```
+┌─────────────────────────────────────────┐
+│  🔄 Premium Insights Coming Soon        │
+│                                         │
+│  Your brand analysis will be ready      │
+│  shortly. Refresh in a moment.          │
+└─────────────────────────────────────────┘
+```
 
 ---
 
@@ -682,7 +752,7 @@ POST /api/prd/generate-all     - Generate PRDs for all actions (batch)
 
 ## Implementation Order
 
-### Sprint 3: Questions & Trends
+### Sprint 3: Questions & Trends ✅ COMPLETE
 
 1. **5A: Editable Questions** ✅ COMPLETE
    - Migration + API routes ✅
@@ -694,17 +764,30 @@ POST /api/prd/generate-all     - Generate PRDs for all actions (batch)
    - Dual-axis TrendChart component (score + mentions)
    - MeasurementsTab integration with locked state for free users
 
-### Sprint 4: Actions & PRDs (1-2 weeks)
+### Sprint 5: Enrichment Pipeline + Premium Features ⏳ IN PROGRESS
 
-3. **5C: Action Plans**
-   - Migration + AI generation
-   - ActionsTab full implementation
-   - Category filtering
+**Step 1: Enrichment Infrastructure**
+- [ ] Migration: Add `enrichment_status` columns to `scan_runs`
+- [ ] Migration: Fix `brand_awareness_results` to allow 'perplexity' platform
+- [ ] Create `enrich-subscriber` Inngest function
+- [ ] Add enrichment trigger to Stripe webhook
+- [ ] Create `EnrichmentLoading` shared component
 
-4. **5D: PRD Generation**
-   - PRD AI generation
-   - PRDTab implementation
-   - Copy-to-clipboard
+**Step 2: Brand Awareness (5E)**
+- [ ] Add brand awareness step to enrichment function
+- [ ] Update BrandAwarenessTab to show loading/pending states
+- [ ] Test end-to-end with subscriber account
+
+**Step 3: Action Plans (5C)**
+- [ ] Create `action_plans` table migration
+- [ ] Create `generate-actions.ts` AI generation
+- [ ] Add action plan step to enrichment function
+- [ ] Build ActionsTab UI
+
+**Step 4: PRD Generation (5D)**
+- [ ] Create `generate-prd.ts` AI generation
+- [ ] Create PRD API routes
+- [ ] Build PRDTab UI with copy-to-clipboard
 
 ---
 

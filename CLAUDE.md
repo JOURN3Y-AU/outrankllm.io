@@ -36,12 +36,28 @@ Affects: `max-w-*`, `mx-auto`, `gap-*`, `p-*` with custom values.
 1. **Start Here** - Persona selection + tailored guide
 2. **Setup** - Business identity, services, questions
 3. **AI Readiness** - Technical SEO/GEO indicators (sticky upsell)
-4. **AI Responses** - LLM query responses (sticky upsell)
+4. **AI Responses** - LLM query responses + Export button (sticky upsell)
 5. **Measurements** - Visibility score breakdown (sticky upsell)
-6. **Competitors** - Detected competitors (Pro+)
+6. **Competitors** - Detected competitors + Competitive Intelligence + Export button (Pro+)
 7. **Brand Awareness** - Direct brand recognition (Pro+)
 8. **Actions** - Action plans (Agency)
 9. **PRD** - PRD generation (Agency)
+
+## Markdown Export
+
+Both AI Responses and Competitors tabs have an **Export** button that downloads data as markdown files for use in external AI assistants.
+
+### AI Responses Export (`ai-responses-{domain}.md`)
+- Summary: total responses and mention count/percentage
+- Grouped by platform (ChatGPT, Claude, Gemini, Perplexity)
+- Each response shows: question, mention status, full response text
+
+### Competitive Intelligence Export (`competitive-analysis-{domain}.md`)
+- Competitive Summary: overall position, strengths, weaknesses, opportunities
+- Per-competitor analysis from each AI platform
+- Positioning status (STRONGER/WEAKER/EQUAL) per platform
+
+Export buttons are styled consistently with platform filter buttons and appear next to them in the filter bar.
 
 ## Authentication
 
@@ -187,6 +203,12 @@ Inngest dashboard: http://localhost:8288
 - `GET /api/user/schedule` - Get scan schedule settings
 - `PATCH /api/user/schedule` - Update scan schedule (day, hour, timezone)
 
+### Questions (Subscribers)
+- `GET /api/questions` - Get subscriber's editable questions
+- `POST /api/questions` - Create new question
+- `PUT /api/questions/[id]` - Update question text/category
+- `DELETE /api/questions/[id]` - Archive question (soft delete)
+
 ## Key Files
 
 - `src/app/globals.css` - CSS variables (colors, fonts)
@@ -241,6 +263,47 @@ score_history
 ```
 
 Free users see a locked "Subscribers Only" overlay on the trend chart.
+
+## Editable Questions (Subscribers Only)
+
+Subscribers can customize the questions used in their scans via the Setup tab.
+
+### How It Works
+
+1. **Initial setup**: When a subscriber first scans, AI-generated questions from `scan_prompts` are copied to `subscriber_questions`
+2. **Edit flow**: Subscribers edit questions in SetupTab → changes saved to `subscriber_questions` table
+3. **Next scan**: Weekly scans use questions from `subscriber_questions` instead of generating new ones
+
+### Data Flow
+
+```
+Free users:  scan_prompts (read-only, per-scan)
+Subscribers: subscriber_questions (editable, per-lead)
+```
+
+The report page checks `featureFlags.isSubscriber`:
+- **Subscribers**: Fetch from `subscriber_questions` table (editable IDs)
+- **Free users**: Fetch from `scan_prompts` table (read-only)
+
+### Database Schema
+
+```sql
+subscriber_questions
+├── id              -- Used by edit API
+├── lead_id         -- Owner
+├── prompt_text     -- The question text
+├── category        -- 'general' | 'service' | 'location' | 'comparison'
+├── source          -- 'ai_generated' | 'user_created'
+├── is_active       -- Used in scans
+├── is_archived     -- Soft delete
+└── sort_order      -- Display order
+```
+
+### Key Files
+- `src/app/api/questions/route.ts` - GET/POST for questions list
+- `src/app/api/questions/[id]/route.ts` - PUT/DELETE for individual questions
+- `src/components/report/tabs/SetupTab.tsx` - Editable UI
+- `supabase/migrations/021_subscriber_questions.sql` - Schema
 
 ## Report Component Structure
 
