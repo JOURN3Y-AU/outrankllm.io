@@ -120,6 +120,7 @@ export interface PriorityAction {
   title: string
   description: string
   rationale: string
+  sourceInsight: string // e.g. "Based on your AI Responses data..." - links to report tabs
   effort: 'low' | 'medium' | 'high'
   impact: 1 | 2 | 3 // Star rating
   consensus: string[] // Which AI platforms support this
@@ -340,6 +341,21 @@ CRITICAL RULES:
 6. Be an expert - use the best practices reference to ensure recommendations are current
 7. Format output as valid JSON matching the schema exactly
 
+CRITICAL - SOURCE INSIGHTS:
+Each action MUST include a "sourceInsight" field that explicitly connects the recommendation to a specific finding from the scan data. This helps users understand WHY we're recommending this action based on what they've already seen in their report.
+
+Use these prefixes based on the data source:
+- "Based on your AI Responses: [specific finding]..." - when referencing missed queries or competitor mentions
+- "Based on your AI Readiness scan: [specific issue]..." - when referencing technical SEO/meta/schema issues
+- "Based on your Brand Awareness results: [specific gap]..." - when referencing brand recognition gaps
+- "Based on your Competitive Intelligence: [specific insight]..." - when referencing competitor strengths/weaknesses
+
+Examples of GOOD sourceInsight values:
+- "Based on your AI Responses: ChatGPT and Perplexity mentioned competitors 'Acme Corp' and 'BetterCo' instead of you for 3 service-related queries."
+- "Based on your AI Readiness scan: Your /services page is missing an H1 tag and has only 156 words of content."
+- "Based on your Brand Awareness results: Claude and Gemini did not recognize your brand when asked directly."
+- "Based on your Competitive Intelligence: Your competitors are being recommended for 'best [service] in [location]' queries while you are not."
+
 IMPACT SCORING:
 - 3 stars (⭐⭐⭐): High impact - directly addresses visibility gaps, affects multiple platforms
 - 2 stars (⭐⭐): Medium impact - improves discoverability for specific queries
@@ -355,7 +371,40 @@ CATEGORY DEFINITIONS:
 - technical: Technical SEO (sitemap, robots.txt, page speed)
 - schema: Structured data / JSON-LD markup
 - citations: Getting mentioned in authoritative sources
-- local: Geographic/location-based optimizations`
+- local: Geographic/location-based optimizations
+
+CONTENT QUALITY GUIDELINES - CRITICAL:
+When suggesting URLs, content, meta tags, or any copy, follow these rules to avoid search engine and AI penalties:
+
+1. NO UNSUBSTANTIATED SUPERLATIVES:
+   - NEVER use: "best", "top", "#1", "leading", "premier", "ultimate", "greatest"
+   - NEVER suggest URLs like: /best-[service]-[location] or /top-[industry]-company
+   - Instead use descriptive URLs: /[service]-[location], /services/[service-name], /[location]-[service]
+   - Replace claims with proof: "Trusted by 200+ clients" instead of "Best in town"
+
+2. NO KEYWORD STUFFING:
+   - Don't over-optimize titles/descriptions with repetitive keywords
+   - Bad: "Digital Marketing Brisbane | Brisbane Digital Marketing Agency | Best Brisbane Marketing"
+   - Good: "Digital Marketing Services in Brisbane | [Business Name]"
+
+3. NO THIN OR DUPLICATED CONTENT:
+   - Suggest substantial, unique content (300+ words for service pages)
+   - Each page should have a distinct purpose and unique content
+   - Don't suggest creating multiple pages targeting slight keyword variations
+
+4. FOCUS ON VALUE, NOT MANIPULATION:
+   - Content should answer user questions genuinely
+   - Recommend content that demonstrates expertise (E-E-A-T)
+   - Suggest proof points: case studies, testimonials, credentials, awards
+
+5. PROFESSIONAL URL PATTERNS:
+   - Good: /services/digital-marketing, /brisbane-office, /about-us
+   - Bad: /best-cheap-digital-marketing-brisbane-australia-2024
+
+6. HONEST CLAIMS ONLY:
+   - Only suggest claims the business can substantiate
+   - Use qualifiers when appropriate: "One of Brisbane's...", "Specialists in..."
+   - Recommend adding proof alongside any positioning statements`
 }
 
 function buildUserPrompt(
@@ -416,6 +465,7 @@ Based on the above data, generate a comprehensive action plan. You MUST respond 
       "title": "Specific action title",
       "description": "Detailed description of what to do",
       "rationale": "Why this matters - reference specific data",
+      "sourceInsight": "Based on your [AI Responses/AI Readiness scan/Brand Awareness results/Competitive Intelligence]: [specific finding from the scan data]",
       "effort": "low|medium|high",
       "impact": 1|2|3,
       "consensus": ["chatgpt", "claude"],
@@ -586,6 +636,7 @@ function parseActionPlanResponse(text: string, runId: string): GeneratedActionPl
       title: action.title || 'Untitled Action',
       description: action.description || '',
       rationale: action.rationale || '',
+      sourceInsight: action.sourceInsight || '',
       effort: normalizeEffort(action.effort),
       impact: normalizeImpact(action.impact),
       consensus: Array.isArray(action.consensus) ? action.consensus : [],

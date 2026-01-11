@@ -305,9 +305,9 @@ subscriber_questions
 - `src/components/report/tabs/SetupTab.tsx` - Editable UI
 - `supabase/migrations/021_subscriber_questions.sql` - Schema
 
-## AI-Powered Action Plans (Agency Tier)
+## AI-Powered Action Plans (Subscribers)
 
-Agency subscribers get comprehensive, AI-generated action plans with:
+Subscribers get comprehensive, AI-generated action plans with:
 
 ### How It Works
 
@@ -315,14 +315,25 @@ Agency subscribers get comprehensive, AI-generated action plans with:
 2. **Extended thinking**: Uses Claude with extended thinking for deep analysis
 3. **Web search**: Searches for current SEO/GEO best practices before generating
 4. **Page-level data**: Recommends specific fixes like "/services missing H1 tag"
+5. **Source insights**: Each action links back to specific scan data (AI Responses, AI Readiness, Brand Awareness, Competitive Intelligence)
 
 ### Generated Content
 
 - **Executive Summary**: 2-3 sentence overview of current state and top opportunity
 - **Priority Actions** (10-15): Ranked by impact/effort with implementation steps
+- **Source Insight**: Links each action to specific scan findings ("Based on your AI Responses...")
 - **Page Edits**: Copy-paste ready meta titles, descriptions, and content
 - **Keyword Map**: Where to add keywords, which pages, priority level
 - **Key Takeaways**: Data-backed insights
+
+### Content Quality Guidelines
+
+The AI follows strict guidelines to avoid search engine penalties:
+- No unsubstantiated superlatives ("best", "top", "#1")
+- No keyword stuffing in URLs or meta tags
+- Professional URL patterns: `/services/digital-marketing` not `/best-cheap-seo-2024`
+- Focus on E-E-A-T (Experience, Expertise, Authority, Trust)
+- Honest claims only - proof points over boasts
 
 ### Database Schema
 
@@ -345,6 +356,7 @@ action_plans
 
 action_items
 ├── title, description     -- Action details
+├── source_insight         -- Links to scan data ("Based on your AI Responses...")
 ├── priority               -- 'quick_win' | 'strategic' | 'backlog'
 ├── consensus[]            -- Which AI platforms support this
 ├── implementation_steps[] -- Step-by-step guide

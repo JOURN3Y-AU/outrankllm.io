@@ -103,7 +103,7 @@ export async function GET(request: Request) {
     // Get action items for this plan with new fields
     const { data: actions, error: actionsError } = await supabase
       .from('action_items')
-      .select('*, consensus, implementation_steps, expected_outcome')
+      .select('*, consensus, implementation_steps, expected_outcome, source_insight')
       .eq('plan_id', plan.id)
       .order('priority', { ascending: true })
       .order('sort_order', { ascending: true })

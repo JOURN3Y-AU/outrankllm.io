@@ -25,6 +25,7 @@ interface ActionItem {
   title: string
   description: string
   rationale: string | null
+  source_insight: string | null
   priority: 'quick_win' | 'strategic' | 'backlog'
   category: string | null
   estimated_impact: string | null
@@ -787,51 +788,58 @@ function ActionCard({
           className="border-t border-[var(--border)]"
           style={{ padding: '20px' }}
         >
-          {/* What to do - main description */}
-          <p className="text-[var(--text)] text-sm" style={{ lineHeight: '1.7' }}>
-            {action.description}
-          </p>
-
-          {/* Why this matters - coaching section */}
-          {action.rationale && (
-            <div
-              className="bg-[var(--surface)] border-l-2 border-[var(--gold)]"
-              style={{ marginTop: '16px', padding: '12px 16px' }}
-            >
-              <p className="text-[var(--gold)] text-xs font-medium" style={{ marginBottom: '4px' }}>
-                Why this matters
-              </p>
-              <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
-                {action.rationale}
+          {/* What we found - the proof point from scan data */}
+          {action.source_insight && (
+            <div style={{ marginBottom: '20px' }}>
+              <h5 className="text-[var(--text-dim)] text-xs font-mono uppercase" style={{ marginBottom: '8px' }}>
+                What we found
+              </h5>
+              <p className="text-[var(--text)] text-sm" style={{ lineHeight: '1.6' }}>
+                {action.source_insight}
               </p>
             </div>
           )}
+
+          {/* What to do - main task description */}
+          <div style={{ marginBottom: '20px' }}>
+            <h5 className="text-[var(--text-dim)] text-xs font-mono uppercase" style={{ marginBottom: '8px' }}>
+              What to do
+            </h5>
+            <p className="text-[var(--text)] text-sm" style={{ lineHeight: '1.6' }}>
+              {action.description}
+            </p>
+          </div>
 
           {/* How to do it - implementation steps */}
           {action.implementation_steps && action.implementation_steps.length > 0 && (
-            <div style={{ marginTop: '20px' }}>
-              <p className="text-[var(--text)] text-sm font-medium" style={{ marginBottom: '12px' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <h5 className="text-[var(--text-dim)] text-xs font-mono uppercase" style={{ marginBottom: '12px' }}>
                 How to do it
-              </p>
-              <ol style={{ display: 'grid', gap: '8px', paddingLeft: '20px' }}>
+              </h5>
+              <div style={{ display: 'grid', gap: '10px' }}>
                 {action.implementation_steps.map((step, idx) => (
-                  <li key={idx} className="text-sm text-[var(--text-mid)]" style={{ lineHeight: '1.6' }}>
-                    {step}
-                  </li>
+                  <div key={idx} className="flex gap-3">
+                    <span className="text-[var(--green)] font-mono text-sm flex-shrink-0" style={{ minWidth: '20px' }}>
+                      {idx + 1}.
+                    </span>
+                    <span className="text-sm text-[var(--text-mid)]" style={{ lineHeight: '1.6' }}>
+                      {step}
+                    </span>
+                  </div>
                 ))}
-              </ol>
+              </div>
             </div>
           )}
 
-          {/* Expected result - what they'll get */}
+          {/* Expected result - highlighted as the payoff */}
           {action.expected_outcome && (
             <div
-              className="bg-[var(--green)]/10 border border-[var(--green)]/20"
-              style={{ marginTop: '20px', padding: '12px 16px', borderRadius: '4px' }}
+              className="bg-[var(--green)]/5 border-l-2 border-[var(--green)]"
+              style={{ padding: '12px 16px' }}
             >
-              <p className="text-[var(--green)] text-xs font-medium" style={{ marginBottom: '4px' }}>
+              <h5 className="text-[var(--green)] text-xs font-mono uppercase" style={{ marginBottom: '6px' }}>
                 Expected result
-              </p>
+              </h5>
               <p className="text-[var(--text)] text-sm" style={{ lineHeight: '1.5' }}>
                 {action.expected_outcome}
               </p>

@@ -442,6 +442,7 @@ export const enrichSubscriber = inngest.createFunction(
             title: action.title,
             description: action.description,
             rationale: action.rationale,
+            source_insight: action.sourceInsight,
             priority: action.effort === "low" && action.impact >= 2 ? "quick_win" : action.effort === "high" ? "backlog" : "strategic",
             category: action.category,
             estimated_impact: action.impact === 3 ? "high" : action.impact === 2 ? "medium" : "low",

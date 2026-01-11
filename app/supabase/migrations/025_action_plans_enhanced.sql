@@ -14,7 +14,8 @@ ALTER TABLE action_plans
 ALTER TABLE action_items
   ADD COLUMN IF NOT EXISTS consensus TEXT[] DEFAULT '{}',           -- Which AI platforms support this (e.g., ['chatgpt', 'claude'])
   ADD COLUMN IF NOT EXISTS implementation_steps TEXT[] DEFAULT '{}', -- Step-by-step implementation guide
-  ADD COLUMN IF NOT EXISTS expected_outcome TEXT;                    -- What improvement this will drive
+  ADD COLUMN IF NOT EXISTS expected_outcome TEXT,                    -- What improvement this will drive
+  ADD COLUMN IF NOT EXISTS source_insight TEXT;                      -- Links action to specific scan data (e.g., "Based on your AI Responses...")
 
 -- Archive table for completed actions (preserved across regenerations)
 -- When weekly rescans generate new action plans, completed actions move here
@@ -38,6 +39,8 @@ CREATE INDEX IF NOT EXISTS idx_action_history_completed ON action_items_history(
 -- RLS policies
 ALTER TABLE action_items_history ENABLE ROW LEVEL SECURITY;
 
+-- Drop and recreate policy to avoid "already exists" error on re-runs
+DROP POLICY IF EXISTS "Action history is viewable" ON action_items_history;
 CREATE POLICY "Action history is viewable" ON action_items_history
   FOR SELECT
   USING (true);
@@ -49,4 +52,5 @@ COMMENT ON COLUMN action_plans.keyword_map IS 'Keyword integration map: keyword,
 COMMENT ON COLUMN action_plans.key_takeaways IS 'Summary takeaways with data-backed insights';
 COMMENT ON COLUMN action_items.consensus IS 'Which AI platforms data supports this recommendation';
 COMMENT ON COLUMN action_items.implementation_steps IS 'Step-by-step guide for implementing this action';
+COMMENT ON COLUMN action_items.source_insight IS 'Links action to specific scan data (e.g., "Based on your AI Responses: ...")';
 COMMENT ON TABLE action_items_history IS 'Archive of completed actions, preserved when action plans regenerate on weekly scans';
