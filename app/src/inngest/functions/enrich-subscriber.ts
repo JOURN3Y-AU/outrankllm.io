@@ -432,7 +432,7 @@ export const enrichSubscriber = inngest.createFunction(
 
         // Safety net: Also filter at insert time in case Claude still generates similar actions
         // We already passed completedActionTitles to Claude, but this ensures no duplicates
-        const completedTitlesNormalized = new Set(completedActionTitles.map(t => normalizeTitle(t)))
+        const completedTitlesNormalized = new Set(completedActionTitles.map((t: string) => normalizeTitle(t)))
 
         // Insert action items (skip if similar action was previously completed)
         const actionInserts = generatedPlan.priorityActions
