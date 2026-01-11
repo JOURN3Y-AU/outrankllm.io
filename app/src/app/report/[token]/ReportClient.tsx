@@ -369,6 +369,7 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
             domain={domain}
             onUpgradeClick={handleUpgradeClick}
             isSubscriber={isSubscriber}
+            tier={featureFlags.tier}
             customQuestionLimit={featureFlags.customQuestionLimit}
             currentRunId={report.run_id}
             enrichmentStatus={report.enrichment_status}

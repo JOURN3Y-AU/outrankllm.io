@@ -15,8 +15,12 @@ import {
   FileText,
   BookOpen,
   History,
+  FileCode,
+  ArrowRight,
 } from 'lucide-react'
+import Link from 'next/link'
 import { EnrichmentLoading } from '../shared/EnrichmentLoading'
+import { handlePricingClick } from '../shared'
 
 type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
 
@@ -78,18 +82,35 @@ interface ActionHistoryItem {
   completed_at: string
 }
 
+type Tier = 'free' | 'starter' | 'pro' | 'agency'
+
 interface ActionsTabProps {
   runId?: string
   enrichmentStatus?: EnrichmentStatus
+  tier?: Tier
+  onUpgradeClick?: () => void
 }
 
-export function ActionsTab({ runId, enrichmentStatus = 'not_applicable' }: ActionsTabProps) {
+export function ActionsTab({ runId, enrichmentStatus = 'not_applicable', tier = 'starter', onUpgradeClick }: ActionsTabProps) {
   const [plan, setPlan] = useState<ActionPlan | null>(null)
   const [history, setHistory] = useState<ActionHistoryItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<'all' | 'quick_win' | 'strategic' | 'backlog'>('all')
+  const [showStickyUpsell, setShowStickyUpsell] = useState(false)
+
+  // Show sticky upsell for starter users after scrolling
+  useEffect(() => {
+    if (tier !== 'starter') return
+
+    const handleScroll = () => {
+      setShowStickyUpsell(window.scrollY > 50)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [tier])
 
   useEffect(() => {
     fetchPlan()
@@ -269,6 +290,21 @@ export function ActionsTab({ runId, enrichmentStatus = 'not_applicable' }: Actio
 
   return (
     <div style={{ display: 'grid', gap: '32px' }}>
+      {/* Context Section - What this is based on */}
+      <div
+        className="bg-[var(--surface-elevated)] border border-[var(--border)]"
+        style={{ padding: '20px 24px' }}
+      >
+        <div className="flex items-start" style={{ gap: '16px' }}>
+          <Lightbulb size={20} className="text-[var(--green)] flex-shrink-0" style={{ marginTop: '2px' }} />
+          <div>
+            <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
+              <strong className="text-[var(--text)]">Personalized Action Plans:</strong> These recommendations are generated from your site scan, AI responses, competitor analysis, and brand awareness data. Use them to make website changes, create new content, or improve your AI visibility.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Executive Summary */}
       <div
         className="bg-[var(--surface-elevated)] border border-[var(--border)]"
@@ -293,11 +329,11 @@ export function ActionsTab({ runId, enrichmentStatus = 'not_applicable' }: Actio
         style={{ padding: '16px 20px', borderRadius: '4px' }}
       >
         <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6' }}>
-          <strong className="text-[var(--gold)]">Tip:</strong> Tick off actions as you complete them using the checkbox on the right.
-          On your next weekly scan, we'll measure the impact of your changes and generate fresh recommendations based on what's improved.
+          <strong className="text-[var(--gold)]">How to use:</strong> Tick off actions as you complete them using the checkbox.
+          On your next weekly scan, we'll measure the impact of your changes and generate fresh recommendations.
           {history.length > 0
-            ? ' Your progress is tracked in the Completed Actions section at the bottom of this page.'
-            : ' Completed actions will be archived after your next scan so you can track your progress over time.'}
+            ? ' Your progress is tracked in the Completed Actions section below.'
+            : ' Completed actions will be archived after your next scan.'}
         </p>
       </div>
 
@@ -638,6 +674,73 @@ export function ActionsTab({ runId, enrichmentStatus = 'not_applicable' }: Actio
             ))}
           </div>
         </CollapsibleSection>
+      )}
+
+      {/* Sticky Floating Upsell for Starter users */}
+      {tier === 'starter' && showStickyUpsell && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '0',
+            left: '0',
+            right: '0',
+            zIndex: 50,
+            padding: '16px 24px',
+            background: 'linear-gradient(135deg, rgba(20,20,20,0.98) 0%, rgba(30,25,20,0.98) 100%)',
+            borderTop: '1px solid var(--gold)',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.5)',
+            animation: 'slideUp 0.3s ease-out',
+          }}
+        >
+          <style>{`
+            @keyframes slideUp {
+              from { transform: translateY(100%); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+          `}</style>
+          <div className="flex items-center justify-between flex-wrap" style={{ gap: '16px', maxWidth: '1200px', margin: '0 auto' }}>
+            <div className="flex items-center" style={{ gap: '16px' }}>
+              <div
+                className="flex items-center justify-center flex-shrink-0"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+                }}
+              >
+                <FileCode size={20} style={{ color: 'white' }} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--text)] font-medium">
+                    Want technical implementation instructions?
+                  </span>
+                </div>
+                <span className="text-[var(--text-dim)] text-sm">
+                  Get Product Requirements and AI coding prompts with the Pro plan
+                </span>
+              </div>
+            </div>
+
+            <Link
+              href="/pricing?from=report"
+              onClick={handlePricingClick}
+              className="font-mono text-sm flex items-center gap-2 transition-all hover:scale-105"
+              style={{
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+                color: 'var(--bg)',
+                fontWeight: 500,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Upgrade to Pro
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 # Subscription System Implementation Plan
 
-**Status:** Sprint 4 Complete (Editable Questions), Sprint 5 Ready
+**Status:** Sprint 5 Complete (All Premium Features)
 **Last Updated:** 2026-01-10
 
 ## Overview
@@ -187,7 +187,7 @@ Subscribers can choose their preferred day and time for weekly report updates:
 
 ---
 
-## Phase 5: Subscriber Features ⏳ IN PROGRESS
+## Phase 5: Subscriber Features ✅ COMPLETE
 
 ### 5A: Editable Questions (Setup Tab) ✅ COMPLETE
 
@@ -313,38 +313,88 @@ See `docs/PHASE5_PLAN.md` for full schema. Key components:
 
 ---
 
-### 5D: PRD Generation (PRD Tab) ⏳ PENDING
+### 5D: PRD Generation (PRD Tab) ✅ COMPLETE
 
-**Goal:** Generate detailed specs for vibe coding platforms.
+**Goal:** Generate detailed specs for vibe coding platforms with content/code separation.
 
 **Access:** Pro and Agency tiers only (locked teaser for Starter/Free)
 
-Based on reference implementation:
-- Take action plan items
-- Generate rich PRD with acceptance criteria
-- Copy-paste ready format for Claude Code / Cursor
+### How It Works
 
-### Structure
+1. **Automatic generation**: PRDs are generated during subscriber enrichment (step 5, after action plans)
+2. **Extended thinking**: Uses Claude with extended thinking for detailed technical output
+3. **Action plan based**: Transforms action items into implementation tasks with code snippets
+4. **Content/code separation**: Tasks requiring content (FAQs, case studies) have `requiresContent: true` and `contentPrompts` array
+5. **Standard tasks**: FAQ Schema and LocalBusiness Schema always included for service businesses
+6. **History filtering**: Previously completed tasks are not regenerated
 
-See `docs/PHASE5_PLAN.md` for full schema. Key components:
-- Organized by priority (Quick Wins, Strategic, Backlog)
-- Problem/Solution format
-- Implementation steps with code snippets
-- Acceptance criteria checklist
-- Technical notes
+### Content/Code Separation
+
+Some tasks require content to be written before code implementation:
+
+```typescript
+interface ContentPrompt {
+  type: string          // "FAQ Answer", "Case Study", "Testimonial"
+  prompt: string        // Specific writing prompt
+  usedIn: string        // Target file/component
+  wordCount: number     // Target word count
+}
+
+// Example task with content prompts
+{
+  "title": "Implement FAQ Schema for Service Pages",
+  "requiresContent": true,
+  "contentPrompts": [
+    {
+      "type": "FAQ Answer",
+      "prompt": "Write answer for: What is GEO?",
+      "usedIn": "components/FAQSchema.tsx",
+      "wordCount": 150
+    }
+  ]
+}
+```
+
+### Generated Content
+
+- **Title & Overview**: Project context and goals
+- **Tech Stack**: Detected or default (Next.js, React, TypeScript)
+- **Tasks by Priority**: Quick Wins (1-4h), Strategic (4-16h), Backlog (16h+)
+- **Acceptance Criteria**: Testable pass/fail conditions
+- **File Paths**: Suggested files to modify
+- **Code Snippets**: JSON-LD examples, component code (with `CONTENT_PLACEHOLDER` for dynamic content)
+- **Prompt Context**: Ready-to-paste instructions for AI coding tools
+- **Implementation Notes**: Integration considerations and gotchas
+- **Content Prompts**: For tasks requiring content before code
+
+### Standard Tasks
+
+For service-based businesses, PRDs always include:
+1. **FAQ Schema** (quick_wins, 2-3 hours) - With `requiresContent: true` for FAQ answers
+2. **LocalBusiness Schema** (quick_wins, 1-2 hours) - If business has physical location
+
+### Task History Filtering
+
+Completed PRD tasks are archived to `prd_tasks_history`. On regeneration:
+1. Query previously completed task titles
+2. Pass to Claude with "DO NOT REGENERATE" instruction
+3. Safety-net filter at insert time (normalized title matching)
 
 ### Implementation
-- Generate from action plans
-- Claude-powered generation
-- Store in `action_plans.prd_outputs` JSONB column
-- Copy-to-clipboard with visual feedback
-- Generated on-demand per action (not batch)
+
+- Generated automatically during enrichment pipeline (step 5)
+- Only for Pro/Agency tiers (checks `showPrdTasks` feature flag)
+- Can also be manually regenerated via POST /api/prd with `force_regenerate=true`
+- Export as markdown for offline use
 
 ### Files
-- `src/lib/ai/generate-prd.ts`
-- `src/app/api/prd/route.ts`
-- `src/app/api/prd/[actionId]/route.ts`
-- `src/components/report/tabs/PRDTab.tsx`
+- `src/lib/ai/generate-prd.ts` ✅ - AI generation with extended thinking + content separation
+- `src/app/api/prd/route.ts` ✅ - GET/POST endpoints
+- `src/app/api/prd/[id]/route.ts` ✅ - PATCH for task status updates
+- `src/inngest/functions/enrich-subscriber.ts` ✅ - Step 5: PRD generation with history filtering
+- `src/components/report/tabs/PrdTab.tsx` ✅ - UI with loading states
+- `supabase/migrations/015_prd_documents.sql` ✅ - Base schema
+- `supabase/migrations/027_prd_content_prompts.sql` ✅ - Content separation columns
 
 ---
 
@@ -372,28 +422,33 @@ See `docs/PHASE5_PLAN.md` for full schema. Key components:
 
 *Outcome: Subscribers can customize their scan questions*
 
-### Sprint 5: Premium Features ⏳ IN PROGRESS
+### Sprint 5: Premium Features ✅ COMPLETE
 
 **Enrichment Pipeline Architecture:**
-Premium features (Brand Awareness, Action Plans) run via a separate "enrichment" Inngest job:
+Premium features (Brand Awareness, Action Plans, PRD) run via a separate "enrichment" Inngest job:
 - Triggered after subscription checkout (enrich existing report)
 - Included in weekly subscriber scans
-- ~1-2 minutes additional processing
+- ~2-3 minutes additional processing (6 steps total)
 - Tabs show loading state while enrichment runs
 
-7. Phase 5E: Brand Awareness + Enrichment Pipeline
-   - Create `enrich-subscriber` Inngest function
-   - Enable brand awareness for subscribers
-   - Fix database schema (add perplexity platform)
-   - Add loading state to BrandAwarenessTab
+7. Phase 5E: Brand Awareness + Enrichment Pipeline ✅
+   - Create `enrich-subscriber` Inngest function ✅
+   - Enable brand awareness for subscribers ✅
+   - Competitive summary generation ✅
+   - Add loading state to BrandAwarenessTab ✅
 
-8. Phase 5C: Action Plans
-   - Add action plan generation to enrichment pipeline
-   - Create ActionsTab UI
+8. Phase 5C: Action Plans ✅
+   - AI-powered action plan generation with extended thinking ✅
+   - Source insights linking to scan data ✅
+   - Content quality guidelines ✅
+   - ActionsTab UI with collapsible sections ✅
 
-9. Phase 5D: PRD Generation
-   - On-demand PRD generation from actions
-   - Create PRDTab UI
+9. Phase 5D: PRD Generation ✅
+   - AI-powered PRD generation from action plans ✅
+   - Code snippets, acceptance criteria, prompt context ✅
+   - Auto-generated during enrichment (Pro/Agency only) ✅
+   - Manual regeneration option ✅
+   - Export as markdown ✅
 
 *Outcome: Full premium feature set with smart cost optimization*
 
@@ -517,6 +572,113 @@ NEXT_PUBLIC_APP_URL=https://outrankllm.io
 2. **Agency domain list**: Currently Agency users see the form but no list of their existing domains. Future enhancement: show domain picker/list.
 
 3. **Email templates**: Password reset email is basic. Could improve styling to match report email.
+
+---
+
+## Phase 6: User Feedback & Help System ⏳ PENDING
+
+**Goal:** Provide users with an easy way to report issues, bugs, or provide feedback.
+
+### Approach
+
+**Nav Help Icon** - A subtle `?` icon in the navigation that opens a dropdown with:
+- "Report an Issue" → Opens feedback modal
+- "Give Feedback" → Opens feedback modal (different preset)
+- "Help & FAQ" → Link to help docs (future)
+
+### Feedback Modal
+
+Simple modal that captures:
+- **Type**: Bug Report / Feature Request / General Feedback / Other
+- **Message**: Free-form text description
+- **Context** (auto-captured):
+  - Current URL/page
+  - User email (if logged in)
+  - User tier (if logged in)
+  - Browser/device info
+  - Timestamp
+
+### Data Flow
+
+1. User clicks help icon → selects option
+2. Modal opens with type pre-selected
+3. User fills in message
+4. Submit → saves to `feedback` table in Supabase
+5. Resend sends email alert to:
+   - adam.king@journ3y.com.au
+   - kevin.morrell@journ3y.com.au
+
+### Database Schema
+
+```sql
+CREATE TABLE feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- User context (nullable for non-logged-in users)
+  lead_id UUID REFERENCES leads(id),
+  user_email TEXT,
+  user_tier TEXT,
+
+  -- Feedback content
+  type TEXT NOT NULL CHECK (type IN ('bug', 'feature', 'feedback', 'other')),
+  message TEXT NOT NULL,
+
+  -- Context
+  page_url TEXT,
+  user_agent TEXT,
+
+  -- Status tracking
+  status TEXT DEFAULT 'new' CHECK (status IN ('new', 'reviewed', 'resolved', 'wont_fix')),
+  notes TEXT,  -- Internal notes for tracking
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_feedback_status ON feedback(status);
+CREATE INDEX idx_feedback_type ON feedback(type);
+CREATE INDEX idx_feedback_created ON feedback(created_at DESC);
+```
+
+### Files to Create
+
+- `supabase/migrations/029_feedback.sql` - Database schema
+- `src/app/api/feedback/route.ts` - POST endpoint (save + send email)
+- `src/components/feedback/FeedbackModal.tsx` - Modal component
+- `src/components/feedback/HelpMenu.tsx` - Dropdown menu component
+
+### Files to Modify
+
+- `src/components/nav/Nav.tsx` - Add help icon with dropdown
+
+### Implementation Notes
+
+- Modal should be lightweight (no heavy dependencies)
+- Auto-close on successful submit with "Thank you" message
+- Email should include all context for easy debugging
+- Consider rate limiting to prevent spam (e.g., max 5 submissions per hour per IP)
+
+### Email Template
+
+```
+Subject: [outrankLLM Feedback] {type}: {first 50 chars of message}
+
+New feedback submitted:
+
+Type: {Bug Report | Feature Request | General Feedback | Other}
+From: {email or "Anonymous"}
+Tier: {tier or "Not logged in"}
+Page: {url}
+
+Message:
+{full message}
+
+---
+Device: {user agent}
+Submitted: {timestamp}
+
+View in Supabase: {link to feedback table}
+```
 
 ---
 

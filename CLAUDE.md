@@ -380,6 +380,115 @@ When weekly scans regenerate action plans:
 3. Similar previously-completed actions are NOT re-added as pending
 4. Users see their progress preserved in a "Completed History" section
 
+## PRD Generation (Pro/Agency)
+
+Pro and Agency subscribers get Claude Code / Cursor-ready PRD documents with content/code separation.
+
+### How It Works
+
+1. **Automatic generation**: PRDs are generated during subscriber enrichment (step 5, after action plans)
+2. **Extended thinking**: Uses Claude with extended thinking for detailed technical output
+3. **Action plan based**: Transforms action items into implementation tasks with code snippets
+4. **Content/code separation**: Tasks that need content (FAQs, case studies) are flagged with `requiresContent` and include `contentPrompts`
+5. **Standard tasks**: FAQ Schema and LocalBusiness Schema are always included for service businesses
+6. **History filtering**: Previously completed tasks are not regenerated
+
+### Content/Code Separation
+
+Some tasks require content to be written before code implementation (FAQ answers, testimonials, case studies). These tasks have:
+
+- **`requiresContent: true`** - Flags the task as needing content first
+- **`contentPrompts`** - Array of specific content pieces to write
+
+```typescript
+interface ContentPrompt {
+  type: string          // "FAQ Answer", "Case Study", "Testimonial", etc.
+  prompt: string        // Specific writing prompt for this content
+  usedIn: string        // Where this content will be used (file/component)
+  wordCount: number     // Target word count
+}
+```
+
+Example task with content prompts:
+```json
+{
+  "title": "Implement FAQ Schema for Service Pages",
+  "requiresContent": true,
+  "contentPrompts": [
+    {
+      "type": "FAQ Answer",
+      "prompt": "Write answer for: What is GEO and how does it differ from SEO?",
+      "usedIn": "components/FAQSchema.tsx",
+      "wordCount": 150
+    }
+  ]
+}
+```
+
+### Generated Content
+
+- **Title & Overview**: Project context and goals
+- **Tech Stack**: Detected or default (Next.js, React, TypeScript)
+- **Tasks by Priority**: Quick Wins (1-4h), Strategic (4-16h), Backlog (16h+)
+- **Acceptance Criteria**: Testable pass/fail conditions
+- **File Paths**: Suggested files to modify
+- **Code Snippets**: JSON-LD examples, component code (use `CONTENT_PLACEHOLDER` for dynamic content)
+- **Prompt Context**: Ready-to-paste instructions for AI coding tools
+- **Implementation Notes**: Integration considerations and gotchas
+- **Content Prompts**: For tasks requiring content before code
+
+### Standard Tasks
+
+For service-based businesses, PRDs always include:
+1. **FAQ Schema** (quick_wins, 2-3 hours) - With `requiresContent: true` for FAQ answers
+2. **LocalBusiness Schema** (quick_wins, 1-2 hours) - If business has physical location
+
+### Task History Filtering
+
+Completed PRD tasks are archived to `prd_tasks_history`. On regeneration:
+1. Query previously completed task titles
+2. Pass to Claude with "DO NOT REGENERATE" instruction
+3. Safety-net filter at insert time (normalized title matching)
+
+### Database Schema
+
+```sql
+prd_documents
+├── title, overview        -- Document metadata
+├── goals[]                -- Key objectives
+├── tech_stack[]           -- Detected tech stack
+├── target_platforms[]     -- Web, mobile, etc.
+└── generated_at           -- Generation timestamp
+
+prd_tasks
+├── title, description     -- Task details
+├── acceptance_criteria[]  -- Testable criteria
+├── section                -- 'quick_wins' | 'strategic' | 'backlog'
+├── category               -- 'technical' | 'content' | 'schema' | 'seo'
+├── estimated_hours        -- Time estimate
+├── file_paths[]           -- Files to modify
+├── code_snippets          -- JSONB with code examples
+├── prompt_context         -- Instructions for AI coding tools
+├── implementation_notes   -- Integration guidance
+├── requires_content       -- Boolean: true if content needed before code
+└── content_prompts        -- JSONB array of ContentPrompt objects
+
+prd_tasks_history          -- Archive of completed tasks (preserved across rescans)
+├── original_task_id       -- Reference to original task
+├── title, description     -- Task details (for filtering)
+└── completed_at           -- When task was completed
+```
+
+### Key Files
+
+- `src/lib/ai/generate-prd.ts` - AI generation with extended thinking + content separation
+- `src/app/api/prd/route.ts` - GET/POST endpoints
+- `src/app/api/prd/[id]/route.ts` - PATCH for task status updates
+- `src/inngest/functions/enrich-subscriber.ts` - Enrichment pipeline (step 5) with history filtering
+- `src/components/report/tabs/PrdTab.tsx` - UI with loading states
+- `supabase/migrations/015_prd_documents.sql` - Base schema
+- `supabase/migrations/027_prd_content_prompts.sql` - Content separation columns
+
 ## Report Component Structure
 
 ```
@@ -402,6 +511,7 @@ src/components/report/
     ├── CompetitorsTab.tsx   # Competitor analysis
     ├── BrandAwarenessTab.tsx # Brand recognition
     ├── ActionsTab.tsx       # AI-generated action plans
+    ├── PrdTab.tsx           # Claude Code / Cursor PRDs (Pro/Agency)
     └── LockedTab.tsx        # Generic locked state
 ```
 

@@ -14,6 +14,12 @@ import {
   type BrandAwarenessData,
   type CompetitiveSummaryData,
 } from "@/lib/ai/generate-actions"
+import {
+  generatePrd,
+  type ActionPlanContext,
+  type SiteContext,
+} from "@/lib/ai/generate-prd"
+import { getUserTier, getFeatureFlags } from "@/lib/features/flags"
 import { log } from "@/lib/logger"
 
 /**
@@ -477,7 +483,203 @@ export const enrichSubscriber = inngest.createFunction(
       }
     })
 
-    // Step 5: Mark enrichment as complete
+    // Step 5: Generate PRD for Pro/Agency tiers (based on action plan)
+    const prdResult = await step.run("generate-prd", async () => {
+      const supabase = createServiceClient()
+
+      // Check if user has PRD access (Pro or Agency tier)
+      const tier = await getUserTier(leadId)
+      const flags = await getFeatureFlags(tier)
+
+      if (!flags.showPrdTasks) {
+        log.info(scanRunId, `PRD generation skipped - tier ${tier} doesn't have PRD access`)
+        return { skipped: true, reason: "tier_not_eligible" }
+      }
+
+      // Delete existing PRD for this run (regenerate fresh like action plans)
+      // Completed tasks are preserved in prd_tasks_history and filtered during generation
+      const { data: existingPrd } = await supabase
+        .from("prd_documents")
+        .select("id")
+        .eq("run_id", scanRunId)
+        .single()
+
+      if (existingPrd) {
+        log.info(scanRunId, "Deleting existing PRD to regenerate fresh")
+        await supabase.from("prd_documents").delete().eq("id", existingPrd.id)
+      }
+
+      // Get action plan data for PRD generation
+      const { data: actionPlan } = await supabase
+        .from("action_plans")
+        .select("id, executive_summary, page_edits, keyword_map")
+        .eq("run_id", scanRunId)
+        .single()
+
+      if (!actionPlan) {
+        log.warn(scanRunId, "No action plan found for PRD generation")
+        return { skipped: true, reason: "no_action_plan" }
+      }
+
+      // Get action items
+      const { data: actionItems } = await supabase
+        .from("action_items")
+        .select("*")
+        .eq("plan_id", actionPlan.id)
+        .order("sort_order", { ascending: true })
+
+      if (!actionItems || actionItems.length === 0) {
+        log.warn(scanRunId, "No action items found for PRD generation")
+        return { skipped: true, reason: "no_action_items" }
+      }
+
+      // Get site analysis for context
+      const { data: analysis } = await supabase
+        .from("site_analyses")
+        .select("business_name, business_type, services")
+        .eq("run_id", scanRunId)
+        .single()
+
+      try {
+        log.step(scanRunId, "Generating PRD from action plan")
+
+        // Get previously completed PRD task titles to pass to Claude
+        // This tells Claude not to suggest similar tasks again
+        const { data: previouslyCompletedTasks } = await supabase
+          .from("prd_tasks_history")
+          .select("title")
+          .eq("lead_id", leadId)
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const completedPrdTaskTitles = (previouslyCompletedTasks || []).map((h: any) => h.title as string)
+
+        if (completedPrdTaskTitles.length > 0) {
+          log.info(scanRunId, `Found ${completedPrdTaskTitles.length} previously completed PRD tasks to exclude from generation`)
+        }
+
+        // Build action plan context for PRD generation
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const actionPlanContext: ActionPlanContext = {
+          executiveSummary: actionPlan.executive_summary,
+          actions: actionItems.map((item: {
+            id: string
+            title: string
+            description: string
+            rationale: string | null
+            source_insight: string | null
+            priority: 'quick_win' | 'strategic' | 'backlog'
+            category: string | null
+            estimated_impact: string | null
+            estimated_effort: string | null
+            target_page: string | null
+            target_keywords: string[] | null
+            consensus: string[] | null
+            implementation_steps: string[] | null
+            expected_outcome: string | null
+          }) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            rationale: item.rationale,
+            sourceInsight: item.source_insight,
+            priority: item.priority,
+            category: item.category,
+            estimatedImpact: item.estimated_impact,
+            estimatedEffort: item.estimated_effort,
+            targetPage: item.target_page,
+            targetKeywords: item.target_keywords,
+            consensus: item.consensus,
+            implementationSteps: item.implementation_steps,
+            expectedOutcome: item.expected_outcome,
+          })),
+          pageEdits: actionPlan.page_edits,
+          keywordMap: actionPlan.keyword_map,
+        }
+
+        const siteContext: SiteContext = {
+          domain: scanData.domain,
+          businessName: analysis?.business_name || null,
+          businessType: analysis?.business_type || null,
+          techStack: ["Next.js", "React", "TypeScript"], // Default for most modern sites
+          services: analysis?.services || null,
+        }
+
+        // Generate PRD
+        const generatedPrd = await generatePrd(actionPlanContext, siteContext, scanRunId, completedPrdTaskTitles)
+
+        // Save PRD document
+        const { data: prdDoc, error: prdError } = await supabase
+          .from("prd_documents")
+          .insert({
+            lead_id: leadId,
+            run_id: scanRunId,
+            title: generatedPrd.title,
+            overview: generatedPrd.overview,
+            goals: generatedPrd.goals,
+            tech_stack: generatedPrd.techStack,
+            target_platforms: generatedPrd.targetPlatforms,
+          })
+          .select("id")
+          .single()
+
+        if (prdError) {
+          throw new Error(`Failed to create PRD document: ${prdError.message}`)
+        }
+
+        // Safety net: Filter out tasks similar to previously completed ones
+        // We already passed completedPrdTaskTitles to Claude, but this ensures no duplicates
+        const completedTitlesNormalized = new Set(completedPrdTaskTitles.map((t: string) => normalizeTitle(t)))
+
+        // Filter and prepare tasks for insert
+        const filteredTasks = generatedPrd.tasks.filter(
+          (task) => !completedTitlesNormalized.has(normalizeTitle(task.title))
+        )
+        const skippedCount = generatedPrd.tasks.length - filteredTasks.length
+
+        const tasksToInsert = filteredTasks.map((task, index) => ({
+          prd_id: prdDoc.id,
+          title: task.title,
+          description: task.description,
+          acceptance_criteria: task.acceptanceCriteria,
+          section: task.section,
+          category: task.category,
+          priority: task.priority,
+          estimated_hours: task.estimatedHours,
+          file_paths: task.filePaths,
+          code_snippets: task.codeSnippets,
+          prompt_context: task.promptContext,
+          implementation_notes: task.implementationNotes,
+          requires_content: task.requiresContent,
+          content_prompts: task.contentPrompts,
+          sort_order: index,
+        }))
+
+        if (tasksToInsert.length > 0) {
+          const { error: tasksError } = await supabase
+            .from("prd_tasks")
+            .insert(tasksToInsert)
+
+          if (tasksError) {
+            log.warn(scanRunId, `Failed to insert PRD tasks: ${tasksError.message}`)
+          }
+        }
+
+        log.done(scanRunId, "PRD", `${tasksToInsert.length} tasks generated${skippedCount > 0 ? ` (${skippedCount} skipped as previously completed)` : ''}`)
+
+        return {
+          success: true,
+          prdId: prdDoc.id,
+          tasksCount: tasksToInsert.length,
+          tasksSkipped: skippedCount,
+        }
+      } catch (error) {
+        log.error(scanRunId, "PRD generation failed", error instanceof Error ? error.message : "Unknown error")
+        // Don't fail enrichment - PRD is supplementary
+        return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+      }
+    })
+
+    // Step 6: Mark enrichment as complete
     await step.run("finalize-enrichment", async () => {
       const supabase = createServiceClient()
 
@@ -503,6 +705,7 @@ export const enrichSubscriber = inngest.createFunction(
       },
       competitiveSummary: competitiveSummary || undefined,
       actionPlan: actionPlanResult,
+      prd: prdResult,
       processingTimeMs: Date.now() - startTime,
     }
   }

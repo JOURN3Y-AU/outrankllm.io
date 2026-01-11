@@ -21,6 +21,8 @@ import {
 
 type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
 
+type Tier = 'free' | 'starter' | 'pro' | 'agency'
+
 interface ReportTabsProps {
   analysis: Analysis | null
   responses: Response[] | null
@@ -34,6 +36,7 @@ interface ReportTabsProps {
   domain: string
   onUpgradeClick: () => void
   isSubscriber?: boolean
+  tier?: Tier
   customQuestionLimit?: number
   currentRunId?: string
   enrichmentStatus?: EnrichmentStatus
@@ -52,6 +55,7 @@ export function ReportTabs({
   domain,
   onUpgradeClick,
   isSubscriber = false,
+  tier = 'free',
   customQuestionLimit = 0,
   currentRunId,
   enrichmentStatus = 'not_applicable',
@@ -211,6 +215,8 @@ export function ReportTabs({
             <ActionsTab
               runId={currentRunId}
               enrichmentStatus={enrichmentStatus}
+              tier={tier}
+              onUpgradeClick={onUpgradeClick}
             />
           ) : (
             <LockedTab
@@ -229,7 +235,7 @@ export function ReportTabs({
         )}
         {activeTab === 'prd' && (
           isSubscriber ? (
-            <PrdTab />
+            <PrdTab runId={currentRunId} enrichmentStatus={enrichmentStatus} />
           ) : (
             <LockedTab
               icon={FileCode}
