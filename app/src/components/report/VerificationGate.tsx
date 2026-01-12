@@ -144,7 +144,7 @@ export function VerificationGate({
 
         {/* Help text */}
         <div className="text-xs text-[var(--text-dim)] space-y-1">
-          <p>Don&apos;t see the email? Check your spam folder.</p>
+          <p>Don&apos;t see the email? Check your spam or junk folder for an email from <strong className="text-[var(--text-mid)]">reports@outrankllm.io</strong></p>
           <p>The verification link expires in 24 hours.</p>
         </div>
       </div>

@@ -256,6 +256,7 @@ function CompleteContent({ email, domain }: { email: string; domain: string }) {
         style={{ fontSize: '13px', lineHeight: '1.6' }}
       >
         Click the verification link in the email to view your report.<br />
+        Don&apos;t see it? Check your spam or junk folder for an email from <strong className="text-[var(--text-mid)]">reports@outrankllm.io</strong><br />
         The link expires in 24 hours.
       </p>
     </>
