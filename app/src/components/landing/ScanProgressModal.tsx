@@ -154,7 +154,10 @@ function ProgressContent({
 
       <p className="text-[var(--text-mid)] text-sm" style={{ marginBottom: '32px', lineHeight: '1.6' }}>
         We&apos;re asking ChatGPT, Claude, Gemini, and Perplexity what they know about you... and your competitors.<br /><br />
-        This takes 10-15 minutes. Grab a coffee — we&apos;ll email you when it&apos;s ready.
+        This takes 10-15 minutes. Grab a coffee — we&apos;ll email you when it&apos;s ready.<br /><br />
+        <span className="text-[var(--text-dim)]">
+          If you don&apos;t receive an email, check your spam or junk folder for <strong className="text-[var(--text-mid)]">reports@outrankllm.io</strong>
+        </span>
       </p>
 
       {/* Progress bar */}
