@@ -55,27 +55,28 @@ export async function POST(request: NextRequest) {
       const isFree = existingLead.tier === 'free'
 
       if (isFree) {
-        // Free users: check for any in-progress scan first
+        // Free users: check for any in-progress scan FOR THIS DOMAIN first
         const { data: inProgressRun } = await supabase
           .from('scan_runs')
           .select('id, status, created_at')
           .eq('lead_id', existingLead.id)
+          .eq('domain', cleanDomain)  // CRITICAL: Only check this domain
           .not('status', 'in', '("complete","failed")')
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
 
         if (inProgressRun) {
-          // User already has a scan in progress
+          // User already has a scan in progress for this domain
           return NextResponse.json({
             success: false,
             scanInProgress: true,
             scanId: inProgressRun.id,
-            message: 'You already have a scan in progress. Please wait for it to complete.',
+            message: 'You already have a scan in progress for this domain. Please wait for it to complete.',
           })
         }
 
-        // Free users: check for any completed scan
+        // Free users: check for any completed scan FOR THIS DOMAIN
         const { data: existingRun } = await supabase
           .from('scan_runs')
           .select(`
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
             reports (url_token)
           `)
           .eq('lead_id', existingLead.id)
+          .eq('domain', cleanDomain)  // CRITICAL: Only check this domain
           .eq('status', 'complete')
           .order('created_at', { ascending: false })
           .limit(1)
@@ -96,13 +98,13 @@ export async function POST(request: NextRequest) {
             : existingRun.reports as { url_token: string }
 
           if (reportData?.url_token) {
-            // User already has a free report - return existing report with locked flag
+            // User already has a free report for this domain - return existing report with locked flag
             return NextResponse.json({
               success: false,
               alreadyScanned: true,
               reportToken: reportData.url_token,
               scannedAt: existingRun.created_at,
-              message: 'You have already used your free report. Subscribe to access your report and get weekly updates.',
+              message: 'You have already used your free report for this domain. Subscribe to access your report and get weekly updates.',
             })
           }
         }
@@ -165,7 +167,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if there's an active domain subscription for this lead+domain
+    // Check if there's a domain subscription for this lead+domain
+    // Include 'incomplete' status to handle scans started during checkout flow
     // This ensures proper data isolation for multi-domain subscribers
     let domainSubscriptionId: string | null = null
     const { data: domainSub } = await supabase
@@ -173,18 +176,19 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('lead_id', lead.id)
       .eq('domain', cleanDomain)
-      .eq('status', 'active')
+      .in('status', ['active', 'incomplete', 'past_due', 'trialing'])  // CRITICAL: Include incomplete
       .single()
 
     if (domainSub) {
       domainSubscriptionId = domainSub.id
     }
 
-    // Create scan run
+    // Create scan run with domain for multi-domain isolation
     const { data: scanRun, error: scanError } = await supabase
       .from('scan_runs')
       .insert({
         lead_id: lead.id,
+        domain: cleanDomain,  // CRITICAL: Store domain for multi-domain isolation
         domain_subscription_id: domainSubscriptionId,
         status: 'pending',
         progress: 0,

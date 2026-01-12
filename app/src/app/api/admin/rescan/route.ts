@@ -94,10 +94,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new scan run (bypassing all tier limits)
+    // CRITICAL: Store domain for multi-domain isolation
     const { data: scanRun, error: scanError } = await supabase
       .from('scan_runs')
       .insert({
         lead_id: leadId,
+        domain: targetDomain,  // CRITICAL: Store domain for multi-domain isolation
         domain_subscription_id: domainSubscriptionId || null,
         status: 'pending',
         progress: 0,

@@ -181,31 +181,33 @@ async function handleDomainSubscriptionCheckout(
     .update({ tier: highestTier })
     .eq('id', leadId)
 
-  // Find existing scans for this domain - they may not have domain_subscription_id yet
+  // Find existing scans for THIS SPECIFIC DOMAIN - they may not have domain_subscription_id yet
   // because the free scan was created before the subscription
-  // Look up by lead_id first, then fall back to domain_subscription_id
-  // Note: scan_runs doesn't have a domain column - domain is on the leads table
+  // CRITICAL: Only link scans matching this domain, not all scans for the lead
   let scanRuns: { id: string }[] | null = null
 
-  // First, find scans by lead_id (covers free scans that predate subscription)
-  const { data: leadScans } = await supabase
-    .from('scan_runs')
-    .select('id')
-    .eq('lead_id', leadId)
-    .eq('status', 'complete')
-    .order('created_at', { ascending: false })
-
-  if (leadScans && leadScans.length > 0) {
-    scanRuns = leadScans
-
-    // Link all these scans to the new domain subscription
-    const scanIds = leadScans.map((s) => s.id)
-    await supabase
+  if (domain) {
+    // Find scans by lead_id AND domain (covers free scans that predate subscription)
+    const { data: domainScans } = await supabase
       .from('scan_runs')
-      .update({ domain_subscription_id: domainSubscriptionId })
-      .in('id', scanIds)
+      .select('id')
+      .eq('lead_id', leadId)
+      .eq('domain', domain)  // CRITICAL: Only match scans for THIS domain
+      .eq('status', 'complete')
+      .order('created_at', { ascending: false })
 
-    console.log(`Linked ${scanIds.length} existing scans to domain subscription ${domainSubscriptionId}`)
+    if (domainScans && domainScans.length > 0) {
+      scanRuns = domainScans
+
+      // Link only these domain-matching scans to the new domain subscription
+      const scanIds = domainScans.map((s) => s.id)
+      await supabase
+        .from('scan_runs')
+        .update({ domain_subscription_id: domainSubscriptionId })
+        .in('id', scanIds)
+
+      console.log(`Linked ${scanIds.length} scans for ${domain} to domain subscription ${domainSubscriptionId}`)
+    }
   }
 
   // Fall back to scans already linked to this domain_subscription_id

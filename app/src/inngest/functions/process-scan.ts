@@ -75,6 +75,7 @@ export const processScan = inngest.createFunction(
           status: "crawling",
           progress: 5,
           started_at: new Date().toISOString(),
+          domain: domain,  // CRITICAL: Store domain for multi-domain isolation
         }
         if (domainSubscriptionId) {
           updateData.domain_subscription_id = domainSubscriptionId
@@ -89,6 +90,7 @@ export const processScan = inngest.createFunction(
       // Create new scan run (for weekly cron scans or manual triggers)
       const insertData: Record<string, unknown> = {
         lead_id: resolvedLeadId,
+        domain: domain,  // CRITICAL: Store domain for multi-domain isolation
         status: "crawling",
         progress: 5,
         started_at: new Date().toISOString(),

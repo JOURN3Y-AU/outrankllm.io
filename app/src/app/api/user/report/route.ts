@@ -16,7 +16,7 @@ export async function GET() {
 
     const supabase = createServiceClient()
 
-    // Get the user's lead record with domain
+    // Get the user's lead record
     const { data: lead } = await supabase
       .from('leads')
       .select('id, domain, tier')
@@ -27,11 +27,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    // Get latest completed scan run with its report (same pattern as dashboard)
+    // Get latest completed scan run with its report and domain
+    // CRITICAL: Include domain from scan_run for multi-domain support
     const { data: scanRun } = await supabase
       .from('scan_runs')
       .select(`
         id,
+        domain,
         reports (url_token)
       `)
       .eq('lead_id', lead.id)
@@ -42,7 +44,7 @@ export async function GET() {
 
     if (!scanRun) {
       return NextResponse.json({
-        domain: lead.domain,
+        domain: lead.domain,  // Fallback to lead.domain if no scans
         tier: lead.tier,
         reportToken: null
       })
@@ -53,8 +55,10 @@ export async function GET() {
       ? scanRun.reports[0]
       : scanRun.reports as { url_token: string } | null
 
+    // CRITICAL: Return domain from scan_run, not lead.domain
+    // This ensures the correct domain is shown for multi-domain users
     return NextResponse.json({
-      domain: lead.domain,
+      domain: scanRun.domain || lead.domain,  // Prefer scan domain, fallback to lead
       tier: lead.tier,
       reportToken: reportData?.url_token || null
     })

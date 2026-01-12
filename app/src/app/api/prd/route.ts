@@ -254,12 +254,45 @@ export async function POST(request: Request) {
       .eq('run_id', targetRunId)
       .single()
 
-    // Get lead for domain
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('domain')
-      .eq('id', session.lead_id)
-      .single()
+    // CRITICAL: Get domain from the correct source for multi-domain support
+    // Priority: 1) domain_subscription 2) scan_run 3) lead.domain (legacy fallback)
+    let resolvedDomain: string | null = null
+
+    // Try 1: Get from domain_subscription
+    if (targetDomainSubscriptionId) {
+      const { data: domainSub } = await supabase
+        .from('domain_subscriptions')
+        .select('domain')
+        .eq('id', targetDomainSubscriptionId)
+        .single()
+      if (domainSub) {
+        resolvedDomain = domainSub.domain
+      }
+    }
+
+    // Try 2: Get from scan_run
+    if (!resolvedDomain) {
+      const { data: scanRun } = await supabase
+        .from('scan_runs')
+        .select('domain')
+        .eq('id', targetRunId)
+        .single()
+      if (scanRun?.domain) {
+        resolvedDomain = scanRun.domain
+      }
+    }
+
+    // Try 3: Fallback to lead.domain (legacy)
+    if (!resolvedDomain) {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('domain')
+        .eq('id', session.lead_id)
+        .single()
+      if (lead?.domain) {
+        resolvedDomain = lead.domain
+      }
+    }
 
     // Build action plan context for PRD generation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -301,7 +334,7 @@ export async function POST(request: Request) {
     }
 
     const siteContext: SiteContext = {
-      domain: lead?.domain || 'unknown',
+      domain: resolvedDomain || 'unknown',
       businessName: analysis?.business_name || null,
       businessType: analysis?.business_type || null,
       techStack: ['Next.js', 'React', 'TypeScript'],

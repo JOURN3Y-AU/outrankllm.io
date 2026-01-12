@@ -66,15 +66,51 @@ export const enrichSubscriber = inngest.createFunction(
         })
         .eq("id", scanRunId)
 
-      // Get the lead and scan data we need
-      const { data: lead } = await supabase
-        .from("leads")
-        .select("domain, email")
-        .eq("id", leadId)
-        .single()
+      // CRITICAL: Resolve domain from the correct source for multi-domain support
+      // Priority: 1) domain_subscription 2) scan_run 3) lead.domain (legacy fallback)
+      let resolvedDomain: string | null = null
 
-      if (!lead) {
-        throw new Error(`Lead not found: ${leadId}`)
+      // Try 1: Get from domain_subscription (most accurate for multi-domain)
+      if (domainSubscriptionId) {
+        const { data: domainSub } = await supabase
+          .from("domain_subscriptions")
+          .select("domain")
+          .eq("id", domainSubscriptionId)
+          .single()
+        if (domainSub) {
+          resolvedDomain = domainSub.domain
+          log.info(scanRunId, `Resolved domain from subscription: ${resolvedDomain}`)
+        }
+      }
+
+      // Try 2: Get from scan_run (for scans that have domain column)
+      if (!resolvedDomain) {
+        const { data: scanRun } = await supabase
+          .from("scan_runs")
+          .select("domain")
+          .eq("id", scanRunId)
+          .single()
+        if (scanRun?.domain) {
+          resolvedDomain = scanRun.domain
+          log.info(scanRunId, `Resolved domain from scan_run: ${resolvedDomain}`)
+        }
+      }
+
+      // Try 3: Legacy fallback to lead.domain (for old single-domain data)
+      if (!resolvedDomain) {
+        const { data: leadWithDomain } = await supabase
+          .from("leads")
+          .select("domain")
+          .eq("id", leadId)
+          .single()
+        if (leadWithDomain?.domain) {
+          resolvedDomain = leadWithDomain.domain
+          log.warn(scanRunId, `Fallback to lead.domain: ${resolvedDomain} (legacy)`)
+        }
+      }
+
+      if (!resolvedDomain) {
+        throw new Error(`Could not resolve domain for scan: ${scanRunId}`)
       }
 
       // Get site analysis for this scan
@@ -129,7 +165,7 @@ export const enrichSubscriber = inngest.createFunction(
       }
 
       return {
-        domain: lead.domain,
+        domain: resolvedDomain,
         analysis: {
           businessName: analysis.business_name,
           businessType: analysis.business_type,
