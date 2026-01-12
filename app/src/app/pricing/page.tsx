@@ -267,6 +267,7 @@ function PricingCards() {
 
     try {
       // Use the new domain subscription API
+      // Pass leadId for first-time subscribers (not logged in yet)
       const response = await fetch('/api/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -274,6 +275,7 @@ function PricingCards() {
           domain: checkoutContext.domain,
           tier,
           region,
+          leadId: checkoutContext.leadId,
         }),
       })
 

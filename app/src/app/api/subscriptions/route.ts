@@ -34,19 +34,20 @@ const CreateSubscriptionSchema = z.object({
   domain: z.string().min(1).max(255),
   tier: z.enum(['starter', 'pro']),
   region: z.enum(['AU', 'INTL']).optional().default('INTL'),
+  leadId: z.string().uuid().optional(), // For first-time subscribers (no account yet)
 })
 
 /**
  * POST /api/subscriptions
  * Create a new domain subscription (initiates Stripe checkout)
+ *
+ * Supports two flows:
+ * 1. Authenticated user: Uses session.lead_id
+ * 2. First-time subscriber: Uses leadId from body (no account yet, will set password after checkout)
  */
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const result = CreateSubscriptionSchema.safeParse(body)
 
@@ -57,7 +58,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { domain, tier, region } = result.data
+    const { domain, tier, region, leadId: bodyLeadId } = result.data
+
+    // Determine lead_id: prefer session (authenticated), fallback to body (first-time subscriber)
+    const leadId = session?.lead_id || bodyLeadId
+    if (!leadId) {
+      return NextResponse.json(
+        { error: 'Unauthorized - please log in or provide a valid lead ID' },
+        { status: 401 }
+      )
+    }
 
     // Normalize domain (remove protocol, trailing slashes, etc.)
     const normalizedDomain = domain
@@ -70,7 +80,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceClient()
 
     // Check if user already has a subscription for this domain
-    const existingSubscription = await getSubscriptionByDomain(session.lead_id, normalizedDomain)
+    const existingSubscription = await getSubscriptionByDomain(leadId, normalizedDomain)
     if (existingSubscription) {
       // If there's an incomplete subscription (from a cancelled checkout), delete it and allow retry
       if (existingSubscription.status === 'incomplete') {
@@ -91,7 +101,7 @@ export async function POST(request: NextRequest) {
     const { data: lead } = await supabase
       .from('leads')
       .select('stripe_customer_id, email')
-      .eq('id', session.lead_id)
+      .eq('id', leadId)
       .single()
 
     if (!lead) {
@@ -105,7 +115,7 @@ export async function POST(request: NextRequest) {
       const customer = await stripe.customers.create({
         email: lead.email,
         metadata: {
-          lead_id: session.lead_id,
+          lead_id: leadId,
         },
       })
       customerId = customer.id
@@ -113,7 +123,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('leads')
         .update({ stripe_customer_id: customerId })
-        .eq('id', session.lead_id)
+        .eq('id', leadId)
     } else {
       // Customer exists - check if they have existing subscriptions
       // Stripe requires all subscriptions for a customer to be in the same currency
@@ -132,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     // Pre-create domain subscription with 'incomplete' status
     const domainSubscription = await createDomainSubscription({
-      lead_id: session.lead_id,
+      lead_id: leadId,
       domain: normalizedDomain,
       tier: tier as SubscriptionTier,
       status: 'incomplete',
@@ -168,7 +178,7 @@ export async function POST(request: NextRequest) {
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
-        lead_id: session.lead_id,
+        lead_id: leadId,
         domain_subscription_id: domainSubscription.id,
         domain: normalizedDomain,
         tier: tier,
@@ -176,7 +186,7 @@ export async function POST(request: NextRequest) {
       },
       subscription_data: {
         metadata: {
-          lead_id: session.lead_id,
+          lead_id: leadId,
           domain_subscription_id: domainSubscription.id,
           domain: normalizedDomain,
           tier: tier,
