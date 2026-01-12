@@ -565,31 +565,62 @@ export const processScan = inngest.createFunction(
         domain
       )
 
-      // Generate URL token
-      const urlToken = crypto.randomBytes(8).toString("hex")
-
       // Set expiry for free reports
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + FREE_REPORT_EXPIRY_DAYS)
 
-      // Create report
-      const { data: reportData, error: reportError } = await supabase
+      // Check if report already exists for this run (from a retry)
+      const { data: existingReport } = await supabase
         .from("reports")
-        .insert({
-          run_id: scanId,
-          url_token: urlToken,
-          visibility_score: scores.overallScore,
-          platform_scores: scores.platformScores,
-          top_competitors: topCompetitors,
-          summary,
-          requires_verification: true,
-          expires_at: expiresAt.toISOString(),
-        })
         .select("id, url_token")
-        .single()
+        .eq("run_id", scanId)
+        .limit(1)
 
-      if (reportError) {
-        throw new Error(`Failed to create report: ${reportError.message}`)
+      const existingReportData = existingReport?.[0]
+      let reportData: { id: string; url_token: string }
+
+      if (existingReportData) {
+        // Update existing report (keep url_token to preserve links)
+        const { data: updated, error: updateError } = await supabase
+          .from("reports")
+          .update({
+            visibility_score: scores.overallScore,
+            platform_scores: scores.platformScores,
+            top_competitors: topCompetitors,
+            summary,
+            expires_at: expiresAt.toISOString(),
+          })
+          .eq("id", existingReportData.id)
+          .select("id, url_token")
+          .single()
+
+        if (updateError) {
+          throw new Error(`Failed to update report: ${updateError.message}`)
+        }
+        reportData = updated
+        log.info(scanId, "Updated existing report (retry detected)")
+      } else {
+        // Create new report with fresh URL token
+        const urlToken = crypto.randomBytes(8).toString("hex")
+        const { data: created, error: createError } = await supabase
+          .from("reports")
+          .insert({
+            run_id: scanId,
+            url_token: urlToken,
+            visibility_score: scores.overallScore,
+            platform_scores: scores.platformScores,
+            top_competitors: topCompetitors,
+            summary,
+            requires_verification: true,
+            expires_at: expiresAt.toISOString(),
+          })
+          .select("id, url_token")
+          .single()
+
+        if (createError) {
+          throw new Error(`Failed to create report: ${createError.message}`)
+        }
+        reportData = created
       }
 
       // Update scan status to complete
