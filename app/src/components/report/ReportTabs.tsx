@@ -34,6 +34,7 @@ interface ReportTabsProps {
   competitors?: Competitor[]
   crawlData?: CrawlData
   domain: string
+  domainSubscriptionId?: string | null
   onUpgradeClick: () => void
   isSubscriber?: boolean
   tier?: Tier
@@ -53,6 +54,7 @@ export function ReportTabs({
   competitors = [],
   crawlData,
   domain,
+  domainSubscriptionId,
   onUpgradeClick,
   isSubscriber = false,
   tier = 'free',
@@ -159,6 +161,7 @@ export function ReportTabs({
             analysis={analysis}
             prompts={prompts}
             domain={domain}
+            domainSubscriptionId={domainSubscriptionId}
             isSubscriber={isSubscriber}
             customQuestionLimit={customQuestionLimit}
           />
@@ -184,6 +187,7 @@ export function ReportTabs({
             isSubscriber={isSubscriber}
             currentRunId={currentRunId}
             domain={domain}
+            domainSubscriptionId={domainSubscriptionId}
           />
         )}
         {activeTab === 'competitors' && (
@@ -194,6 +198,7 @@ export function ReportTabs({
             competitiveSummary={competitiveSummary}
             analysis={analysis}
             domain={domain}
+            domainSubscriptionId={domainSubscriptionId}
             onUpgradeClick={onUpgradeClick}
             isSubscriber={isSubscriber}
           />
@@ -214,6 +219,7 @@ export function ReportTabs({
           isSubscriber ? (
             <ActionsTab
               runId={currentRunId}
+              domainSubscriptionId={domainSubscriptionId}
               enrichmentStatus={enrichmentStatus}
               tier={tier}
               onUpgradeClick={onUpgradeClick}
@@ -235,7 +241,7 @@ export function ReportTabs({
         )}
         {activeTab === 'prd' && (
           isSubscriber ? (
-            <PrdTab runId={currentRunId} enrichmentStatus={enrichmentStatus} />
+            <PrdTab runId={currentRunId} domainSubscriptionId={domainSubscriptionId} enrichmentStatus={enrichmentStatus} />
           ) : (
             <LockedTab
               icon={FileCode}

@@ -40,24 +40,37 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 12
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
 
-    // Get lead's domain
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('domain')
-      .eq('id', session.lead_id)
-      .single()
+    // Get domain - from domain_subscription if provided, otherwise from lead
+    let domain: string | null = null
 
-    if (!lead) {
+    if (domainSubscriptionId) {
+      const { data: domainSub } = await supabase
+        .from('domain_subscriptions')
+        .select('domain')
+        .eq('id', domainSubscriptionId)
+        .single()
+      domain = domainSub?.domain || null
+    } else {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('domain')
+        .eq('id', session.lead_id)
+        .single()
+      domain = lead?.domain || null
+    }
+
+    if (!domain) {
       return NextResponse.json(
-        { error: 'Lead not found' },
+        { error: 'Domain not found' },
         { status: 404 }
       )
     }
 
-    // Fetch reports with competitor data for this lead
-    // Join through scan_runs to get historical data
-    const { data: reports, error } = await supabase
+    // Fetch reports with competitor data
+    // Use domain_subscription_id if provided for multi-domain isolation
+    let scanRunsQuery = supabase
       .from('scan_runs')
       .select(`
         id,
@@ -67,10 +80,17 @@ export async function GET(request: Request) {
           visibility_score
         )
       `)
-      .eq('lead_id', session.lead_id)
       .eq('status', 'complete')
       .order('created_at', { ascending: true })
       .limit(limit)
+
+    if (domainSubscriptionId) {
+      scanRunsQuery = scanRunsQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      scanRunsQuery = scanRunsQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: reports, error } = await scanRunsQuery
 
     if (error) {
       console.error('Error fetching competitor history:', error)
@@ -81,10 +101,17 @@ export async function GET(request: Request) {
     }
 
     // Also get total domain mentions from score_history for each run
-    const { data: scoreHistory } = await supabase
+    let scoreHistoryQuery = supabase
       .from('score_history')
       .select('run_id, total_mentions')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      scoreHistoryQuery = scoreHistoryQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      scoreHistoryQuery = scoreHistoryQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: scoreHistory } = await scoreHistoryQuery
 
     const mentionsByRun = new Map<string, number | null>(
       (scoreHistory || []).map((s: { run_id: string; total_mentions: number | null }) => [s.run_id, s.total_mentions])
@@ -129,7 +156,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       snapshots,
       hasHistory: snapshots.length > 0,
-      domain: lead.domain,
+      domain,
       topCompetitors,
     })
   } catch (error) {

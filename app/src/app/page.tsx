@@ -1,6 +1,6 @@
 import { Ghost } from '@/components/ghost/Ghost'
 import { FloatingPixels } from '@/components/landing/FloatingPixels'
-import { Platforms, WorksWith } from '@/components/landing/Platforms'
+import { Platforms, WorksWith, Journ3yAttribution } from '@/components/landing/Platforms'
 import { EmailForm } from '@/components/landing/EmailForm'
 import { Footer } from '@/components/landing/Footer'
 import { Nav } from '@/components/nav/Nav'
@@ -53,6 +53,9 @@ export default function Home() {
 
           {/* Works with */}
           <WorksWith />
+
+          {/* JOURN3Y attribution */}
+          <Journ3yAttribution />
         </div>
       </main>
 

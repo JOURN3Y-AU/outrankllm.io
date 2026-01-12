@@ -59,3 +59,35 @@ export function WorksWith() {
     </div>
   )
 }
+
+export function Journ3yAttribution() {
+  return (
+    <div className="flex flex-col items-center" style={{ marginTop: '48px', gap: '1px' }}>
+      <span className="font-mono text-[0.6rem] text-[var(--text-dim)] uppercase tracking-widest">
+        Designed and Developed by JOURN3Y Pty Ltd
+      </span>
+      <a
+        href="https://journ3y.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center opacity-80 hover:opacity-100 transition-opacity"
+      >
+        <Image
+          src="/images/JOURN3Y_SQUARE_PNG.png"
+          alt="JOURN3Y"
+          width={21}
+          height={21}
+          className="object-contain"
+        />
+        <Image
+          src="/images/JOURN3Y_WHITE LOGO_PNG.png"
+          alt="JOURN3Y Pty Ltd"
+          width={125}
+          height={35}
+          className="object-contain"
+          style={{ marginLeft: '-16px' }}
+        />
+      </a>
+    </div>
+  )
+}

@@ -25,20 +25,26 @@ export async function PATCH(
       )
     }
 
-    // Verify ownership
-    const { data: existing, error: fetchError } = await supabase
+    const body = await request.json()
+    const { is_active, domain_subscription_id } = body
+
+    // Verify ownership with domain isolation
+    let ownershipQuery = supabase
       .from('subscriber_competitors')
       .select('*')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domain_subscription_id) {
+      ownershipQuery = ownershipQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      ownershipQuery = ownershipQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: existing, error: fetchError } = await ownershipQuery.single()
 
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Competitor not found' }, { status: 404 })
     }
-
-    const body = await request.json()
-    const { is_active } = body
 
     // Build update object with only provided fields
     const updates: Record<string, unknown> = {}
@@ -54,14 +60,19 @@ export async function PATCH(
       )
     }
 
-    // Update the competitor
-    const { data: competitor, error: updateError } = await supabase
+    // Update the competitor with domain isolation
+    let updateQuery = supabase
       .from('subscriber_competitors')
       .update(updates)
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .select()
-      .single()
+
+    if (domain_subscription_id) {
+      updateQuery = updateQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      updateQuery = updateQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: competitor, error: updateError } = await updateQuery.select().single()
 
     if (updateError) {
       console.error('Error updating competitor:', updateError)
@@ -106,13 +117,23 @@ export async function DELETE(
       )
     }
 
-    // Verify ownership and check source
-    const { data: existing, error: fetchError } = await supabase
+    // Parse query params for domain isolation
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Verify ownership and check source with domain isolation
+    let ownershipQuery = supabase
       .from('subscriber_competitors')
       .select('id, source')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domainSubscriptionId) {
+      ownershipQuery = ownershipQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      ownershipQuery = ownershipQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: existing, error: fetchError } = await ownershipQuery.single()
 
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Competitor not found' }, { status: 404 })
@@ -127,12 +148,19 @@ export async function DELETE(
       )
     }
 
-    // Delete the competitor
-    const { error: deleteError } = await supabase
+    // Delete the competitor with domain isolation
+    let deleteQuery = supabase
       .from('subscriber_competitors')
       .delete()
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      deleteQuery = deleteQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      deleteQuery = deleteQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { error: deleteError } = await deleteQuery
 
     if (deleteError) {
       console.error('Error deleting competitor:', deleteError)

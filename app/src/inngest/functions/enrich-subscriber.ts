@@ -48,10 +48,10 @@ export const enrichSubscriber = inngest.createFunction(
   },
   { event: "subscriber/enrich" },
   async ({ event, step }) => {
-    const { leadId, scanRunId } = event.data
+    const { leadId, scanRunId, domainSubscriptionId } = event.data
     const startTime = Date.now()
 
-    log.info(scanRunId, `Starting enrichment for lead ${leadId}`)
+    log.info(scanRunId, `Starting enrichment for lead ${leadId}${domainSubscriptionId ? ` (domain_subscription: ${domainSubscriptionId})` : ''}`)
 
     // Step 1: Mark enrichment as processing and get scan data
     const scanData = await step.run("setup-enrichment", async () => {
@@ -90,10 +90,17 @@ export const enrichSubscriber = inngest.createFunction(
 
       // Get competitors to compare against
       // First try subscriber_competitors table (for tracked competitors)
-      const { data: subscriberCompetitors } = await supabase
+      let competitorsQuery = supabase
         .from("subscriber_competitors")
         .select("name")
-        .eq("lead_id", leadId)
+
+      if (domainSubscriptionId) {
+        competitorsQuery = competitorsQuery.eq("domain_subscription_id", domainSubscriptionId)
+      } else {
+        competitorsQuery = competitorsQuery.eq("lead_id", leadId)
+      }
+
+      const { data: subscriberCompetitors } = await competitorsQuery
         .eq("is_active", true)
         .limit(5)
 
@@ -332,10 +339,17 @@ export const enrichSubscriber = inngest.createFunction(
 
         // Get previously completed action titles to pass to Claude
         // This tells Claude not to suggest similar actions again
-        const { data: previouslyCompleted } = await supabase
+        let historyQuery = supabase
           .from("action_items_history")
           .select("title")
-          .eq("lead_id", leadId)
+
+        if (domainSubscriptionId) {
+          historyQuery = historyQuery.eq("domain_subscription_id", domainSubscriptionId)
+        } else {
+          historyQuery = historyQuery.eq("lead_id", leadId)
+        }
+
+        const { data: previouslyCompleted } = await historyQuery
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const completedActionTitles = (previouslyCompleted || []).map((h: any) => h.title as string)
@@ -378,12 +392,18 @@ export const enrichSubscriber = inngest.createFunction(
         const generatedPlan = await generateActionPlan(actionPlanInput, scanRunId)
 
         // Archive any existing completed/dismissed actions before saving new ones
-        // First get the existing plan for this lead
-        const { data: existingPlan } = await supabase
+        // First get the existing plan for this domain subscription or lead
+        let existingPlanQuery = supabase
           .from("action_plans")
           .select("id")
-          .eq("lead_id", leadId)
-          .single()
+
+        if (domainSubscriptionId) {
+          existingPlanQuery = existingPlanQuery.eq("domain_subscription_id", domainSubscriptionId)
+        } else {
+          existingPlanQuery = existingPlanQuery.eq("lead_id", leadId)
+        }
+
+        const { data: existingPlan } = await existingPlanQuery.single()
 
         let existingActions: { id: string; title: string; description: string; category: string | null; status: string }[] | null = null
         if (existingPlan) {
@@ -400,6 +420,7 @@ export const enrichSubscriber = inngest.createFunction(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const historyInserts = existingActions.map((a: any) => ({
             lead_id: leadId,
+            domain_subscription_id: domainSubscriptionId || null,
             original_action_id: a.id,
             title: a.title,
             description: a.description,
@@ -411,14 +432,21 @@ export const enrichSubscriber = inngest.createFunction(
           log.info(scanRunId, `Archived ${historyInserts.length} completed actions to history`)
         }
 
-        // Delete existing action plan for this lead (will recreate fresh)
-        await supabase.from("action_plans").delete().eq("lead_id", leadId)
+        // Delete existing action plan for this domain subscription or lead (will recreate fresh)
+        let deletePlanQuery = supabase.from("action_plans").delete()
+        if (domainSubscriptionId) {
+          deletePlanQuery = deletePlanQuery.eq("domain_subscription_id", domainSubscriptionId)
+        } else {
+          deletePlanQuery = deletePlanQuery.eq("lead_id", leadId)
+        }
+        await deletePlanQuery
 
         // Create new action plan
         const { data: planData, error: planError } = await supabase
           .from("action_plans")
           .insert({
             lead_id: leadId,
+            domain_subscription_id: domainSubscriptionId || null,
             run_id: scanRunId,
             executive_summary: generatedPlan.executiveSummary,
             page_edits: generatedPlan.pageEdits,
@@ -545,10 +573,17 @@ export const enrichSubscriber = inngest.createFunction(
 
         // Get previously completed PRD task titles to pass to Claude
         // This tells Claude not to suggest similar tasks again
-        const { data: previouslyCompletedTasks } = await supabase
+        let prdHistoryQuery = supabase
           .from("prd_tasks_history")
           .select("title")
-          .eq("lead_id", leadId)
+
+        if (domainSubscriptionId) {
+          prdHistoryQuery = prdHistoryQuery.eq("domain_subscription_id", domainSubscriptionId)
+        } else {
+          prdHistoryQuery = prdHistoryQuery.eq("lead_id", leadId)
+        }
+
+        const { data: previouslyCompletedTasks } = await prdHistoryQuery
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const completedPrdTaskTitles = (previouslyCompletedTasks || []).map((h: any) => h.title as string)
@@ -612,6 +647,7 @@ export const enrichSubscriber = inngest.createFunction(
           .from("prd_documents")
           .insert({
             lead_id: leadId,
+            domain_subscription_id: domainSubscriptionId || null,
             run_id: scanRunId,
             title: generatedPrd.title,
             overview: generatedPrd.overview,

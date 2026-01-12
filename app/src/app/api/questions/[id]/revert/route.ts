@@ -26,7 +26,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { version } = body
+    const { version, domain_subscription_id } = body
 
     if (typeof version !== 'number') {
       return NextResponse.json(
@@ -35,13 +35,19 @@ export async function POST(
       )
     }
 
-    // Verify the question belongs to this user
-    const { data: question, error: questionError } = await supabase
+    // Verify the question belongs to this user with domain isolation
+    let ownershipQuery = supabase
       .from('subscriber_questions')
       .select('*')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domain_subscription_id) {
+      ownershipQuery = ownershipQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      ownershipQuery = ownershipQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: question, error: questionError } = await ownershipQuery.single()
 
     if (questionError || !question) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 })
@@ -62,15 +68,20 @@ export async function POST(
       )
     }
 
-    // Update the question to the historical version
+    // Update the question to the historical version with domain isolation
     // This will trigger the history creation for the current version
-    const { data: updatedQuestion, error: updateError } = await supabase
+    let updateQuery = supabase
       .from('subscriber_questions')
       .update({ prompt_text: historyEntry.prompt_text })
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .select()
-      .single()
+
+    if (domain_subscription_id) {
+      updateQuery = updateQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      updateQuery = updateQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: updatedQuestion, error: updateError } = await updateQuery.select().single()
 
     if (updateError) {
       console.error('Error reverting question:', updateError)

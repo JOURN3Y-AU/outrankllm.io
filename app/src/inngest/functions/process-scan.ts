@@ -42,7 +42,7 @@ export const processScan = inngest.createFunction(
   },
   { event: "scan/process" },
   async ({ event, step }) => {
-    const { domain, email, verificationToken, skipEmail } = event.data
+    const { domain, email, verificationToken, skipEmail, domainSubscriptionId } = event.data
     const startTime = Date.now()
 
     // Step 1: Setup - resolve leadId and create or get scan run
@@ -69,23 +69,35 @@ export const processScan = inngest.createFunction(
       }
 
       if (event.data.scanId) {
-        // Update existing scan status
+        // Update existing scan status (and link to domain_subscription if provided)
+        const updateData: Record<string, unknown> = {
+          status: "crawling",
+          progress: 5,
+          started_at: new Date().toISOString(),
+        }
+        if (domainSubscriptionId) {
+          updateData.domain_subscription_id = domainSubscriptionId
+        }
         await supabase
           .from("scan_runs")
-          .update({ status: "crawling", progress: 5, started_at: new Date().toISOString() })
+          .update(updateData)
           .eq("id", event.data.scanId)
         return { scanId: event.data.scanId, leadId: resolvedLeadId }
       }
 
       // Create new scan run (for weekly cron scans or manual triggers)
+      const insertData: Record<string, unknown> = {
+        lead_id: resolvedLeadId,
+        status: "crawling",
+        progress: 5,
+        started_at: new Date().toISOString(),
+      }
+      if (domainSubscriptionId) {
+        insertData.domain_subscription_id = domainSubscriptionId
+      }
       const { data, error } = await supabase
         .from("scan_runs")
-        .insert({
-          lead_id: resolvedLeadId,
-          status: "crawling",
-          progress: 5,
-          started_at: new Date().toISOString(),
-        })
+        .insert(insertData)
         .select("id")
         .single()
 
@@ -210,11 +222,18 @@ export const processScan = inngest.createFunction(
       const userTier = await getUserTier(leadId)
 
       if (userTier !== "free") {
-        // Check for existing subscriber questions
-        const { data: subscriberQuestions } = await supabase
+        // Check for existing subscriber questions - use domain_subscription_id if available
+        let questionsQuery = supabase
           .from("subscriber_questions")
           .select("id, prompt_text, category")
-          .eq("lead_id", leadId)
+
+        if (domainSubscriptionId) {
+          questionsQuery = questionsQuery.eq("domain_subscription_id", domainSubscriptionId)
+        } else {
+          questionsQuery = questionsQuery.eq("lead_id", leadId)
+        }
+
+        const { data: subscriberQuestions } = await questionsQuery
           .eq("is_active", true)
           .eq("is_archived", false)
           .order("sort_order", { ascending: true })
@@ -293,16 +312,25 @@ export const processScan = inngest.createFunction(
 
           // Seed subscriber_questions for first-time subscribers
           if (userTier !== "free") {
-            const { count } = await supabase
+            // Check for existing questions - use domain_subscription_id if available
+            let countQuery = supabase
               .from("subscriber_questions")
               .select("id", { count: "exact", head: true })
-              .eq("lead_id", leadId)
+
+            if (domainSubscriptionId) {
+              countQuery = countQuery.eq("domain_subscription_id", domainSubscriptionId)
+            } else {
+              countQuery = countQuery.eq("lead_id", leadId)
+            }
+
+            const { count } = await countQuery
 
             if (!count || count === 0) {
               log.info(scanId, "Seeding subscriber questions for first-time subscriber")
               await supabase.from("subscriber_questions").insert(
                 insertedPrompts.map((p: { id: string; prompt_text: string; category: string }, index: number) => ({
                   lead_id: leadId,
+                  domain_subscription_id: domainSubscriptionId || null,
                   prompt_text: p.prompt_text,
                   category: p.category,
                   source: "ai_generated",
@@ -537,6 +565,7 @@ export const processScan = inngest.createFunction(
         await supabase.from("score_history").upsert(
           {
             lead_id: leadId,
+            domain_subscription_id: domainSubscriptionId || null,
             run_id: scanId,
             visibility_score: scores.overallScore,
             chatgpt_score: scores.platformScores.chatgpt,
@@ -593,6 +622,7 @@ export const processScan = inngest.createFunction(
           data: {
             leadId,
             scanRunId: scanId,
+            domainSubscriptionId: domainSubscriptionId || undefined,
           },
         })
 

@@ -82,6 +82,7 @@ interface ReportData {
   domain: string
   leadId: string
   runId: string
+  domainSubscriptionId: string | null
   isVerified: boolean
   featureFlags: FeatureFlags
   sitemapUsed: boolean
@@ -102,7 +103,9 @@ async function getReport(token: string): Promise<ReportData | null> {
         id,
         created_at,
         enrichment_status,
-        lead:leads(id, email, domain, email_verified, tier)
+        domain_subscription_id,
+        lead:leads(id, email, domain, email_verified, tier),
+        domain_subscription:domain_subscriptions(id, domain)
       )
     `)
     .eq('url_token', token)
@@ -116,10 +119,15 @@ async function getReport(token: string): Promise<ReportData | null> {
   const runId = report.run?.id as string
   const runCreatedAt = report.run?.created_at as string
   const enrichmentStatus = (report.run?.enrichment_status as EnrichmentStatus) || 'not_applicable'
+  const domainSubscriptionId = report.run?.domain_subscription_id as string | null
+  const domainSubscription = report.run?.domain_subscription as { id: string; domain: string } | null
 
   if (!lead) {
     return null
   }
+
+  // Get domain from domain_subscription if available, otherwise fall back to lead.domain
+  const reportDomain = domainSubscription?.domain || lead.domain
 
   // Check verification status
   // 1. Check if email is verified in database
@@ -150,8 +158,21 @@ async function getReport(token: string): Promise<ReportData | null> {
     .order('created_at', { ascending: true })
 
   // For subscribers: fetch their editable subscriber_questions
+  // Use domain_subscription_id for multi-domain isolation
   let subscriberQuestions: { id: string; prompt_text: string; category: string; source: 'ai_generated' | 'user_created' }[] | null = null
-  if (featureFlags.isSubscriber) {
+  if (featureFlags.isSubscriber && domainSubscriptionId) {
+    const { data } = await supabase
+      .from('subscriber_questions')
+      .select('id, prompt_text, category, source')
+      .eq('domain_subscription_id', domainSubscriptionId)
+      .eq('is_active', true)
+      .eq('is_archived', false)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    subscriberQuestions = data as typeof subscriberQuestions
+  } else if (featureFlags.isSubscriber) {
+    // Fallback for legacy data without domain_subscription_id
     const { data } = await supabase
       .from('subscriber_questions')
       .select('id, prompt_text, category, source')
@@ -237,9 +258,10 @@ async function getReport(token: string): Promise<ReportData | null> {
     brandAwareness: brandAwareness as ReportData['brandAwareness'],
     competitiveSummary: report.competitive_summary as ReportData['competitiveSummary'],
     email: lead.email,
-    domain: lead.domain,
+    domain: reportDomain,
     leadId: lead.id,
     runId,
+    domainSubscriptionId,
     isVerified,
     featureFlags,
     sitemapUsed,

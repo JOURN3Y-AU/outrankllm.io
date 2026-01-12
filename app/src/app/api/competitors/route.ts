@@ -18,17 +18,30 @@ const MAX_COMPETITORS = 5 // Cost control: limit tracked competitors
 /**
  * GET /api/competitors
  * List all competitors for the current user
+ * Pass domain_subscription_id query param for multi-domain isolation
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireSession()
     const supabase = createServiceClient()
 
-    // Get competitors for this lead
-    const { data: competitors, error } = await supabase
+    // Parse domain_subscription_id from query params
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Get competitors - use domain_subscription_id if provided for multi-domain isolation
+    let query = supabase
       .from('subscriber_competitors')
       .select('*')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      query = query.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      // Legacy fallback
+      query = query.eq('lead_id', session.lead_id)
+    }
+
+    const { data: competitors, error } = await query
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -82,12 +95,22 @@ export async function POST(request: Request) {
       )
     }
 
+    const body = await request.json()
+    const { name, source = 'user_added', domain_subscription_id } = body
+
     // Check current active competitor count (only count active ones toward limit)
-    const { count, error: countError } = await supabase
+    let countQuery = supabase
       .from('subscriber_competitors')
       .select('*', { count: 'exact', head: true })
-      .eq('lead_id', session.lead_id)
       .eq('is_active', true)
+
+    if (domain_subscription_id) {
+      countQuery = countQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      countQuery = countQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { count, error: countError } = await countQuery
 
     if (countError) {
       console.error('Error counting competitors:', countError)
@@ -108,9 +131,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json()
-    const { name, source = 'user_added' } = body
-
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json(
         { error: 'Competitor name is required' },
@@ -125,11 +145,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create the competitor
+    // Create the competitor with domain_subscription_id for multi-domain isolation
     const { data: competitor, error: insertError } = await supabase
       .from('subscriber_competitors')
       .insert({
         lead_id: session.lead_id,
+        domain_subscription_id: domain_subscription_id || null,
         name: name.trim(),
         source: source === 'detected' ? 'detected' : 'user_added',
       })

@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CheckCircle, Loader2, ArrowRight, Sparkles, Lock } from 'lucide-react'
+import { CheckCircle, Loader2, ArrowRight, Sparkles, Lock, Globe } from 'lucide-react'
 import { Nav } from '@/components/nav/Nav'
 import { SetPasswordForm } from '@/components/auth/SetPasswordForm'
 
@@ -12,6 +12,8 @@ type PageStatus = 'loading' | 'set-password' | 'complete' | 'error'
 interface VerificationData {
   email: string
   tier: string
+  isNewDomain: boolean
+  domain: string | null
 }
 
 function SuccessContent() {
@@ -56,6 +58,8 @@ function SuccessContent() {
         setVerificationData({
           email: data.email,
           tier: data.tier,
+          isNewDomain: data.isNewDomain,
+          domain: data.domain,
         })
 
         if (data.hasPassword) {
@@ -152,7 +156,64 @@ function SuccessContent() {
     )
   }
 
-  // Complete state
+  // Complete state - different content for domain additions vs first-time signup
+  const isNewDomain = verificationData?.isNewDomain
+  const domain = verificationData?.domain
+
+  if (isNewDomain && domain) {
+    // Domain addition success
+    return (
+      <div className="text-center">
+        <div
+          className="w-16 h-16 rounded-full bg-[var(--green)]/10 flex items-center justify-center"
+          style={{ margin: '0 auto 24px' }}
+        >
+          <Globe className="w-8 h-8 text-[var(--green)]" />
+        </div>
+
+        <h1 className="text-3xl font-medium" style={{ marginBottom: '12px' }}>
+          Domain Added
+        </h1>
+        <p className="text-[var(--text-mid)] text-lg" style={{ marginBottom: '32px' }}>
+          <span className="font-mono text-[var(--text)]">{domain}</span> is now being monitored.
+        </p>
+
+        <div
+          className="border border-[var(--border)] bg-[var(--surface)]"
+          style={{ padding: '24px', marginBottom: '32px' }}
+        >
+          <h2 className="font-mono text-sm text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '16px' }}>
+            What happens next
+          </h2>
+          <ul className="text-left" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <li className="flex items-center gap-3 text-sm">
+              <Sparkles className="w-4 h-4 text-[var(--green)]" />
+              <span>Initial scan is starting now</span>
+            </li>
+            <li className="flex items-center gap-3 text-sm">
+              <Sparkles className="w-4 h-4 text-[var(--green)]" />
+              <span>Results ready in ~5 minutes</span>
+            </li>
+            <li className="flex items-center gap-3 text-sm">
+              <Sparkles className="w-4 h-4 text-[var(--green)]" />
+              <span>Weekly monitoring enabled</span>
+            </li>
+          </ul>
+        </div>
+
+        <Link
+          href="/dashboard"
+          className="form-button inline-flex items-center justify-center gap-2"
+          style={{ padding: '16px 28px' }}
+        >
+          Go to Dashboard
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+    )
+  }
+
+  // First-time signup success
   return (
     <div className="text-center">
       <div

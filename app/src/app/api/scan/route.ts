@@ -137,11 +137,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if there's an active domain subscription for this lead+domain
+    // This ensures proper data isolation for multi-domain subscribers
+    let domainSubscriptionId: string | null = null
+    const { data: domainSub } = await supabase
+      .from('domain_subscriptions')
+      .select('id')
+      .eq('lead_id', lead.id)
+      .eq('domain', cleanDomain)
+      .eq('status', 'active')
+      .single()
+
+    if (domainSub) {
+      domainSubscriptionId = domainSub.id
+    }
+
     // Create scan run
     const { data: scanRun, error: scanError } = await supabase
       .from('scan_runs')
       .insert({
         lead_id: lead.id,
+        domain_subscription_id: domainSubscriptionId,
         status: 'pending',
         progress: 0,
       })
@@ -193,6 +209,7 @@ export async function POST(request: NextRequest) {
         email: normalizedEmail,
         verificationToken, // Pass token for email sending
         leadId: lead.id,
+        domainSubscriptionId: domainSubscriptionId || undefined, // For multi-domain isolation
       },
     })
 

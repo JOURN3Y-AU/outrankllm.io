@@ -15,13 +15,23 @@ export async function GET(
     const supabase = createServiceClient()
     const { id } = await params
 
-    // First verify the question belongs to this user
-    const { data: question, error: questionError } = await supabase
+    // Parse query params for domain isolation
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // First verify the question belongs to this user with domain isolation
+    let query = supabase
       .from('subscriber_questions')
       .select('id, prompt_text, created_at')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domainSubscriptionId) {
+      query = query.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      query = query.eq('lead_id', session.lead_id)
+    }
+
+    const { data: question, error: questionError } = await query.single()
 
     if (questionError || !question) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 })

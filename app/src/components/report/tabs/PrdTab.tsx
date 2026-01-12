@@ -74,10 +74,11 @@ interface PrdHistoryItem {
 
 interface PrdTabProps {
   runId?: string
+  domainSubscriptionId?: string | null
   enrichmentStatus?: EnrichmentStatus
 }
 
-export function PrdTab({ runId, enrichmentStatus = 'not_applicable' }: PrdTabProps) {
+export function PrdTab({ runId, domainSubscriptionId, enrichmentStatus = 'not_applicable' }: PrdTabProps) {
   const [prd, setPrd] = useState<PrdDocument | null>(null)
   const [history, setHistory] = useState<PrdHistoryItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -94,13 +95,16 @@ export function PrdTab({ runId, enrichmentStatus = 'not_applicable' }: PrdTabPro
 
   useEffect(() => {
     fetchPrd()
-  }, [runId])
+  }, [runId, domainSubscriptionId])
 
   const fetchPrd = async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const url = runId ? `/api/prd?run_id=${runId}` : '/api/prd'
+      const params = new URLSearchParams()
+      if (runId) params.set('run_id', runId)
+      if (domainSubscriptionId) params.set('domain_subscription_id', domainSubscriptionId)
+      const url = `/api/prd?${params}`
       const res = await fetch(url)
       if (!res.ok) {
         const data = await res.json()

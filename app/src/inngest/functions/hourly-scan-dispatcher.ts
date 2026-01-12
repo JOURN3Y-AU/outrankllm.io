@@ -1,23 +1,29 @@
 import { inngest } from "../client"
 import { createServiceClient } from "@/lib/supabase/server"
 
-interface Subscriber {
+interface DomainSubscriptionSchedule {
   id: string
-  email: string
+  lead_id: string
   domain: string
   scan_schedule_day: number | null
   scan_schedule_hour: number | null
   scan_timezone: string | null
+  leads: {
+    email: string
+  } | null
 }
 
 /**
  * Hourly Scan Dispatcher
  *
- * Runs every hour and dispatches scan/process events for subscribers
+ * Runs every hour and dispatches scan/process events for domain subscriptions
  * whose local time matches their configured schedule.
  *
  * This approach allows users in different timezones to have their
  * weekly scans run at their preferred local time.
+ *
+ * Now queries domain_subscriptions table instead of leads, to support
+ * multiple domains per user with independent schedules.
  */
 export const hourlyScanDispatcher = inngest.createFunction(
   {
@@ -28,27 +34,37 @@ export const hourlyScanDispatcher = inngest.createFunction(
   async ({ step }) => {
     const now = new Date()
 
-    // Find all subscribers whose local time matches their schedule
-    const subscribersToScan = await step.run("find-due-subscribers", async () => {
+    // Find all active domain subscriptions whose local time matches their schedule
+    const subscriptionsToScan = await step.run("find-due-subscriptions", async () => {
       const supabase = createServiceClient()
 
-      // Query subscribers with scan schedules
-      const { data: subscribers, error } = await supabase
-        .from("leads")
-        .select("id, email, domain, scan_schedule_day, scan_schedule_hour, scan_timezone")
-        .in("tier", ["starter", "pro", "agency"])
+      // Query active domain subscriptions with their lead's email
+      const { data: subscriptions, error } = await supabase
+        .from("domain_subscriptions")
+        .select(`
+          id,
+          lead_id,
+          domain,
+          scan_schedule_day,
+          scan_schedule_hour,
+          scan_timezone,
+          leads (
+            email
+          )
+        `)
+        .eq("status", "active")
 
       if (error) {
-        console.error("Error fetching subscribers:", error)
+        console.error("Error fetching domain subscriptions:", error)
         return []
       }
 
-      if (!subscribers || subscribers.length === 0) {
+      if (!subscriptions || subscriptions.length === 0) {
         return []
       }
 
       // Filter to those whose local time matches their schedule
-      return subscribers.filter((sub: Subscriber) => {
+      return subscriptions.filter((sub: DomainSubscriptionSchedule) => {
         // Use defaults if not set
         const scheduleDay = sub.scan_schedule_day ?? 1 // Default: Monday
         const scheduleHour = sub.scan_schedule_hour ?? 9 // Default: 9am
@@ -59,20 +75,21 @@ export const hourlyScanDispatcher = inngest.createFunction(
       })
     })
 
-    if (subscribersToScan.length === 0) {
+    if (subscriptionsToScan.length === 0) {
       return { queued: 0, message: "No scans due this hour" }
     }
 
-    // Queue scans for matching subscribers
+    // Queue scans for matching subscriptions
     await step.run("queue-scans", async () => {
       await inngest.send(
-        subscribersToScan.map((sub: Subscriber) => ({
+        subscriptionsToScan.map((sub: DomainSubscriptionSchedule) => ({
           name: "scan/process" as const,
           data: {
             scanId: null, // Will be created in first step of process-scan
             domain: sub.domain,
-            email: sub.email,
-            leadId: sub.id,
+            email: sub.leads?.email || "",
+            leadId: sub.lead_id,
+            domainSubscriptionId: sub.id, // NEW: Link to domain subscription
             skipEmail: false, // Send scan complete emails
           },
         }))
@@ -80,8 +97,11 @@ export const hourlyScanDispatcher = inngest.createFunction(
     })
 
     return {
-      queued: subscribersToScan.length,
-      subscribers: subscribersToScan.map((s: Subscriber) => s.email),
+      queued: subscriptionsToScan.length,
+      subscriptions: subscriptionsToScan.map((s: DomainSubscriptionSchedule) => ({
+        domain: s.domain,
+        email: s.leads?.email,
+      })),
     }
   }
 )

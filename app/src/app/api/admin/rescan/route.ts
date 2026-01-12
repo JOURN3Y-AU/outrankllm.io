@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { reportToken, email, domain, skipEmail = false } = body
+    const { reportToken, email, domain, skipEmail = false, domainSubscriptionId } = body
 
     if (!reportToken && !email) {
       return NextResponse.json(
@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
       .from('scan_runs')
       .insert({
         lead_id: leadId,
+        domain_subscription_id: domainSubscriptionId || null,
         status: 'pending',
         progress: 0,
       })
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
         domain: targetDomain,
         email: targetEmail,
         leadId: leadId,
+        domainSubscriptionId: domainSubscriptionId || undefined,
         skipEmail, // Optionally skip email (defaults to false - subscribers get scan complete emails)
       },
     })

@@ -77,12 +77,20 @@ export async function GET(request: Request) {
     // Parse query params
     const { searchParams } = new URL(request.url)
     const runId = searchParams.get('run_id')
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
 
     // Get the action plan with new fields
+    // Use domain_subscription_id if provided for multi-domain isolation
     let planQuery = supabase
       .from('action_plans')
       .select('*, page_edits, keyword_map, key_takeaways')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      planQuery = planQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      // Legacy fallback
+      planQuery = planQuery.eq('lead_id', session.lead_id)
+    }
 
     if (runId) {
       planQuery = planQuery.eq('run_id', runId)
@@ -117,10 +125,18 @@ export async function GET(request: Request) {
     }
 
     // Get completed action history
-    const { data: history, error: historyError } = await supabase
+    // Use domain_subscription_id if provided for multi-domain isolation
+    let historyQuery = supabase
       .from('action_items_history')
       .select('id, title, description, category, completed_at')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      historyQuery = historyQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      historyQuery = historyQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: history, error: historyError } = await historyQuery
       .order('completed_at', { ascending: false })
 
     if (historyError) {

@@ -208,6 +208,7 @@ interface ReportData {
   domain: string
   leadId: string
   runId: string
+  domainSubscriptionId: string | null
   isVerified: boolean
   featureFlags: FeatureFlags
   sitemapUsed: boolean
@@ -219,7 +220,7 @@ interface ReportClientProps {
 }
 
 export function ReportClient({ data, showLockedModal = false }: ReportClientProps) {
-  const { report, analysis, crawlData, responses, prompts, subscriberQuestions, brandAwareness, competitiveSummary, email, domain, runId, isVerified, featureFlags } = data
+  const { report, analysis, crawlData, responses, prompts, subscriberQuestions, brandAwareness, competitiveSummary, email, domain, runId, domainSubscriptionId, isVerified, featureFlags } = data
   const [showModal, setShowModal] = useState(false)
   const [showLocked, setShowLocked] = useState(showLockedModal)
   const isSubscriber = featureFlags.isSubscriber
@@ -367,6 +368,7 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
             platformScores={report.platform_scores}
             competitors={report.top_competitors}
             domain={domain}
+            domainSubscriptionId={domainSubscriptionId}
             onUpgradeClick={handleUpgradeClick}
             isSubscriber={isSubscriber}
             tier={featureFlags.tier}

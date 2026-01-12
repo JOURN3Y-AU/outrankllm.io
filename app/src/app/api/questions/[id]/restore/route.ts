@@ -25,12 +25,23 @@ export async function POST(
       )
     }
 
-    // Check if restoring would exceed the limit
-    const { count, error: countError } = await supabase
+    // Parse body for domain isolation
+    const body = await request.json().catch(() => ({}))
+    const { domain_subscription_id } = body
+
+    // Check if restoring would exceed the limit with domain isolation
+    let countQuery = supabase
       .from('subscriber_questions')
       .select('*', { count: 'exact', head: true })
-      .eq('lead_id', session.lead_id)
       .eq('is_archived', false)
+
+    if (domain_subscription_id) {
+      countQuery = countQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      countQuery = countQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { count, error: countError } = await countQuery
 
     if (countError) {
       console.error('Error counting questions:', countError)
@@ -51,14 +62,20 @@ export async function POST(
       )
     }
 
-    // Verify the question exists and belongs to this user
-    const { data: existing, error: fetchError } = await supabase
+    // Verify the question exists and belongs to this user with domain isolation
+    let ownershipQuery = supabase
       .from('subscriber_questions')
       .select('*')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
       .eq('is_archived', true)
-      .single()
+
+    if (domain_subscription_id) {
+      ownershipQuery = ownershipQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      ownershipQuery = ownershipQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: existing, error: fetchError } = await ownershipQuery.single()
 
     if (fetchError || !existing) {
       return NextResponse.json(
@@ -67,14 +84,19 @@ export async function POST(
       )
     }
 
-    // Restore the question
-    const { data: question, error: restoreError } = await supabase
+    // Restore the question with domain isolation
+    let restoreQuery = supabase
       .from('subscriber_questions')
       .update({ is_archived: false, is_active: true })
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .select()
-      .single()
+
+    if (domain_subscription_id) {
+      restoreQuery = restoreQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      restoreQuery = restoreQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: question, error: restoreError } = await restoreQuery.select().single()
 
     if (restoreError) {
       console.error('Error restoring question:', restoreError)

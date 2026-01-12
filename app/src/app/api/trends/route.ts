@@ -47,12 +47,22 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 12 // Default to last 12 scans
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
 
-    // Fetch score history for this lead
-    const { data: snapshots, error } = await supabase
+    // Fetch score history - use domain_subscription_id if provided for multi-domain isolation
+    let query = supabase
       .from('score_history')
       .select('*')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      // Multi-domain: filter by specific domain subscription
+      query = query.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      // Legacy fallback: filter by lead_id
+      query = query.eq('lead_id', session.lead_id)
+    }
+
+    const { data: snapshots, error } = await query
       .order('recorded_at', { ascending: true })
       .limit(limit)
 
@@ -116,10 +126,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify the run belongs to this user
+    // Verify the run belongs to this user and get domain_subscription_id
     const { data: run, error: runError } = await supabase
       .from('scan_runs')
-      .select('lead_id')
+      .select('lead_id, domain_subscription_id')
       .eq('id', run_id)
       .single()
 
@@ -137,11 +147,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // Insert or update score snapshot
+    // Insert or update score snapshot with domain_subscription_id for multi-domain isolation
     const { data: snapshot, error: insertError } = await supabase
       .from('score_history')
       .upsert({
         lead_id: session.lead_id,
+        domain_subscription_id: run.domain_subscription_id,
         run_id,
         visibility_score,
         chatgpt_score: chatgpt_score ?? null,

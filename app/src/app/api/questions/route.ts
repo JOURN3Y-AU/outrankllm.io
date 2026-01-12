@@ -21,18 +21,31 @@ export interface SubscriberQuestion {
 /**
  * GET /api/questions
  * List all questions for the current user (both custom and original scan prompts)
+ * Pass domain_subscription_id query param for multi-domain isolation
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireSession()
     const supabase = createServiceClient()
 
-    // Get custom questions for this lead
-    const { data: customQuestions, error: customError } = await supabase
+    // Parse domain_subscription_id from query params
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Get custom questions - use domain_subscription_id if provided for multi-domain isolation
+    let query = supabase
       .from('subscriber_questions')
       .select('*')
-      .eq('lead_id', session.lead_id)
       .eq('is_archived', false)
+
+    if (domainSubscriptionId) {
+      query = query.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      // Legacy fallback
+      query = query.eq('lead_id', session.lead_id)
+    }
+
+    const { data: customQuestions, error: customError } = await query
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
 
@@ -84,12 +97,22 @@ export async function POST(request: Request) {
       )
     }
 
+    const body = await request.json()
+    const { prompt_text, category = 'custom', domain_subscription_id } = body
+
     // Check current question count
-    const { count, error: countError } = await supabase
+    let countQuery = supabase
       .from('subscriber_questions')
       .select('*', { count: 'exact', head: true })
-      .eq('lead_id', session.lead_id)
       .eq('is_archived', false)
+
+    if (domain_subscription_id) {
+      countQuery = countQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      countQuery = countQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { count, error: countError } = await countQuery
 
     if (countError) {
       console.error('Error counting questions:', countError)
@@ -110,9 +133,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json()
-    const { prompt_text, category = 'custom' } = body
-
     if (!prompt_text || typeof prompt_text !== 'string' || prompt_text.trim().length === 0) {
       return NextResponse.json(
         { error: 'Question text is required' },
@@ -127,22 +147,30 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get the highest sort_order for this lead
-    const { data: maxOrderData } = await supabase
+    // Get the highest sort_order for this domain subscription or lead
+    let sortQuery = supabase
       .from('subscriber_questions')
       .select('sort_order')
-      .eq('lead_id', session.lead_id)
+
+    if (domain_subscription_id) {
+      sortQuery = sortQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      sortQuery = sortQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: maxOrderData } = await sortQuery
       .order('sort_order', { ascending: false })
       .limit(1)
       .single()
 
     const nextSortOrder = (maxOrderData?.sort_order || 0) + 1
 
-    // Create the question (user-created)
+    // Create the question (user-created) with domain_subscription_id for multi-domain isolation
     const { data: question, error: insertError } = await supabase
       .from('subscriber_questions')
       .insert({
         lead_id: session.lead_id,
+        domain_subscription_id: domain_subscription_id || null,
         prompt_text: prompt_text.trim(),
         category,
         source: 'user_created',

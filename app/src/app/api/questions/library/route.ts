@@ -34,7 +34,7 @@ interface SubscriberQuestionRow {
  * Get the full question library for a user, grouped by category
  * Falls back to scan_prompts if subscriber_questions table doesn't exist or is empty
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireSession()
     const supabase = createServiceClient()
@@ -48,15 +48,26 @@ export async function GET() {
       )
     }
 
-    // Try to get subscriber questions first
+    // Parse query params for domain isolation
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Try to get subscriber questions first with domain isolation
     let questions: SubscriberQuestionRow[] = []
     let usesScanPrompts = false
 
-    const result = await supabase
+    let questionsQuery = supabase
       .from('subscriber_questions')
       .select('*')
-      .eq('lead_id', session.lead_id)
       .order('created_at', { ascending: false })
+
+    if (domainSubscriptionId) {
+      questionsQuery = questionsQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      questionsQuery = questionsQuery.eq('lead_id', session.lead_id)
+    }
+
+    const result = await questionsQuery
 
     // If subscriber_questions table exists and has data, use it
     if (!result.error && result.data && result.data.length > 0) {
@@ -65,14 +76,20 @@ export async function GET() {
       // Fall back to scan_prompts from the user's latest run
       usesScanPrompts = true
 
-      // Get the user's latest run
-      const { data: latestRun } = await supabase
+      // Get the user's latest run with domain isolation
+      let latestRunQuery = supabase
         .from('scan_runs')
         .select('id')
-        .eq('lead_id', session.lead_id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+
+      if (domainSubscriptionId) {
+        latestRunQuery = latestRunQuery.eq('domain_subscription_id', domainSubscriptionId)
+      } else {
+        latestRunQuery = latestRunQuery.eq('lead_id', session.lead_id)
+      }
+
+      const { data: latestRun } = await latestRunQuery.single()
 
       if (latestRun) {
         // Get prompts from that run
@@ -172,7 +189,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { prompts, runId } = body
+    const { prompts, runId, domain_subscription_id } = body
 
     if (!prompts || !Array.isArray(prompts)) {
       return NextResponse.json(
@@ -181,11 +198,18 @@ export async function POST(request: Request) {
       )
     }
 
-    // Check if user already has questions seeded
-    const { count: existingCount } = await supabase
+    // Check if user already has questions seeded with domain isolation
+    let existingQuery = supabase
       .from('subscriber_questions')
       .select('id', { count: 'exact', head: true })
-      .eq('lead_id', session.lead_id)
+
+    if (domain_subscription_id) {
+      existingQuery = existingQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      existingQuery = existingQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { count: existingCount } = await existingQuery
 
     if (existingCount && existingCount > 0) {
       return NextResponse.json({
@@ -195,9 +219,10 @@ export async function POST(request: Request) {
       })
     }
 
-    // Seed the questions
+    // Seed the questions with domain isolation
     const questionsToInsert = prompts.map((p: { id: string; prompt_text: string; category: string }, index: number) => ({
       lead_id: session.lead_id,
+      domain_subscription_id: domain_subscription_id || null,
       prompt_text: p.prompt_text,
       category: p.category || 'other',
       source: 'ai_generated',

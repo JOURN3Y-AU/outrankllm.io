@@ -59,12 +59,20 @@ export async function GET(request: Request) {
     // Parse query params
     const { searchParams } = new URL(request.url)
     const runId = searchParams.get('run_id')
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
 
     // Get the PRD document
+    // Use domain_subscription_id if provided for multi-domain isolation
     let prdQuery = supabase
       .from('prd_documents')
       .select('*')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      prdQuery = prdQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      // Legacy fallback
+      prdQuery = prdQuery.eq('lead_id', session.lead_id)
+    }
 
     if (runId) {
       prdQuery = prdQuery.eq('run_id', runId)
@@ -98,10 +106,18 @@ export async function GET(request: Request) {
     }
 
     // Get completed task history
-    const { data: history, error: historyError } = await supabase
+    // Use domain_subscription_id if provided for multi-domain isolation
+    let historyQuery = supabase
       .from('prd_tasks_history')
       .select('id, title, description, section, category, completed_at')
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      historyQuery = historyQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      historyQuery = historyQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: history, error: historyError } = await historyQuery
       .order('completed_at', { ascending: false })
 
     if (historyError) {
@@ -151,19 +167,27 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { run_id, force_regenerate = false } = body
+    const { run_id, force_regenerate = false, domain_subscription_id } = body
 
     // Get run_id if not provided
     let targetRunId = run_id
+    let targetDomainSubscriptionId = domain_subscription_id
     if (!targetRunId) {
-      const { data: latestRun } = await supabase
+      // Build query with domain isolation
+      let latestRunQuery = supabase
         .from('scan_runs')
-        .select('id')
-        .eq('lead_id', session.lead_id)
+        .select('id, domain_subscription_id')
         .eq('status', 'complete')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+
+      if (domain_subscription_id) {
+        latestRunQuery = latestRunQuery.eq('domain_subscription_id', domain_subscription_id)
+      } else {
+        latestRunQuery = latestRunQuery.eq('lead_id', session.lead_id)
+      }
+
+      const { data: latestRun } = await latestRunQuery.single()
 
       if (!latestRun) {
         return NextResponse.json(
@@ -172,6 +196,7 @@ export async function POST(request: Request) {
         )
       }
       targetRunId = latestRun.id
+      targetDomainSubscriptionId = latestRun.domain_subscription_id
     }
 
     // Check if PRD already exists
@@ -286,11 +311,12 @@ export async function POST(request: Request) {
     // Generate PRD using AI
     const generatedPrd = await generatePrd(actionPlanContext, siteContext, targetRunId)
 
-    // Save PRD document
+    // Save PRD document with domain isolation
     const { data: prd, error: prdError } = await supabase
       .from('prd_documents')
       .insert({
         lead_id: session.lead_id,
+        domain_subscription_id: targetDomainSubscriptionId,
         run_id: targetRunId,
         title: generatedPrd.title,
         overview: generatedPrd.overview,
@@ -381,10 +407,10 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Verify PRD ownership
+    // Verify PRD ownership (include domain_subscription_id for history)
     const { data: prd, error: prdError } = await supabase
       .from('prd_documents')
-      .select('id, lead_id, run_id')
+      .select('id, lead_id, run_id, domain_subscription_id')
       .eq('id', prd_id)
       .single()
 
@@ -442,6 +468,7 @@ export async function PUT(request: Request) {
       if (tasks && tasks.length > 0) {
         const historyEntries = tasks.map((task: { id: string; title: string; description: string; section: string; category: string | null }) => ({
           lead_id: session.lead_id,
+          domain_subscription_id: prd.domain_subscription_id,
           original_task_id: task.id,
           title: task.title,
           description: task.description,

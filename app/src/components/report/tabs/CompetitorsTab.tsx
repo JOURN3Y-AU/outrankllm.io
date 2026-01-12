@@ -112,11 +112,13 @@ function HorizontalBarChart({
 function CompetitorManager({
   detectedCompetitors,
   trackedCompetitorNames,
+  domainSubscriptionId,
   isSubscriber,
 }: {
   detectedCompetitors: Competitor[]
   /** Names of competitors that already have positioning data (from brand awareness results) */
   trackedCompetitorNames: string[]
+  domainSubscriptionId?: string | null
   isSubscriber: boolean
 }) {
   const [trackedCompetitors, setTrackedCompetitors] = useState<SubscriberCompetitor[]>([])
@@ -136,7 +138,11 @@ function CompetitorManager({
 
     async function fetchCompetitors() {
       try {
-        const res = await fetch('/api/competitors')
+        const params = new URLSearchParams()
+        if (domainSubscriptionId) {
+          params.set('domain_subscription_id', domainSubscriptionId)
+        }
+        const res = await fetch(`/api/competitors?${params}`)
         if (res.ok) {
           const data = await res.json()
           setTrackedCompetitors(data.competitors || [])
@@ -155,7 +161,7 @@ function CompetitorManager({
     }
 
     fetchCompetitors()
-  }, [isSubscriber])
+  }, [isSubscriber, domainSubscriptionId])
 
   async function toggleCompetitor(id: string, currentActive: boolean) {
     setIsSaving(true)
@@ -220,7 +226,7 @@ function CompetitorManager({
         const res = await fetch('/api/competitors', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), source }),
+          body: JSON.stringify({ name: name.trim(), source, domain_subscription_id: domainSubscriptionId }),
         })
 
         if (res.ok) {
@@ -552,6 +558,7 @@ export function CompetitorsTab({
   competitiveSummary,
   analysis,
   domain,
+  domainSubscriptionId,
   onUpgradeClick,
   isSubscriber = false,
 }: {
@@ -561,6 +568,7 @@ export function CompetitorsTab({
   competitiveSummary?: CompetitiveSummary | null
   analysis?: Analysis | null
   domain: string
+  domainSubscriptionId?: string | null
   onUpgradeClick: () => void
   isSubscriber?: boolean
 }) {
@@ -794,6 +802,7 @@ export function CompetitorsTab({
       <CompetitorManager
         detectedCompetitors={competitors}
         trackedCompetitorNames={competitorNames}
+        domainSubscriptionId={domainSubscriptionId}
         isSubscriber={isSubscriber}
       />
 

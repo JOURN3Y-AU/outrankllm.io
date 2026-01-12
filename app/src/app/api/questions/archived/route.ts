@@ -6,17 +6,29 @@ import { createServiceClient } from '@/lib/supabase/server'
  * GET /api/questions/archived
  * List all archived questions for the current user
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireSession()
     const supabase = createServiceClient()
 
-    const { data: archivedQuestions, error } = await supabase
+    // Parse query params for domain isolation
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Build query with domain isolation
+    let query = supabase
       .from('subscriber_questions')
       .select('*')
-      .eq('lead_id', session.lead_id)
       .eq('is_archived', true)
       .order('updated_at', { ascending: false })
+
+    if (domainSubscriptionId) {
+      query = query.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      query = query.eq('lead_id', session.lead_id)
+    }
+
+    const { data: archivedQuestions, error } = await query
 
     if (error) {
       console.error('Error fetching archived questions:', error)

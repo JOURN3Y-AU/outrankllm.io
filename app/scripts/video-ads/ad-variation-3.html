@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, height=1080">
+  <title>OutrankLLM Ad - Variation 3</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-dark: #0a0a0a;
+      --text-primary: #fafafa;
+      --text-dim: #737373;
+      --accent-green: #22c55e;
+      --accent-gold: #d4a574;
+    }
+
+    body {
+      width: 1080px;
+      height: 1080px;
+      background: var(--bg-dark);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.5;
+    }
+
+    /* Multiple ghost orbs floating */
+    .orbs {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, transparent 70%);
+      animation: orb-float 8s infinite ease-in-out;
+    }
+
+    .orb:nth-child(1) {
+      width: 100px;
+      height: 100px;
+      top: 15%;
+      left: 10%;
+      animation-delay: 0s;
+    }
+
+    .orb:nth-child(2) {
+      width: 60px;
+      height: 60px;
+      top: 25%;
+      right: 15%;
+      animation-delay: -2s;
+    }
+
+    .orb:nth-child(3) {
+      width: 80px;
+      height: 80px;
+      bottom: 20%;
+      left: 20%;
+      animation-delay: -4s;
+    }
+
+    .orb:nth-child(4) {
+      width: 50px;
+      height: 50px;
+      bottom: 30%;
+      right: 10%;
+      animation-delay: -6s;
+    }
+
+    @keyframes orb-float {
+      0%, 100% { transform: translate(0, 0); opacity: 0.3; }
+      25% { transform: translate(20px, -30px); opacity: 0.6; }
+      50% { transform: translate(-10px, -20px); opacity: 0.4; }
+      75% { transform: translate(15px, 10px); opacity: 0.5; }
+    }
+
+    .ghost-container {
+      position: relative;
+      width: 160px;
+      height: 200px;
+      margin-bottom: 40px;
+      animation: ghost-float 3s infinite ease-in-out;
+    }
+
+    .ghost-container img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    @keyframes ghost-float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      25% { transform: translate(4px, -8px) rotate(0.5deg); }
+      50% { transform: translate(-2px, -4px) rotate(-0.5deg); }
+      75% { transform: translate(2px, -10px) rotate(0.3deg); }
+    }
+
+    @keyframes ghost-blink {
+      0%, 90%, 100% { opacity: 0; }
+      92%, 98% { opacity: 1; }
+    }
+
+    @keyframes ghost-blink-inverse {
+      0%, 90%, 100% { opacity: 1; }
+      92%, 98% { opacity: 0; }
+    }
+
+    @keyframes ghost-fade {
+      0%, 70%, 100% { opacity: 1; }
+      80%, 90% { opacity: 0.15; }
+    }
+
+    .ghost-container .eyes-open {
+      animation:
+        ghost-blink-inverse 4s infinite,
+        ghost-fade 8s infinite ease-in-out;
+    }
+
+    .ghost-container .eyes-closed {
+      opacity: 0;
+      animation: ghost-blink 4s infinite;
+    }
+
+    .content {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 0 60px;
+    }
+
+    .question {
+      font-size: 28px;
+      color: var(--text-dim);
+      margin-bottom: 24px;
+      opacity: 0;
+      animation: fade-up 0.8s ease-out 0.3s forwards;
+    }
+
+    .headline {
+      font-size: 52px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.15;
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fade-up 0.8s ease-out 0.6s forwards;
+    }
+
+    .headline .ai-names {
+      color: var(--accent-green);
+    }
+
+    .platforms {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 40px;
+      opacity: 0;
+      animation: fade-up 0.8s ease-out 0.9s forwards;
+    }
+
+    .platform {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      color: var(--text-dim);
+      padding: 12px 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .platform-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      animation: dot-pulse 2s infinite;
+    }
+
+    .platform:nth-child(2) .platform-dot { animation-delay: 0.3s; }
+    .platform:nth-child(3) .platform-dot { animation-delay: 0.6s; }
+    .platform:nth-child(4) .platform-dot { animation-delay: 0.9s; }
+
+    @keyframes dot-pulse {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    .cta {
+      display: inline-block;
+      background: var(--accent-green);
+      color: var(--bg-dark);
+      font-size: 22px;
+      font-weight: 600;
+      padding: 18px 44px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0;
+      animation: fade-up 0.8s ease-out 1.2s forwards, cta-pulse 2s infinite 2s;
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes cta-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .brand {
+      position: absolute;
+      bottom: 40px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 18px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      opacity: 0;
+      animation: fade-up 0.8s ease-out 1.5s forwards;
+    }
+
+    .brand .domain { color: var(--accent-gold); }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <div class="orbs">
+    <div class="orb"></div>
+    <div class="orb"></div>
+    <div class="orb"></div>
+    <div class="orb"></div>
+  </div>
+
+  <div class="content">
+    <div class="ghost-container">
+      <img src="ghost-eyes-open.png" alt="Ghost" class="eyes-open">
+      <img src="ghost-eyes-closed.png" alt="Ghost blinking" class="eyes-closed">
+    </div>
+
+    <p class="question">When someone asks AI for help...</p>
+
+    <h1 class="headline">
+      Does <span class="ai-names">AI</span> recommend<br>
+      your business?
+    </h1>
+
+    <div class="platforms">
+      <div class="platform"><span class="platform-dot"></span>ChatGPT</div>
+      <div class="platform"><span class="platform-dot"></span>Claude</div>
+      <div class="platform"><span class="platform-dot"></span>Gemini</div>
+      <div class="platform"><span class="platform-dot"></span>Perplexity</div>
+    </div>
+
+    <div class="cta">Find Out Free</div>
+  </div>
+
+  <div class="brand">
+    <span class="domain">outrankllm.io</span>
+  </div>
+</body>
+</html>

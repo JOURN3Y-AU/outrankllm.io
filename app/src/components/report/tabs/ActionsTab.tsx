@@ -86,12 +86,13 @@ type Tier = 'free' | 'starter' | 'pro' | 'agency'
 
 interface ActionsTabProps {
   runId?: string
+  domainSubscriptionId?: string | null
   enrichmentStatus?: EnrichmentStatus
   tier?: Tier
   onUpgradeClick?: () => void
 }
 
-export function ActionsTab({ runId, enrichmentStatus = 'not_applicable', tier = 'starter', onUpgradeClick }: ActionsTabProps) {
+export function ActionsTab({ runId, domainSubscriptionId, enrichmentStatus = 'not_applicable', tier = 'starter', onUpgradeClick }: ActionsTabProps) {
   const [plan, setPlan] = useState<ActionPlan | null>(null)
   const [history, setHistory] = useState<ActionHistoryItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -114,13 +115,16 @@ export function ActionsTab({ runId, enrichmentStatus = 'not_applicable', tier = 
 
   useEffect(() => {
     fetchPlan()
-  }, [runId])
+  }, [runId, domainSubscriptionId])
 
   const fetchPlan = async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const url = runId ? `/api/actions?run_id=${runId}` : '/api/actions'
+      const params = new URLSearchParams()
+      if (runId) params.set('run_id', runId)
+      if (domainSubscriptionId) params.set('domain_subscription_id', domainSubscriptionId)
+      const url = `/api/actions?${params}`
       const res = await fetch(url)
       if (!res.ok) {
         const data = await res.json()

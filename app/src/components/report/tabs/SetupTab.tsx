@@ -666,12 +666,14 @@ export function SetupTab({
   analysis,
   prompts,
   domain,
+  domainSubscriptionId,
   isSubscriber = false,
   customQuestionLimit = 0,
 }: {
   analysis: Analysis | null
   prompts?: Prompt[] | null
   domain: string
+  domainSubscriptionId?: string | null
   isSubscriber?: boolean
   customQuestionLimit?: number
 }) {
@@ -779,6 +781,7 @@ export function SetupTab({
         body: JSON.stringify({
           prompt_text: newQuestionText.trim(),
           category: newQuestionCategory,
+          domain_subscription_id: domainSubscriptionId,
         }),
       })
 

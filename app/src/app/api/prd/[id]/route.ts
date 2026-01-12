@@ -35,7 +35,7 @@ export async function PATCH(
       )
     }
 
-    // Get the task and verify ownership
+    // Get the task and verify ownership (include domain_subscription_id for history)
     const { data: task, error: taskError } = await supabase
       .from('prd_tasks')
       .select(`
@@ -45,7 +45,7 @@ export async function PATCH(
         section,
         category,
         prd_id,
-        prd_documents!inner(lead_id, run_id)
+        prd_documents!inner(lead_id, run_id, domain_subscription_id)
       `)
       .eq('id', taskId)
       .single()
@@ -58,7 +58,7 @@ export async function PATCH(
     }
 
     // Verify the task belongs to this user
-    const prdDoc = task.prd_documents as { lead_id: string; run_id: string }
+    const prdDoc = task.prd_documents as { lead_id: string; run_id: string; domain_subscription_id: string | null }
     if (prdDoc.lead_id !== session.lead_id) {
       return NextResponse.json(
         { error: 'Not authorized' },
@@ -93,6 +93,7 @@ export async function PATCH(
         .upsert(
           {
             lead_id: session.lead_id,
+            domain_subscription_id: prdDoc.domain_subscription_id,
             original_task_id: taskId,
             title: task.title,
             description: task.description,

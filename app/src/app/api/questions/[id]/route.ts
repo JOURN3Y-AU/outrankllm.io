@@ -16,12 +16,23 @@ export async function GET(
     const supabase = createServiceClient()
     const { id } = await params
 
-    const { data: question, error } = await supabase
+    // Parse query params for domain isolation
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Build query with domain isolation
+    let query = supabase
       .from('subscriber_questions')
       .select('*')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domainSubscriptionId) {
+      query = query.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      query = query.eq('lead_id', session.lead_id)
+    }
+
+    const { data: question, error } = await query.single()
 
     if (error || !question) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 })
@@ -62,20 +73,26 @@ export async function PUT(
       )
     }
 
-    // Verify ownership
-    const { data: existing, error: fetchError } = await supabase
+    const body = await request.json()
+    const { prompt_text, category, is_active, sort_order, domain_subscription_id } = body
+
+    // Verify ownership with domain isolation
+    let ownershipQuery = supabase
       .from('subscriber_questions')
       .select('*')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domain_subscription_id) {
+      ownershipQuery = ownershipQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      ownershipQuery = ownershipQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: existing, error: fetchError } = await ownershipQuery.single()
 
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 })
     }
-
-    const body = await request.json()
-    const { prompt_text, category, is_active, sort_order } = body
 
     // Build update object with only provided fields
     const updates: Record<string, unknown> = {}
@@ -116,13 +133,18 @@ export async function PUT(
     }
 
     // Update the question (history is auto-created by trigger if prompt_text changed)
-    const { data: question, error: updateError } = await supabase
+    let updateQuery = supabase
       .from('subscriber_questions')
       .update(updates)
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .select()
-      .single()
+
+    if (domain_subscription_id) {
+      updateQuery = updateQuery.eq('domain_subscription_id', domain_subscription_id)
+    } else {
+      updateQuery = updateQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: question, error: updateError } = await updateQuery.select().single()
 
     if (updateError) {
       console.error('Error updating question:', updateError)
@@ -167,24 +189,41 @@ export async function DELETE(
       )
     }
 
-    // Verify ownership
-    const { data: existing, error: fetchError } = await supabase
+    // Parse query params for domain isolation
+    const { searchParams } = new URL(request.url)
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Verify ownership with domain isolation
+    let ownershipQuery = supabase
       .from('subscriber_questions')
       .select('id')
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
-      .single()
+
+    if (domainSubscriptionId) {
+      ownershipQuery = ownershipQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      ownershipQuery = ownershipQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { data: existing, error: fetchError } = await ownershipQuery.single()
 
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 })
     }
 
     // Archive the question (soft delete)
-    const { error: archiveError } = await supabase
+    let archiveQuery = supabase
       .from('subscriber_questions')
       .update({ is_archived: true, is_active: false })
       .eq('id', id)
-      .eq('lead_id', session.lead_id)
+
+    if (domainSubscriptionId) {
+      archiveQuery = archiveQuery.eq('domain_subscription_id', domainSubscriptionId)
+    } else {
+      archiveQuery = archiveQuery.eq('lead_id', session.lead_id)
+    }
+
+    const { error: archiveError } = await archiveQuery
 
     if (archiveError) {
       console.error('Error archiving question:', archiveError)

@@ -14,6 +14,7 @@ export type ScanProcessEvent = {
     domain: string
     email: string
     leadId: string
+    domainSubscriptionId?: string // For subscriber scans - links scan_run to domain_subscription
     verificationToken?: string
     skipEmail?: boolean
   }
@@ -24,6 +25,7 @@ export type SubscriberEnrichEvent = {
   data: {
     leadId: string
     scanRunId: string
+    domainSubscriptionId?: string // For multi-domain isolation
   }
 }
 

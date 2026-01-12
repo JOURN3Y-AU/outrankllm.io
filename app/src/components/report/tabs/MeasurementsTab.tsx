@@ -41,6 +41,7 @@ export function MeasurementsTab({
   isSubscriber = false,
   currentRunId,
   domain,
+  domainSubscriptionId,
 }: {
   visibilityScore: number
   platformScores: Record<string, number>
@@ -50,6 +51,7 @@ export function MeasurementsTab({
   isSubscriber?: boolean
   currentRunId?: string
   domain?: string
+  domainSubscriptionId?: string | null
 }) {
   const [showStickyUpsell, setShowStickyUpsell] = useState(false)
   const [rawTrendData, setRawTrendData] = useState<ScoreSnapshot[]>([])
@@ -65,7 +67,11 @@ export function MeasurementsTab({
     const fetchTrends = async () => {
       setTrendLoading(true)
       try {
-        const res = await fetch('/api/trends?limit=12')
+        const params = new URLSearchParams({ limit: '12' })
+        if (domainSubscriptionId) {
+          params.set('domain_subscription_id', domainSubscriptionId)
+        }
+        const res = await fetch(`/api/trends?${params}`)
         if (res.ok) {
           const data = await res.json()
           setRawTrendData(data.snapshots || [])
@@ -78,7 +84,7 @@ export function MeasurementsTab({
     }
 
     fetchTrends()
-  }, [isSubscriber])
+  }, [isSubscriber, domainSubscriptionId])
 
   // Fetch competitor trend data for subscribers
   useEffect(() => {
@@ -87,7 +93,11 @@ export function MeasurementsTab({
     const fetchCompetitorTrends = async () => {
       setCompetitorLoading(true)
       try {
-        const res = await fetch('/api/trends/competitors?limit=12')
+        const params = new URLSearchParams({ limit: '12' })
+        if (domainSubscriptionId) {
+          params.set('domain_subscription_id', domainSubscriptionId)
+        }
+        const res = await fetch(`/api/trends/competitors?${params}`)
         if (res.ok) {
           const data = await res.json()
           setRawCompetitorData(data.snapshots || [])
@@ -101,7 +111,7 @@ export function MeasurementsTab({
     }
 
     fetchCompetitorTrends()
-  }, [isSubscriber])
+  }, [isSubscriber, domainSubscriptionId])
 
   // Filter trend data to only show data up to and including the current report
   // This ensures the trend chart values match the gauges shown above it

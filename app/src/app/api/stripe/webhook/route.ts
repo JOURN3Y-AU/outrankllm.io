@@ -4,6 +4,12 @@ import Stripe from 'stripe'
 import { stripe, getTierFromPriceId } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '@/inngest/client'
+import {
+  getSubscriptionByStripeId,
+  updateSubscriptionByStripeId,
+  updateDomainSubscription,
+  getHighestTierForLead,
+} from '@/lib/subscriptions'
 
 // Use service role client for webhook operations (no user session)
 function createServiceClient() {
@@ -86,6 +92,8 @@ async function handleCheckoutCompleted(
 ) {
   const leadId = session.metadata?.lead_id
   const tier = session.metadata?.tier
+  const domain = session.metadata?.domain
+  const domainSubscriptionId = session.metadata?.domain_subscription_id
   const subscriptionId = session.subscription as string
 
   if (!leadId || !subscriptionId) {
@@ -103,17 +111,162 @@ async function handleCheckoutCompleted(
   const currentPeriodStart = subscriptionItem?.current_period_start
   const currentPeriodEnd = subscriptionItem?.current_period_end
 
-  // Create subscription record
+  // Check if this is a domain subscription (new flow) or legacy subscription
+  if (domainSubscriptionId) {
+    // New domain subscription flow
+    await handleDomainSubscriptionCheckout(
+      supabase,
+      domainSubscriptionId,
+      subscriptionId,
+      priceId,
+      resolvedTier,
+      subscription.status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      subscription.cancel_at_period_end,
+      leadId,
+      domain
+    )
+  } else {
+    // Legacy flow - update old subscriptions table
+    await handleLegacyCheckout(
+      supabase,
+      leadId,
+      subscriptionId,
+      priceId,
+      resolvedTier,
+      subscription.status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      subscription.cancel_at_period_end
+    )
+  }
+
+  console.log(`Subscription created for lead ${leadId}, tier: ${resolvedTier}`)
+}
+
+async function handleDomainSubscriptionCheckout(
+  supabase: ReturnType<typeof createServiceClient>,
+  domainSubscriptionId: string,
+  stripeSubscriptionId: string,
+  priceId: string | undefined,
+  tier: string,
+  status: string,
+  currentPeriodStart: number | undefined,
+  currentPeriodEnd: number | undefined,
+  cancelAtPeriodEnd: boolean,
+  leadId: string,
+  domain: string | undefined
+) {
+  // Update domain_subscription record
+  const updated = await updateDomainSubscription(domainSubscriptionId, {
+    stripe_subscription_id: stripeSubscriptionId,
+    stripe_price_id: priceId,
+    tier: tier as 'starter' | 'pro',
+    status: status as 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete',
+    current_period_start: currentPeriodStart ? new Date(currentPeriodStart * 1000).toISOString() : undefined,
+    current_period_end: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : undefined,
+    cancel_at_period_end: cancelAtPeriodEnd,
+  })
+
+  if (!updated) {
+    console.error('Failed to update domain subscription:', domainSubscriptionId)
+    throw new Error('Failed to update domain subscription')
+  }
+
+  // Update lead tier to highest active tier
+  const highestTier = await getHighestTierForLead(leadId)
+  await supabase
+    .from('leads')
+    .update({ tier: highestTier })
+    .eq('id', leadId)
+
+  // If this domain has existing scans, trigger enrichment for the latest one
+  const { data: scanRuns } = await supabase
+    .from('scan_runs')
+    .select('id')
+    .eq('domain_subscription_id', domainSubscriptionId)
+    .eq('status', 'complete')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (scanRuns && scanRuns.length > 0) {
+    const latestScanId = scanRuns[0].id
+
+    // Remove expiry and mark as subscriber
+    await supabase
+      .from('reports')
+      .update({ expires_at: null, subscriber_only: true })
+      .eq('run_id', latestScanId)
+
+    // Mark the scan as pending enrichment
+    await supabase
+      .from('scan_runs')
+      .update({ enrichment_status: 'pending' })
+      .eq('id', latestScanId)
+
+    // Dispatch enrichment job via Inngest
+    await inngest.send({
+      name: 'subscriber/enrich',
+      data: {
+        leadId,
+        scanRunId: latestScanId,
+        domainSubscriptionId,
+      },
+    })
+
+    console.log(`Enrichment triggered for scan ${latestScanId}`)
+  } else if (domain) {
+    // No existing scan for this domain - trigger a new scan
+    // Get lead email for the scan
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('email')
+      .eq('id', leadId)
+      .single()
+
+    if (lead?.email) {
+      await inngest.send({
+        name: 'scan/process',
+        data: {
+          scanId: null, // Will be created in first step
+          domain,
+          email: lead.email,
+          leadId,
+          domainSubscriptionId,
+          skipEmail: false, // Send scan complete email
+        },
+      })
+
+      console.log(`New scan triggered for domain ${domain}`)
+    } else {
+      console.error(`Could not find email for lead ${leadId} to trigger scan`)
+    }
+  }
+}
+
+async function handleLegacyCheckout(
+  supabase: ReturnType<typeof createServiceClient>,
+  leadId: string,
+  subscriptionId: string,
+  priceId: string | undefined,
+  resolvedTier: string,
+  status: string,
+  currentPeriodStart: number | undefined,
+  currentPeriodEnd: number | undefined,
+  cancelAtPeriodEnd: boolean
+) {
+  // Create subscription record (legacy table)
   const { error: subError } = await supabase.from('subscriptions').upsert(
     {
       lead_id: leadId,
       stripe_subscription_id: subscriptionId,
       stripe_price_id: priceId,
-      status: subscription.status,
+      status: status,
       tier: resolvedTier,
       current_period_start: currentPeriodStart ? new Date(currentPeriodStart * 1000).toISOString() : null,
       current_period_end: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null,
-      cancel_at_period_end: subscription.cancel_at_period_end,
+      cancel_at_period_end: cancelAtPeriodEnd,
     },
     { onConflict: 'stripe_subscription_id' }
   )
@@ -135,15 +288,6 @@ async function handleCheckoutCompleted(
   }
 
   // Remove expiry from any reports for this lead (they're now a subscriber)
-  const { error: reportError } = await supabase
-    .from('reports')
-    .update({ expires_at: null, subscriber_only: true })
-    .eq(
-      'run_id',
-      supabase.from('scan_runs').select('id').eq('lead_id', leadId)
-    )
-
-  // Alternative: Update via join query
   const { data: scanRuns } = await supabase
     .from('scan_runs')
     .select('id')
@@ -176,8 +320,6 @@ async function handleCheckoutCompleted(
 
     console.log(`Enrichment triggered for scan ${latestScanId}`)
   }
-
-  console.log(`Subscription created for lead ${leadId}, tier: ${resolvedTier}`)
 }
 
 async function handleSubscriptionUpdated(
@@ -192,7 +334,34 @@ async function handleSubscriptionUpdated(
   const currentPeriodStart = subscriptionItem?.current_period_start
   const currentPeriodEnd = subscriptionItem?.current_period_end
 
-  // Update subscription record
+  // Try to find in domain_subscriptions first (new flow)
+  const domainSub = await getSubscriptionByStripeId(subscription.id)
+
+  if (domainSub) {
+    // Update domain_subscriptions
+    await updateSubscriptionByStripeId(subscription.id, {
+      stripe_price_id: priceId,
+      status: subscription.status as 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete',
+      tier: tier as 'starter' | 'pro',
+      current_period_start: currentPeriodStart ? new Date(currentPeriodStart * 1000).toISOString() : undefined,
+      current_period_end: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : undefined,
+      cancel_at_period_end: subscription.cancel_at_period_end,
+    })
+
+    // Update lead tier to highest active
+    if (subscription.status === 'active') {
+      const highestTier = await getHighestTierForLead(domainSub.lead_id)
+      await supabase
+        .from('leads')
+        .update({ tier: highestTier })
+        .eq('id', domainSub.lead_id)
+    }
+
+    console.log(`Domain subscription updated: ${subscription.id}, status: ${subscription.status}`)
+    return
+  }
+
+  // Fall back to legacy subscriptions table
   const { data: existingSub, error: fetchError } = await supabase
     .from('subscriptions')
     .select('lead_id')
@@ -237,7 +406,44 @@ async function handleSubscriptionDeleted(
   supabase: ReturnType<typeof createServiceClient>,
   subscription: Stripe.Subscription
 ) {
-  // Get lead ID before updating
+  // Try to find in domain_subscriptions first (new flow)
+  const domainSub = await getSubscriptionByStripeId(subscription.id)
+
+  if (domainSub) {
+    // Update domain_subscription status
+    await updateSubscriptionByStripeId(subscription.id, {
+      status: 'canceled',
+    })
+
+    // Update lead tier to highest remaining active subscription (or free)
+    const highestTier = await getHighestTierForLead(domainSub.lead_id)
+    await supabase
+      .from('leads')
+      .update({ tier: highestTier })
+      .eq('id', domainSub.lead_id)
+
+    // Re-add expiry to reports for this domain subscription only
+    const { data: scanRuns } = await supabase
+      .from('scan_runs')
+      .select('id')
+      .eq('domain_subscription_id', domainSub.id)
+
+    if (scanRuns && scanRuns.length > 0) {
+      const runIds = scanRuns.map((r) => r.id)
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + 3)
+
+      await supabase
+        .from('reports')
+        .update({ expires_at: expiresAt.toISOString(), subscriber_only: false })
+        .in('run_id', runIds)
+    }
+
+    console.log(`Domain subscription canceled: ${domainSub.id} for lead ${domainSub.lead_id}`)
+    return
+  }
+
+  // Fall back to legacy subscriptions table
   const { data: existingSub, error: fetchError } = await supabase
     .from('subscriptions')
     .select('lead_id')
@@ -295,7 +501,18 @@ async function handlePaymentFailed(
   const subscriptionId = typeof subscription === 'string' ? subscription : subscription?.id
   if (!subscriptionId) return
 
-  // Update subscription status to past_due
+  // Try to update in domain_subscriptions first
+  const domainSub = await getSubscriptionByStripeId(subscriptionId)
+
+  if (domainSub) {
+    await updateSubscriptionByStripeId(subscriptionId, {
+      status: 'past_due',
+    })
+    console.log(`Payment failed for domain subscription: ${subscriptionId}`)
+    return
+  }
+
+  // Fall back to legacy subscriptions table
   const { error } = await supabase
     .from('subscriptions')
     .update({
