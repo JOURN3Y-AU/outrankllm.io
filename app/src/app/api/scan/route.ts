@@ -55,6 +55,26 @@ export async function POST(request: NextRequest) {
       const isFree = existingLead.tier === 'free'
 
       if (isFree) {
+        // Free users: check for any in-progress scan first
+        const { data: inProgressRun } = await supabase
+          .from('scan_runs')
+          .select('id, status, created_at')
+          .eq('lead_id', existingLead.id)
+          .not('status', 'in', '("complete","failed")')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (inProgressRun) {
+          // User already has a scan in progress
+          return NextResponse.json({
+            success: false,
+            scanInProgress: true,
+            scanId: inProgressRun.id,
+            message: 'You already have a scan in progress. Please wait for it to complete.',
+          })
+        }
+
         // Free users: check for any completed scan
         const { data: existingRun } = await supabase
           .from('scan_runs')

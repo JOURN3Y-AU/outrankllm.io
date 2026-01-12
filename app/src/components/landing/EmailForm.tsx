@@ -92,6 +92,15 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         return
       }
 
+      // Check if user already has a scan in progress
+      if (data.scanInProgress) {
+        // Show the progress modal for their existing scan
+        setScanId(data.scanId)
+        setShowModal(true)
+        setStatus('success')
+        return
+      }
+
       setScanId(data.scanId)
       setShowModal(true)
       setStatus('success')
