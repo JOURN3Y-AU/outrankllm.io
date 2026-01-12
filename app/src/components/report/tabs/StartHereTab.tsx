@@ -7,11 +7,13 @@ import type { Analysis, TabId } from '../shared'
 export function StartHereTab({
   analysis,
   domain,
-  onContinue
+  onContinue,
+  isSubscriber = false
 }: {
   analysis: Analysis | null
   domain: string
   onContinue: () => void
+  isSubscriber?: boolean
 }) {
   const [selectedPersona, setSelectedPersona] = useState<string | null>('business-owner')
 
@@ -163,18 +165,46 @@ export function StartHereTab({
           className="text-2xl font-medium text-[var(--text)]"
           style={{ marginBottom: '16px' }}
         >
-          We&apos;ve analyzed how AI assistants see{' '}
-          <span className="text-[var(--green)]">{analysis?.business_name || domain}</span>
+          {isSubscriber ? (
+            <>
+              Your AI Visibility Report for{' '}
+              <span className="text-[var(--green)]">{analysis?.business_name || domain}</span>
+            </>
+          ) : (
+            <>
+              We&apos;ve analyzed how AI assistants see{' '}
+              <span className="text-[var(--green)]">{analysis?.business_name || domain}</span>
+            </>
+          )}
         </h2>
-        <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
-          Thanks for requesting your AI Visibility Report.
-        </p>
-        <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
-          You&apos;re now seeing your business the way ChatGPT, Claude, Gemini, and Perplexity do — and it might be different from what you&apos;d expect. Unlike Google, there&apos;s no paid advertising in AI responses. What these assistants recommend comes entirely from how they understand your content. OutrankLLM shows you exactly what to change so AI starts recommending you.
-        </p>
-        <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6' }}>
-          Select your role below for a tailored guide on getting the most from this analysis.
-        </p>
+        {isSubscriber ? (
+          <>
+            <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
+              Here&apos;s your latest AI visibility analysis across ChatGPT, Claude, Gemini, and Perplexity.
+            </p>
+            <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
+              You can manage your subscription and add more domains from your{' '}
+              <a href="/dashboard" className="text-[var(--green)] hover:underline">Dashboard</a>.
+              If you have questions or notice anything that doesn&apos;t look right, use the{' '}
+              <span className="text-[var(--text)]">?</span> help button in the top menu.
+            </p>
+            <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6' }}>
+              Select your role below for a tailored guide on exploring your report.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
+              Thanks for requesting your AI Visibility Report.
+            </p>
+            <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
+              You&apos;re now seeing your business the way ChatGPT, Claude, Gemini, and Perplexity do — and it might be different from what you&apos;d expect. Unlike Google, there&apos;s no paid advertising in AI responses. What these assistants recommend comes entirely from how they understand your content. OutrankLLM shows you exactly what to change so AI starts recommending you.
+            </p>
+            <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6' }}>
+              Select your role below for a tailored guide on getting the most from this analysis.
+            </p>
+          </>
+        )}
       </div>
 
       {/* Persona Pills - Inline selection */}
@@ -249,25 +279,27 @@ export function StartHereTab({
             ))}
           </div>
 
-          {/* Locked features teaser */}
-          <div
-            style={{ marginTop: '32px', paddingTop: '32px', borderTop: '1px solid var(--border)' }}
-          >
-            <div className="flex items-center gap-2" style={{ marginBottom: '12px' }}>
-              <Lock size={14} style={{ color: 'var(--gold)' }} />
-              <span className="text-sm" style={{ color: 'var(--gold)' }}>
-                Subscribers also get access to:
-              </span>
+          {/* Locked features teaser - only show for non-subscribers */}
+          {!isSubscriber && (
+            <div
+              style={{ marginTop: '32px', paddingTop: '32px', borderTop: '1px solid var(--border)' }}
+            >
+              <div className="flex items-center gap-2" style={{ marginBottom: '12px' }}>
+                <Lock size={14} style={{ color: 'var(--gold)' }} />
+                <span className="text-sm" style={{ color: 'var(--gold)' }}>
+                  Subscribers also get access to:
+                </span>
+              </div>
+              <div className="grid sm:grid-cols-2" style={{ gap: '8px' }}>
+                {getSubscriberBenefits().map((benefit, index) => (
+                  <div key={index} className="flex items-start gap-2">
+                    <ChevronRight size={12} className="text-[var(--text-ghost)] flex-shrink-0" style={{ marginTop: '4px' }} />
+                    <span className="text-[var(--text-dim)] text-sm">{benefit}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="grid sm:grid-cols-2" style={{ gap: '8px' }}>
-              {getSubscriberBenefits().map((benefit, index) => (
-                <div key={index} className="flex items-start gap-2">
-                  <ChevronRight size={12} className="text-[var(--text-ghost)] flex-shrink-0" style={{ marginTop: '4px' }} />
-                  <span className="text-[var(--text-dim)] text-sm">{benefit}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       )}
 

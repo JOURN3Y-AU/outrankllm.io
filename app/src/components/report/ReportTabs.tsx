@@ -154,6 +154,7 @@ export function ReportTabs({
             analysis={analysis}
             domain={domain}
             onContinue={() => scrollToTabsAndNavigate('setup')}
+            isSubscriber={isSubscriber}
           />
         )}
         {activeTab === 'setup' && (
