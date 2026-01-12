@@ -698,6 +698,39 @@ export function SetupTab({
   const [historyQuestionId, setHistoryQuestionId] = useState<string | null>(null)
   const [showPicker, setShowPicker] = useState<'edit' | 'add' | null>(null)
 
+  // Fetch fresh questions from API when component mounts (for subscribers)
+  // This ensures we have the latest data after tab switches, not stale SSR data
+  useEffect(() => {
+    if (!isSubscriber) return
+
+    const fetchQuestions = async () => {
+      try {
+        // Pass domain_subscription_id for multi-domain isolation
+        const url = domainSubscriptionId
+          ? `/api/questions?domain_subscription_id=${domainSubscriptionId}`
+          : '/api/questions'
+        const res = await fetch(url)
+        if (!res.ok) return
+
+        const data = await res.json()
+        if (data.questions && Array.isArray(data.questions)) {
+          setQuestions(data.questions.map((q: { id: string; prompt_text: string; category: string; source?: string }) => ({
+            id: q.id,
+            prompt_text: q.prompt_text,
+            category: q.category,
+            source: q.source,
+            isCustom: q.source === 'user_created',
+          })))
+        }
+      } catch (err) {
+        // Silently fail - we still have the SSR data as fallback
+        console.error('Failed to fetch fresh questions:', err)
+      }
+    }
+
+    fetchQuestions()
+  }, [isSubscriber, domainSubscriptionId])
+
   if (!analysis) {
     return (
       <div className="text-center text-[var(--text-dim)]" style={{ padding: '80px 0' }}>

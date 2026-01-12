@@ -159,7 +159,9 @@ async function getReport(token: string): Promise<ReportData | null> {
 
   // For subscribers: fetch their editable subscriber_questions
   // Use domain_subscription_id for multi-domain isolation
-  let subscriberQuestions: { id: string; prompt_text: string; category: string; source: 'ai_generated' | 'user_created' }[] | null = null
+  type SubscriberQuestion = { id: string; prompt_text: string; category: string; source: 'ai_generated' | 'user_created' }
+  let subscriberQuestions: SubscriberQuestion[] | null = null
+
   if (featureFlags.isSubscriber && domainSubscriptionId) {
     const { data } = await supabase
       .from('subscriber_questions')
@@ -170,7 +172,42 @@ async function getReport(token: string): Promise<ReportData | null> {
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
 
-    subscriberQuestions = data as typeof subscriberQuestions
+    const fetchedQuestions = data as SubscriberQuestion[] | null
+
+    // If no AI-generated questions exist for this domain subscription, seed them from scan_prompts
+    // This handles the case where a subscriber was created but AI questions weren't seeded
+    const hasAiGeneratedQuestions = fetchedQuestions?.some(q => q.source === 'ai_generated')
+
+    if (!hasAiGeneratedQuestions && prompts && prompts.length > 0) {
+      // Seed AI-generated questions from scan_prompts
+      const questionsToSeed = prompts.map((p: { id: string; prompt_text: string; category: string }, index: number) => ({
+        lead_id: lead.id,
+        domain_subscription_id: domainSubscriptionId,
+        prompt_text: p.prompt_text,
+        category: p.category,
+        source: 'ai_generated' as const,
+        is_active: true,
+        is_archived: false,
+        sort_order: index,
+        original_prompt_id: p.id,
+        source_run_id: runId,
+      }))
+
+      const { data: seededQuestions } = await supabase
+        .from('subscriber_questions')
+        .insert(questionsToSeed)
+        .select('id, prompt_text, category, source')
+
+      if (seededQuestions) {
+        // Combine seeded AI questions with existing user-created questions
+        const userCreatedQuestions = fetchedQuestions?.filter(q => q.source === 'user_created') || []
+        subscriberQuestions = [...(seededQuestions as SubscriberQuestion[]), ...userCreatedQuestions]
+      } else {
+        subscriberQuestions = fetchedQuestions
+      }
+    } else {
+      subscriberQuestions = fetchedQuestions
+    }
   } else if (featureFlags.isSubscriber) {
     // Fallback for legacy data without domain_subscription_id
     const { data } = await supabase
@@ -182,7 +219,7 @@ async function getReport(token: string): Promise<ReportData | null> {
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
 
-    subscriberQuestions = data as typeof subscriberQuestions
+    subscriberQuestions = data as SubscriberQuestion[] | null
   }
 
   // Fetch all LLM responses for the AI Responses tab
