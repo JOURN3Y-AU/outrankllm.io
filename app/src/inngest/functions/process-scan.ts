@@ -388,22 +388,62 @@ export const processScan = inngest.createFunction(
       countryCode: countryToIsoCode(analysisResult.geoResult.country) || undefined,
     }
 
-    // Query all platforms IN PARALLEL, each platform as its own step
-    // This is a DAG pattern - all 4 platforms run concurrently
-    // Each platform step runs its queries sequentially to avoid rate limits
-    // With 4 parallel steps (one per platform), total time ≈ slowest platform time
-    // Instead of sequential: 7 queries × 4 platforms × ~20s = ~10 min
-    // Parallel: 7 queries × ~20s = ~2-3 min (4x faster)
+    // Query all platforms IN PARALLEL using DAG pattern
+    // ChatGPT: Split into individual query steps (intermittent failures need granular retries)
+    // Other platforms: Single step per platform (more reliable)
 
-    const platformResultsMap = await Promise.all(
-      PLATFORMS.map((platform) =>
+    // Helper to run a single query and save result
+    const runSingleQuery = async (
+      platform: typeof PLATFORMS[number],
+      prompt: { id: string; prompt_text: string },
+    ): Promise<{ promptId: string; result: PlatformResult }> => {
+      const db = createServiceClient()
+
+      try {
+        const queryResult = await queryPlatformWithSearch(
+          platform,
+          prompt.prompt_text,
+          domain,
+          locationContext
+        )
+        await saveResponseToDb(db, scanId, prompt.id, queryResult)
+        return { promptId: prompt.id, result: queryResult }
+      } catch (error) {
+        const errorResult: PlatformResult = {
+          platform,
+          query: prompt.prompt_text,
+          response: "",
+          domainMentioned: false,
+          mentionPosition: null,
+          competitorsMentioned: [],
+          responseTimeMs: 0,
+          error: error instanceof Error ? error.message : "Unknown error",
+          searchEnabled: true,
+          sources: [],
+        }
+        await saveResponseToDb(db, scanId, prompt.id, errorResult)
+        return { promptId: prompt.id, result: errorResult }
+      }
+    }
+
+    // ChatGPT: Individual steps per query (granular retries for intermittent failures)
+    // Each query gets its own Inngest step with independent retry budget
+    const chatgptResults = await Promise.all(
+      savedPrompts.map((prompt: { id: string; prompt_text: string; category: string }, i: number) =>
+        step.run(`query-chatgpt-${i}`, () => runSingleQuery("chatgpt", prompt))
+      )
+    )
+
+    // Other platforms: Single step per platform (run queries sequentially within step)
+    const otherPlatforms = PLATFORMS.filter(p => p !== "chatgpt")
+    const otherPlatformResults = await Promise.all(
+      otherPlatforms.map((platform) =>
         step.run(`query-platform-${platform}`, async () => {
           const db = createServiceClient()
           log.platform(scanId, platform, "querying")
 
           const results: Array<{ promptId: string; result: PlatformResult }> = []
 
-          // Run queries sequentially within each platform to avoid rate limits
           for (let i = 0; i < savedPrompts.length; i++) {
             const prompt = savedPrompts[i]
 
@@ -414,12 +454,9 @@ export const processScan = inngest.createFunction(
                 domain,
                 locationContext
               )
-
-              // Save result immediately
               await saveResponseToDb(db, scanId, prompt.id, queryResult)
               results.push({ promptId: prompt.id, result: queryResult })
             } catch (error) {
-              // Create error result
               const errorResult: PlatformResult = {
                 platform,
                 query: prompt.prompt_text,
@@ -432,8 +469,6 @@ export const processScan = inngest.createFunction(
                 searchEnabled: true,
                 sources: [],
               }
-
-              // Save error result
               await saveResponseToDb(db, scanId, prompt.id, errorResult)
               results.push({ promptId: prompt.id, result: errorResult })
             }
@@ -444,6 +479,9 @@ export const processScan = inngest.createFunction(
         })
       )
     )
+
+    // Combine all results
+    const platformResultsMap = [chatgptResults, ...otherPlatformResults]
 
     // Update progress after all platforms complete
     await step.run("update-query-progress", async () => {
