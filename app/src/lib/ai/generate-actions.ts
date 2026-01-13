@@ -11,7 +11,7 @@
 
 import { generateText } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { trackCost } from './costs'
+import { trackCost, trackTavilyCost } from './costs'
 import { log } from '@/lib/logger'
 
 const anthropic = createAnthropic({
@@ -208,6 +208,9 @@ async function searchBestPractices(
           answer?: string
           results?: Array<{ title?: string; content?: string }>
         }
+
+        // Track Tavily cost for successful search
+        await trackTavilyCost(runId, 'actions_best_practices_tavily')
 
         if (data.answer) {
           results.push(`### ${query}\n${data.answer}`)

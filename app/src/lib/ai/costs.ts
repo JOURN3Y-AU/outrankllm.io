@@ -6,6 +6,10 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 
+// Tavily pricing (per search, not per token)
+// Source: https://tavily.com/pricing - ~$0.01 per search on paid plans
+const TAVILY_COST_CENTS_PER_SEARCH = 1  // $0.01 = 1 cent
+
 // Pricing per 1K tokens (as of Jan 2025)
 // Source: https://vercel.com/docs/ai-gateway/pricing, https://openai.com/pricing, https://ai.google.dev/pricing
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -89,6 +93,29 @@ export function estimateCostCents(model: string, usage: UsageData): number {
   const outputCost = (usage.outputTokens / 1000) * pricing.output * 100
 
   return inputCost + outputCost
+}
+
+/**
+ * Track Tavily search cost in the api_costs table
+ * Tavily charges per search, not per token
+ */
+export async function trackTavilyCost(runId: string, step: string, searchCount: number = 1): Promise<void> {
+  try {
+    const supabase = createServiceClient()
+    const costCents = TAVILY_COST_CENTS_PER_SEARCH * searchCount
+
+    await supabase.from('api_costs').insert({
+      run_id: runId,
+      step,
+      model: 'tavily/search',
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_cents: costCents,
+    })
+  } catch (error) {
+    // Don't fail the request if cost tracking fails
+    console.error('Failed to track Tavily cost:', error)
+  }
 }
 
 /**

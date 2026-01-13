@@ -15,7 +15,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createPerplexity } from '@ai-sdk/perplexity'
-import { trackCost } from './costs'
+import { trackCost, trackTavilyCost } from './costs'
 import { log } from '@/lib/logger'
 import type { BusinessAnalysis } from './analyze'
 
@@ -157,7 +157,9 @@ export function generateBrandAwarenessQueries(
  * Search with Tavily API for Claude's web search capability
  */
 async function searchWithTavily(
-  query: string
+  query: string,
+  runId?: string,
+  step?: string
 ): Promise<{ success: boolean; results: { url: string; title: string; snippet?: string }[] }> {
   const apiKey = process.env.TAVILY_API_KEY
 
@@ -198,6 +200,11 @@ async function searchWithTavily(
       title: r.title || '',
       snippet: r.content,
     }))
+
+    // Track Tavily cost if runId provided
+    if (runId) {
+      await trackTavilyCost(runId, step || 'tavily_search')
+    }
 
     return { success: true, results }
   } catch (error) {
@@ -249,7 +256,7 @@ async function runChatGPTQuery(
   // If still inadequate after retries, fall back to Tavily + GPT-4o
   if (responseLength < MIN_RESPONSE_LENGTH) {
     log.warn(runId, `ChatGPT web search failed for brand ${query.type}, falling back to Tavily + GPT-4o`)
-    const tavilyResults = await searchWithTavily(query.prompt)
+    const tavilyResults = await searchWithTavily(query.prompt, runId, `brand_${query.type}_chatgpt_tavily`)
 
     log.info(runId, `Tavily search returned ${tavilyResults.results.length} results for ${query.type}`)
 
@@ -365,7 +372,7 @@ async function runQueryOnPlatform(
             const searchQuery = query.testedDomain && business === query.testedEntity
               ? `${business} ${query.testedDomain}`
               : `${business} company`
-            const results = await searchWithTavily(searchQuery)
+            const results = await searchWithTavily(searchQuery, runId, `brand_${query.type}_claude_tavily`)
             return { business, results }
           })
 
@@ -385,7 +392,7 @@ async function runQueryOnPlatform(
           searchContext = contextParts.join('\n\n')
         } else {
           // For other queries, use the prompt directly
-          const tavilyResults = await searchWithTavily(query.prompt)
+          const tavilyResults = await searchWithTavily(query.prompt, runId, `brand_${query.type}_claude_tavily`)
           if (tavilyResults.success && tavilyResults.results.length > 0) {
             searchContext = tavilyResults.results
               .map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\nSource: ${r.url}`)
@@ -480,7 +487,7 @@ Provide a helpful answer based on the search results.`,
         } catch {
           // Fallback to Tavily if Google Search fails
           log.warn(runId, `Gemini Google Search failed for brand awareness, trying Tavily`)
-          const tavilyResults = await searchWithTavily(query.prompt)
+          const tavilyResults = await searchWithTavily(query.prompt, runId, `brand_${query.type}_gemini_tavily`)
 
           if (tavilyResults.success && tavilyResults.results.length > 0) {
             const searchContext = tavilyResults.results
