@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { BarChart3, Lock, AlertCircle, Sparkles, Info, TrendingUp } from 'lucide-react'
-import Link from 'next/link'
+import { BarChart3, Lock, AlertCircle, Sparkles, TrendingUp, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react'
 import { ScoreGauge } from '../ScoreGauge'
 import { MultiLineTrendChart, CompetitorMentionsTrendChart, type MultiLineSeries, type CompetitorMentionsSeries } from '../TrendChart'
 import { UpgradeModal } from '../UpgradeModal'
@@ -58,6 +57,7 @@ export function MeasurementsTab({
 }) {
   const [showStickyUpsell, setShowStickyUpsell] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [scoreCalloutExpanded, setScoreCalloutExpanded] = useState(true)
   const [rawTrendData, setRawTrendData] = useState<ScoreSnapshot[]>([])
   const [trendLoading, setTrendLoading] = useState(false)
   const [rawCompetitorData, setRawCompetitorData] = useState<CompetitorSnapshot[]>([])
@@ -285,15 +285,150 @@ export function MeasurementsTab({
           <ScoreGauge score={visibilityScore} size="lg" />
         </div>
 
-        {/* Score Explanation */}
+        {/* Score Context Callout - Collapsible to manage number shock */}
         <div
-          className="flex items-start bg-[var(--surface-elevated)] border border-[var(--border-subtle)]"
-          style={{ padding: '14px 18px', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto', gap: '12px' }}
+          className="relative bg-[var(--surface-elevated)] border-2 border-[var(--green)]"
+          style={{
+            maxWidth: '560px',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            overflow: 'hidden',
+          }}
         >
-          <Info size={16} className="text-[var(--text-dim)] flex-shrink-0" style={{ marginTop: '2px' }} />
-          <p className="text-[var(--text-dim)] text-xs" style={{ lineHeight: '1.6' }}>
-            <strong className="text-[var(--text-mid)]">Reach-Weighted Score:</strong> Platforms are weighted by their real-world traffic share. ChatGPT mentions count 10x more than Claude, reflecting actual user reach (~80% vs ~1% of AI referrals).
-          </p>
+          {/* Pointer arrow */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '-10px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 0,
+              height: 0,
+              borderLeft: '10px solid transparent',
+              borderRight: '10px solid transparent',
+              borderBottom: '10px solid var(--green)',
+            }}
+          />
+
+          {/* Collapsible header */}
+          <button
+            onClick={() => setScoreCalloutExpanded(!scoreCalloutExpanded)}
+            className="w-full flex items-center justify-between text-left hover:bg-[var(--surface)] transition-colors"
+            style={{ padding: '16px 20px' }}
+          >
+            <div className="flex items-center" style={{ gap: '12px' }}>
+              <div
+                className="flex-shrink-0 flex items-center justify-center"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--green)',
+                }}
+              >
+                <Lightbulb size={14} style={{ color: 'var(--bg)' }} />
+              </div>
+              <span className="text-[var(--text)] font-medium">
+                {visibilityScore < 20
+                  ? "Don't worry — most businesses start here"
+                  : visibilityScore < 40
+                  ? "You're building momentum"
+                  : visibilityScore < 60
+                  ? "You're ahead of most businesses"
+                  : "Strong visibility — keep it up!"
+                }
+              </span>
+            </div>
+            {scoreCalloutExpanded ? (
+              <ChevronUp size={18} className="text-[var(--text-dim)] flex-shrink-0" />
+            ) : (
+              <ChevronDown size={18} className="text-[var(--text-dim)] flex-shrink-0" />
+            )}
+          </button>
+
+          {/* Expandable content */}
+          <div
+            style={{
+              maxHeight: scoreCalloutExpanded ? '500px' : '0',
+              opacity: scoreCalloutExpanded ? 1 : 0,
+              transition: 'max-height 0.3s ease-out, opacity 0.2s ease-out',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '0 20px 20px 20px' }}>
+              <p className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.6', marginBottom: '16px' }}>
+                <strong>Businesses in your industry typically aim for 35%–55% visibility.</strong> This score is weighted by platform reach — ChatGPT counts 10× more than Claude since it has ~80% of AI referral traffic.
+              </p>
+
+              {/* Improvement tips */}
+              <div
+                className="bg-[var(--surface)] border border-[var(--border-subtle)]"
+                style={{ padding: '12px 14px', marginBottom: '16px' }}
+              >
+                <p className="text-[var(--text-dim)] text-xs font-mono uppercase tracking-wider" style={{ marginBottom: '8px' }}>
+                  Quick ways to improve
+                </p>
+                <ul className="text-[var(--text-mid)] text-sm" style={{ paddingLeft: '16px', lineHeight: '1.8' }}>
+                  <li>Review the <strong>Setup</strong> tab — are the questions we're asking AI accurate?</li>
+                  <li>Check <strong>AI Readiness</strong> — is your site structured for AI discovery?</li>
+                  <li>Update how your website describes your services and expertise</li>
+                </ul>
+              </div>
+
+              {/* CTA for non-subscribers */}
+              {(tier === 'free' || tier === 'starter') && (
+                <div
+                  className="flex items-center justify-between flex-wrap bg-gradient-to-r from-[var(--surface)] to-[rgba(212,165,116,0.1)] border border-[var(--gold-dim)]"
+                  style={{ padding: '14px 16px', gap: '12px' }}
+                >
+                  <div>
+                    <p className="text-[var(--text)] text-sm font-medium" style={{ marginBottom: '2px' }}>
+                      {tier === 'free' ? 'Want a detailed action plan?' : 'Need technical specs for developers?'}
+                    </p>
+                    <p className="text-[var(--text-dim)] text-xs">
+                      {tier === 'free'
+                        ? 'Get prioritized fixes and step-by-step guidance'
+                        : 'Upgrade to Pro for developer-ready PRDs'
+                      }
+                    </p>
+                  </div>
+                  {tier === 'free' ? (
+                    <a
+                      href="/pricing?from=report"
+                      onClick={handlePricingClick}
+                      className="font-mono text-xs flex items-center gap-2 transition-all hover:scale-105 flex-shrink-0"
+                      style={{
+                        padding: '10px 16px',
+                        background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+                        color: 'var(--bg)',
+                        textDecoration: 'none',
+                        fontWeight: '600',
+                      }}
+                    >
+                      <Sparkles size={12} />
+                      Get Action Plans
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="font-mono text-xs flex items-center gap-2 transition-all hover:scale-105 flex-shrink-0"
+                      style={{
+                        padding: '10px 16px',
+                        background: 'linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%)',
+                        color: 'var(--bg)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                      }}
+                    >
+                      <Sparkles size={12} />
+                      Upgrade to Pro
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
