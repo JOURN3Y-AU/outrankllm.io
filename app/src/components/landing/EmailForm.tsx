@@ -7,6 +7,20 @@ import { ScanProgressModal } from './ScanProgressModal'
 import { useSession } from '@/lib/auth-client'
 import Link from 'next/link'
 
+// Extend Window type for gtag
+declare global {
+  interface Window {
+    gtag?: (command: string, action: string, params?: Record<string, unknown>) => void
+  }
+}
+
+// Track events to Google Analytics
+function trackEvent(eventName: string, params?: Record<string, string | boolean>) {
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag('event', eventName, params)
+  }
+}
+
 interface EmailFormProps {
   onSuccess?: (data: { email: string; domain: string; scanId: string }) => void
 }
@@ -61,6 +75,12 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
     cleanDomain = cleanDomain.replace(/^www\./, '')
     cleanDomain = cleanDomain.replace(/\/$/, '')
     setCleanedDomain(cleanDomain)
+
+    // Track button click
+    trackEvent('get_free_report_click', {
+      user_type: session ? 'logged_in' : 'anonymous',
+      user_tier: session?.tier || 'none',
+    })
 
     try {
       const response = await fetch('/api/scan', {
