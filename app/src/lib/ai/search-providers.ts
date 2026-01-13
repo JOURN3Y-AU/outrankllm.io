@@ -1050,11 +1050,10 @@ export async function queryPlatformWithSearch(
   platform: SearchPlatform,
   query: string,
   domain: string,
+  runId: string,
   locationContext?: LocationContext
 ): Promise<SearchQueryResult> {
-  // Use a dummy runId for cost tracking - Inngest handles the real tracking
-  const dummyRunId = 'inngest-scan'
-  return queryWithSearch(platform, query, domain, dummyRunId, locationContext)
+  return queryWithSearch(platform, query, domain, runId, locationContext)
 }
 
 export function calculateSearchVisibilityScore(

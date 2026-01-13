@@ -408,6 +408,7 @@ export const processScan = inngest.createFunction(
           platform,
           prompt.prompt_text,
           domain,
+          scanId,
           locationContext
         )
         await saveResponseToDb(db, scanId, prompt.id, queryResult)
@@ -456,6 +457,7 @@ export const processScan = inngest.createFunction(
                 platform,
                 prompt.prompt_text,
                 domain,
+                scanId,
                 locationContext
               )
               await saveResponseToDb(db, scanId, prompt.id, queryResult)
