@@ -181,10 +181,39 @@ export const enrichSubscriber = inngest.createFunction(
 
         if (report?.top_competitors && report.top_competitors.length > 0) {
           // Take top 3 competitors (or fewer if not available)
-          competitors = report.top_competitors
-            .slice(0, 3)
-            .map((c: { name: string }) => c.name)
+          const topThree = report.top_competitors.slice(0, 3)
+          competitors = topThree.map((c: { name: string }) => c.name)
           log.info(scanRunId, `Using ${competitors.length} fallback competitors: ${competitors.join(', ')}`)
+
+          // PERSIST these detected competitors to subscriber_competitors table
+          // This ensures consistency across future scans - the same competitors will be used
+          // unless the user manually changes them
+          // Use individual inserts with conflict handling since we have partial unique indexes
+          let persistedCount = 0
+          for (const comp of topThree) {
+            const { error: insertError } = await supabase
+              .from("subscriber_competitors")
+              .insert({
+                lead_id: leadId,
+                domain_subscription_id: domainSubscriptionId || null,
+                name: comp.name,
+                source: 'detected',
+                is_active: true,
+              })
+
+            if (insertError) {
+              // Likely duplicate - that's fine, competitor already exists
+              if (insertError.code !== '23505') {
+                log.warn(scanRunId, `Failed to persist competitor "${comp.name}": ${insertError.message}`)
+              }
+            } else {
+              persistedCount++
+            }
+          }
+
+          if (persistedCount > 0) {
+            log.info(scanRunId, `Persisted ${persistedCount} detected competitors for future scans`)
+          }
         }
       }
 
