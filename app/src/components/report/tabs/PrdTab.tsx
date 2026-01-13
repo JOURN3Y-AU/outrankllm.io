@@ -128,7 +128,7 @@ export function PrdTab({ runId, domainSubscriptionId, enrichmentStatus = 'not_ap
       const res = await fetch('/api/prd', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: runId }),
+        body: JSON.stringify({ run_id: runId, domain_subscription_id: domainSubscriptionId }),
       })
       if (!res.ok) {
         const data = await res.json()
