@@ -17,7 +17,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "outrankllm.io | AI Visibility for Vibe Coders",
+  title: "outrankllm.io | See your visibility to AI",
   description:
     "Your business is invisible to AI. We fix that. Get your free AI visibility report.",
   keywords: [
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "outrankllm.io | AI Visibility for Vibe Coders",
+    title: "outrankllm.io | See your visibility to AI",
     description: "Your business is invisible to AI. We fix that.",
     url: "https://outrankllm.io",
     siteName: "outrankllm.io",
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "outrankllm.io | AI Visibility for Vibe Coders",
+    title: "outrankllm.io | See your visibility to AI",
     description: "Your business is invisible to AI. We fix that.",
   },
 };

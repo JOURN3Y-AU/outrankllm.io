@@ -756,6 +756,8 @@ leads (user account)
 
 ## Design Notes
 
+- **Brand name**: outrankllm.io (with `.io` in white, `llm` in green)
+- **Page title**: "outrankllm.io | See your visibility to AI"
 - Green (#22c55e) = primary accent
 - Gold (#d4a574) = premium/subscriber features
 - Monospace font for labels, buttons, technical elements

@@ -20,7 +20,7 @@ export default function Home() {
           <div className="flex flex-col items-center gap-3" style={{ marginBottom: '20px' }}>
             <Ghost size="md" />
             <div className="logo-text">
-              outrank<span className="mark">llm</span>
+              outrank<span className="mark">llm</span>.io
             </div>
           </div>
 

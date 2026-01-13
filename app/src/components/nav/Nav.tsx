@@ -39,7 +39,7 @@ export function Nav() {
       <div className="max-w-6xl mx-auto flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="font-mono text-lg font-medium hover:opacity-80 transition-opacity">
-          outrank<span className="text-[var(--green)]">llm</span>
+          outrank<span className="text-[var(--green)]">llm</span>.io
         </Link>
 
         {/* Nav Links */}
