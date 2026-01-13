@@ -277,8 +277,8 @@ export function AIReadinessTab({
         </p>
       </div>
 
-      {/* Sticky Floating Upsell - Tier-based messaging */}
-      {showStickyUpsell && tier !== 'agency' && (
+      {/* Sticky Floating Upsell - Free and Starter only (no meaningful upgrade path for Pro/Agency) */}
+      {showStickyUpsell && (tier === 'free' || tier === 'starter') && (
         <div
           style={{
             position: 'fixed',
@@ -329,8 +329,7 @@ export function AIReadinessTab({
                     <span className="text-[var(--text-ghost)]">•</span>
                     <span className="text-[var(--text-dim)] text-sm">
                       {tier === 'free' && 'Get step-by-step fixes'}
-                      {tier === 'starter' && 'Unlock competitive insights'}
-                      {tier === 'pro' && 'Scale to more domains'}
+                      {tier === 'starter' && 'Get technical fixes with Pro'}
                     </span>
                   </div>
                 ) : (
@@ -341,8 +340,7 @@ export function AIReadinessTab({
                     <span className="text-[var(--text-ghost)]">•</span>
                     <span className="text-[var(--text-dim)] text-sm">
                       {tier === 'free' && 'Monitor weekly to maintain your edge'}
-                      {tier === 'starter' && 'See who else AI recommends'}
-                      {tier === 'pro' && 'Track more domains'}
+                      {tier === 'starter' && 'Get technical PRDs to improve further'}
                     </span>
                   </div>
                 )}
@@ -364,8 +362,7 @@ export function AIReadinessTab({
             >
               <Sparkles size={16} />
               {tier === 'free' && (failCount > 0 ? 'Get Fixes & Action Plans' : 'Subscribe for Weekly Monitoring')}
-              {tier === 'starter' && 'Unlock Competitors & PRD'}
-              {tier === 'pro' && 'Add More Domains'}
+              {tier === 'starter' && 'Upgrade to Pro'}
             </Link>
           </div>
         </div>

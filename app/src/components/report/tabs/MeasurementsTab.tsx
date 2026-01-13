@@ -769,11 +769,12 @@ export function MeasurementsTab({
         </div>
       )}
 
-      {/* Sticky Floating Upsell - Tier-based messaging */}
+      {/* Sticky Floating Upsell - Free and Starter only (no meaningful upgrade path for Pro/Agency) */}
       {(() => {
         const shouldShowUpsell = queryCoverage < 50 // Show if less than 50% query coverage
 
-        if (!shouldShowUpsell || !showStickyUpsell || tier === 'agency') return null
+        // Only show for free and starter tiers
+        if (!shouldShowUpsell || !showStickyUpsell || tier === 'pro' || tier === 'agency') return null
 
         // Format visibility text - show "Less than 5%" for low values
         const visibilityText = queryCoverage < 5
@@ -822,8 +823,7 @@ export function MeasurementsTab({
                     <span className="text-[var(--text-ghost)]">•</span>
                     <span className="text-[var(--text-dim)] text-sm">
                       {tier === 'free' && 'Get action plans to improve'}
-                      {tier === 'starter' && 'Unlock competitor tracking'}
-                      {tier === 'pro' && 'Monitor more domains'}
+                      {tier === 'starter' && 'Track progress with Pro insights'}
                     </span>
                   </div>
                 </div>
@@ -845,8 +845,7 @@ export function MeasurementsTab({
               >
                 <Sparkles size={16} />
                 {tier === 'free' && 'Get Fixes & Action Plans'}
-                {tier === 'starter' && 'Unlock Competitors & PRD'}
-                {tier === 'pro' && 'Add More Domains'}
+                {tier === 'starter' && 'Upgrade to Pro'}
               </a>
             </div>
           </div>

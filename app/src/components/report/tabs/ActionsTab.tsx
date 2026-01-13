@@ -709,7 +709,7 @@ export function ActionsTab({ runId, domainSubscriptionId, enrichmentStatus = 'no
         </CollapsibleSection>
       )}
 
-      {/* Sticky Floating Upsell for Starter users */}
+      {/* Sticky Floating Upsell for Starter users - focused on technical PRD value */}
       {tier === 'starter' && showStickyUpsell && (
         <div
           style={{
@@ -747,11 +747,11 @@ export function ActionsTab({ runId, domainSubscriptionId, enrichmentStatus = 'no
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[var(--text)] font-medium">
-                    Want technical implementation instructions?
+                    Need help implementing these fixes?
                   </span>
                 </div>
                 <span className="text-[var(--text-dim)] text-sm">
-                  Get Product Requirements and AI coding prompts with the Pro plan
+                  Pro includes technical PRDs with code snippets for Claude Code and Cursor
                 </span>
               </div>
             </div>
