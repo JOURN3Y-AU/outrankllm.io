@@ -97,6 +97,15 @@ export function ReportTabs({
 
   return (
     <div ref={tabsRef} style={{ marginTop: '48px', scrollMarginTop: '24px' }}>
+      {/* Tab Navigation Header */}
+      <div
+        className="font-mono text-[var(--text-dim)]"
+        style={{ fontSize: '11px', marginBottom: '12px', letterSpacing: '0.05em' }}
+      >
+        <span style={{ textTransform: 'uppercase' }}>Click to explore each section</span>
+        <span style={{ marginLeft: '8px', color: 'var(--text-ghost)' }}>↓</span>
+      </div>
+
       {/* Tab Navigation - Spread across full width */}
       <div
         className="border-b border-[var(--border)]"
@@ -118,17 +127,22 @@ export function ReportTabs({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  relative flex flex-col items-center justify-center flex-1 font-mono transition-all
+                  group relative flex flex-col items-center justify-center flex-1 font-mono
                   border-b-2 cursor-pointer
+                  transition-all duration-150 ease-out
                   ${isActive
                     ? 'text-[var(--text)] border-[var(--green)] bg-[var(--surface)]'
-                    : 'text-[var(--text-dim)] border-transparent hover:text-[var(--text-mid)] hover:bg-[var(--surface)]/50'
+                    : 'text-[var(--text-dim)] border-transparent hover:text-[var(--text)] hover:bg-[var(--surface)] hover:border-[var(--text-ghost)]'
                   }
                   ${!isLast ? 'border-r border-r-[var(--border-subtle)]' : ''}
                 `}
                 style={{ fontSize: '11px', minWidth: 0, padding: '16px 8px' }}
               >
-                <Icon size={18} className="flex-shrink-0" style={{ marginBottom: '8px' }} />
+                <Icon
+                  size={18}
+                  className="flex-shrink-0 transition-transform duration-150 group-hover:scale-110"
+                  style={{ marginBottom: '8px' }}
+                />
                 <span className="hidden sm:inline truncate">{tab.label}</span>
                 {showGoldLock && (
                   <Lock

@@ -106,24 +106,33 @@ export async function GET(request: Request) {
     }
 
     // Get completed task history from history table
-    // IMPORTANT: Use the domain_subscription_id from the PRD document we just fetched,
-    // not from the query params. This ensures consistency because history entries are
-    // created with prd_documents.domain_subscription_id when tasks are marked complete.
-    let historyQuery = supabase
-      .from('prd_tasks_history')
-      .select('id, original_task_id, title, description, section, category, completed_at')
-
-    // Use the PRD's domain_subscription_id for consistency with how history is created
+    // For multi-domain: Include history matching EITHER the domain_subscription_id
+    // OR history with NULL domain_subscription_id for this lead (legacy records before multi-domain)
+    // This ensures we don't lose completed task history when transitioning to multi-domain
     const prdDomainSubId = prd.domain_subscription_id
+    let historyFromTable: { id: string; original_task_id: string | null; title: string; description: string; section: string; category: string | null; completed_at: string | null }[] | null = null
+    let historyError: Error | null = null
+
     if (prdDomainSubId) {
-      historyQuery = historyQuery.eq('domain_subscription_id', prdDomainSubId)
+      // Query for both: matching domain_subscription_id OR legacy NULL records for this lead
+      const { data, error } = await supabase
+        .from('prd_tasks_history')
+        .select('id, original_task_id, title, description, section, category, completed_at')
+        .eq('lead_id', session.lead_id)
+        .or(`domain_subscription_id.eq.${prdDomainSubId},domain_subscription_id.is.null`)
+        .order('completed_at', { ascending: false })
+      historyFromTable = data
+      historyError = error
     } else {
       // Fallback to lead_id for legacy PRDs without domain_subscription_id
-      historyQuery = historyQuery.eq('lead_id', session.lead_id)
+      const { data, error } = await supabase
+        .from('prd_tasks_history')
+        .select('id, original_task_id, title, description, section, category, completed_at')
+        .eq('lead_id', session.lead_id)
+        .order('completed_at', { ascending: false })
+      historyFromTable = data
+      historyError = error
     }
-
-    const { data: historyFromTable, error: historyError } = await historyQuery
-      .order('completed_at', { ascending: false })
 
     if (historyError) {
       console.error('Error fetching PRD task history:', historyError)

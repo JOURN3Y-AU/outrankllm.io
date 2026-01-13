@@ -125,19 +125,31 @@ export async function GET(request: Request) {
     }
 
     // Get completed action history from history table
-    // Use domain_subscription_id if provided for multi-domain isolation
-    let historyQuery = supabase
-      .from('action_items_history')
-      .select('id, original_action_id, title, description, category, completed_at')
+    // For multi-domain: Include history matching EITHER the domain_subscription_id
+    // OR history with NULL domain_subscription_id for this lead (legacy records before multi-domain)
+    // This ensures we don't lose completed task history when transitioning to multi-domain
+    let historyFromTable: { id: string; original_action_id: string | null; title: string; description: string; category: string | null; completed_at: string | null }[] | null = null
+    let historyError: Error | null = null
 
     if (domainSubscriptionId) {
-      historyQuery = historyQuery.eq('domain_subscription_id', domainSubscriptionId)
+      // Query for both: matching domain_subscription_id OR legacy NULL records for this lead
+      const { data, error } = await supabase
+        .from('action_items_history')
+        .select('id, original_action_id, title, description, category, completed_at')
+        .eq('lead_id', session.lead_id)
+        .or(`domain_subscription_id.eq.${domainSubscriptionId},domain_subscription_id.is.null`)
+        .order('completed_at', { ascending: false })
+      historyFromTable = data
+      historyError = error
     } else {
-      historyQuery = historyQuery.eq('lead_id', session.lead_id)
+      const { data, error } = await supabase
+        .from('action_items_history')
+        .select('id, original_action_id, title, description, category, completed_at')
+        .eq('lead_id', session.lead_id)
+        .order('completed_at', { ascending: false })
+      historyFromTable = data
+      historyError = error
     }
-
-    const { data: historyFromTable, error: historyError } = await historyQuery
-      .order('completed_at', { ascending: false })
 
     if (historyError) {
       console.error('Error fetching action history:', historyError)

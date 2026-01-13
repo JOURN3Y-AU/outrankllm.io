@@ -424,17 +424,24 @@ export const enrichSubscriber = inngest.createFunction(
 
         // Get previously completed action titles to pass to Claude
         // This tells Claude not to suggest similar actions again
-        let historyQuery = supabase
-          .from("action_items_history")
-          .select("title")
+        // Include BOTH: matching domain_subscription_id AND legacy NULL records for this lead
+        // This ensures we don't regenerate tasks that were completed before multi-domain migration
+        let previouslyCompleted: { title: string }[] | null = null
 
         if (domainSubscriptionId) {
-          historyQuery = historyQuery.eq("domain_subscription_id", domainSubscriptionId)
+          const { data } = await supabase
+            .from("action_items_history")
+            .select("title")
+            .eq("lead_id", leadId)
+            .or(`domain_subscription_id.eq.${domainSubscriptionId},domain_subscription_id.is.null`)
+          previouslyCompleted = data
         } else {
-          historyQuery = historyQuery.eq("lead_id", leadId)
+          const { data } = await supabase
+            .from("action_items_history")
+            .select("title")
+            .eq("lead_id", leadId)
+          previouslyCompleted = data
         }
-
-        const { data: previouslyCompleted } = await historyQuery
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const completedActionTitles = (previouslyCompleted || []).map((h: any) => h.title as string)
@@ -658,17 +665,24 @@ export const enrichSubscriber = inngest.createFunction(
 
         // Get previously completed PRD task titles to pass to Claude
         // This tells Claude not to suggest similar tasks again
-        let prdHistoryQuery = supabase
-          .from("prd_tasks_history")
-          .select("title")
+        // Include BOTH: matching domain_subscription_id AND legacy NULL records for this lead
+        // This ensures we don't regenerate tasks that were completed before multi-domain migration
+        let previouslyCompletedTasks: { title: string }[] | null = null
 
         if (domainSubscriptionId) {
-          prdHistoryQuery = prdHistoryQuery.eq("domain_subscription_id", domainSubscriptionId)
+          const { data } = await supabase
+            .from("prd_tasks_history")
+            .select("title")
+            .eq("lead_id", leadId)
+            .or(`domain_subscription_id.eq.${domainSubscriptionId},domain_subscription_id.is.null`)
+          previouslyCompletedTasks = data
         } else {
-          prdHistoryQuery = prdHistoryQuery.eq("lead_id", leadId)
+          const { data } = await supabase
+            .from("prd_tasks_history")
+            .select("title")
+            .eq("lead_id", leadId)
+          previouslyCompletedTasks = data
         }
-
-        const { data: previouslyCompletedTasks } = await prdHistoryQuery
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const completedPrdTaskTitles = (previouslyCompletedTasks || []).map((h: any) => h.title as string)
