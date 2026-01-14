@@ -8,6 +8,7 @@ import { useSession } from '@/lib/auth-client'
 import Link from 'next/link'
 
 import { trackEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
+import { trackLinkedInConversion, LINKEDIN_CONVERSIONS } from '@/lib/linkedin'
 
 interface EmailFormProps {
   onSuccess?: (data: { email: string; domain: string; scanId: string }) => void
@@ -119,6 +120,9 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         user_tier: session?.tier || 'none',
         domain: cleanDomain,
       })
+
+      // Track LinkedIn conversion for free report signup
+      trackLinkedInConversion(LINKEDIN_CONVERSIONS.FREE_REPORT_SIGNUP)
 
       onSuccess?.({ email: session ? session.email : email.trim(), domain: cleanDomain, scanId: data.scanId })
     } catch (err) {

@@ -21,6 +21,7 @@ import {
   type RegionDetectionContext
 } from '@/lib/geo/pricing-region'
 import { trackEvent, trackEventOnce, ANALYTICS_EVENTS } from '@/lib/analytics'
+import { trackLinkedInConversionOnce, LINKEDIN_CONVERSIONS } from '@/lib/linkedin'
 
 type TierKey = SubscriptionTier
 
@@ -165,6 +166,9 @@ function PricingCards() {
     trackEventOnce(ANALYTICS_EVENTS.PRICING_PAGE_VIEWED, 'pricing', {
       source: fromReport ? 'report' : 'direct',
     })
+
+    // Track LinkedIn pricing page view
+    trackLinkedInConversionOnce(LINKEDIN_CONVERSIONS.PRICING_PAGE_VIEWED, 'pricing')
   }, [searchParams])
 
   // Detect region on mount
@@ -296,6 +300,9 @@ function PricingCards() {
       region,
       source: checkoutContext.fromReport ? 'report' : 'direct',
     })
+
+    // Track LinkedIn checkout started (use domain as unique key to allow one per domain)
+    trackLinkedInConversionOnce(LINKEDIN_CONVERSIONS.CHECKOUT_STARTED, checkoutContext.domain || 'unknown')
 
     setLoadingTier(tier)
 

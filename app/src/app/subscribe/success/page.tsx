@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { CheckCircle, Loader2, ArrowRight, Sparkles, Lock, Globe } from 'lucide-react'
 import { Nav } from '@/components/nav/Nav'
 import { SetPasswordForm } from '@/components/auth/SetPasswordForm'
+import { trackLinkedInConversionOnce, LINKEDIN_CONVERSIONS } from '@/lib/linkedin'
 
 type PageStatus = 'loading' | 'set-password' | 'complete' | 'error'
 
@@ -63,6 +64,12 @@ function SuccessContent() {
           isUpgrade: data.isUpgrade || false,
           domain: data.domain,
         })
+
+        // Track LinkedIn subscription completed conversion
+        trackLinkedInConversionOnce(
+          LINKEDIN_CONVERSIONS.SUBSCRIPTION_COMPLETED,
+          data.domain || data.email || 'unknown'
+        )
 
         if (data.hasPassword) {
           // User already has a password (returning customer) - go straight to complete

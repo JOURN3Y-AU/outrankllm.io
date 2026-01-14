@@ -11,6 +11,7 @@ import { ArrowLeft, ExternalLink, Sparkles, Lock, Crown, Check } from 'lucide-re
 import Link from 'next/link'
 import type { FeatureFlags } from '@/lib/features/flags'
 import { trackEventOnce, ANALYTICS_EVENTS } from '@/lib/analytics'
+import { trackLinkedInConversionOnce, LINKEDIN_CONVERSIONS } from '@/lib/linkedin'
 
 // Locked report modal for users who already used their free report
 function LockedReportModal({
@@ -253,6 +254,9 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
       domain,
       hours_since_scan: hoursSinceScan,
     })
+
+    // Track LinkedIn report view conversion
+    trackLinkedInConversionOnce(LINKEDIN_CONVERSIONS.REPORT_VIEWED, report.url_token)
   }, [isVerified, report.url_token, report.created_at, featureFlags.tier, isSubscriber, domain])
 
   // Show modal after a brief delay on first view
