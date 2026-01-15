@@ -40,27 +40,33 @@ export async function POST(request: NextRequest) {
     // Get Supabase client
     const supabase = createServiceClient()
 
-    // Check if this email already has a completed scan (free report limit)
+    // Check if this email already has a completed scan (free report limit - ONE per email)
     // Use ilike for case-insensitive matching
-    const { data: existingLead } = await supabase
+    // Get ALL leads for this email to check across all domains
+    const { data: existingLeads } = await supabase
       .from('leads')
-      .select('id, tier')
+      .select('id, tier, domain')
       .ilike('email', normalizedEmail)
-      .limit(1)
-      .single()
+
+    // Find if any lead is a paid subscriber
+    const paidLead = existingLeads?.find((l: { tier: string | null }) => l.tier && l.tier !== 'free')
+    const existingLead = paidLead || existingLeads?.[0]
 
     if (existingLead) {
       // Check if they're a paid subscriber (subscribers can run new scans based on tier)
       const isAgency = existingLead.tier === 'agency'
-      const isFree = existingLead.tier === 'free'
+      const isFree = !paidLead // No paid lead found = free user
 
       if (isFree) {
+        // Get all lead IDs for this email to check across all their domains
+        const leadIds = existingLeads?.map((l: { id: string }) => l.id) || []
+
         // Free users: check for any in-progress scan FOR THIS DOMAIN first
         const { data: inProgressRun } = await supabase
           .from('scan_runs')
           .select('id, status, created_at')
-          .eq('lead_id', existingLead.id)
-          .eq('domain', cleanDomain)  // CRITICAL: Only check this domain
+          .in('lead_id', leadIds)
+          .eq('domain', cleanDomain)
           .not('status', 'in', '("complete","failed")')
           .order('created_at', { ascending: false })
           .limit(1)
@@ -76,16 +82,18 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        // Free users: check for any completed scan FOR THIS DOMAIN
+        // Free users: check for ANY completed scan across ALL domains for this email
+        // This enforces "one free report per email address"
+        // Note: Multiple different emails CAN scan the same domain - this only restricts per-email
         const { data: existingRun } = await supabase
           .from('scan_runs')
           .select(`
             id,
+            domain,
             created_at,
             reports (url_token)
           `)
-          .eq('lead_id', existingLead.id)
-          .eq('domain', cleanDomain)  // CRITICAL: Only check this domain
+          .in('lead_id', leadIds)
           .eq('status', 'complete')
           .order('created_at', { ascending: false })
           .limit(1)
@@ -98,14 +106,40 @@ export async function POST(request: NextRequest) {
             : existingRun.reports as { url_token: string }
 
           if (reportData?.url_token) {
-            // User already has a free report for this domain - return existing report with locked flag
-            return NextResponse.json({
-              success: false,
-              alreadyScanned: true,
-              reportToken: reportData.url_token,
-              scannedAt: existingRun.created_at,
-              message: 'You have already used your free report for this domain. Subscribe to access your report and get weekly updates.',
-            })
+            // Check if the free report has expired (7 days)
+            const createdAt = new Date(existingRun.created_at)
+            const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+            const isExpired = new Date() > expiresAt
+
+            // Check if this is the same domain or a different domain
+            const isSameDomain = existingRun.domain === cleanDomain
+
+            if (isSameDomain) {
+              // User already has a free report for this exact domain - return existing report
+              return NextResponse.json({
+                success: false,
+                alreadyScanned: true,
+                reportToken: reportData.url_token,
+                scannedAt: existingRun.created_at,
+                isExpired,
+                message: isExpired
+                  ? 'Your free report has expired. Subscribe to unlock it and get weekly updates.'
+                  : 'You have already used your free report for this domain. Subscribe to access your report and get weekly updates.',
+              })
+            } else {
+              // User trying to scan a DIFFERENT domain - they've already used their one free report
+              return NextResponse.json({
+                success: false,
+                freeReportUsed: true,
+                existingDomain: existingRun.domain,
+                reportToken: reportData.url_token,
+                scannedAt: existingRun.created_at,
+                isExpired,
+                message: isExpired
+                  ? `Your free report for ${existingRun.domain} has expired. Subscribe to unlock it and add more domains.`
+                  : `You've already used your free report for ${existingRun.domain}. Subscribe to monitor multiple domains.`,
+              })
+            }
           }
         }
       } else if (!isAgency) {

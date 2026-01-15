@@ -33,6 +33,11 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
   const [userReport, setUserReport] = useState<UserReport | null>(null)
   const [loadingReport, setLoadingReport] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [freeReportUsed, setFreeReportUsed] = useState<{
+    existingDomain: string
+    reportToken: string
+    isExpired: boolean
+  } | null>(null)
 
   // Fetch user's report when logged in
   useEffect(() => {
@@ -88,7 +93,7 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         throw new Error(data.error || 'Something went wrong')
       }
 
-      // Check if user already has a free report
+      // Check if user already has a free report for this domain
       if (data.alreadyScanned) {
         // Redirect to report with locked flag (free users see locked modal)
         if (data.isSubscriber) {
@@ -98,6 +103,17 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
           // Free users see locked modal over frosted report
           router.push(`/report/${data.reportToken}?locked=true`)
         }
+        return
+      }
+
+      // Check if user has already used their one free report on a different domain
+      if (data.freeReportUsed) {
+        setStatus('idle')
+        setFreeReportUsed({
+          existingDomain: data.existingDomain,
+          reportToken: data.reportToken,
+          isExpired: data.isExpired || false,
+        })
         return
       }
 
@@ -259,6 +275,42 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         <p className="mt-3 text-[var(--red)] font-mono text-sm text-center">
           {error}
         </p>
+      )}
+
+      {freeReportUsed && (
+        <div
+          className="bg-[var(--surface)] border border-[var(--border)]"
+          style={{ marginTop: '16px', padding: '20px', textAlign: 'center' }}
+        >
+          <p className="text-[var(--text)] text-sm" style={{ marginBottom: '8px' }}>
+            {freeReportUsed.isExpired
+              ? 'Your free report has expired:'
+              : "You've already used your free report for:"}
+          </p>
+          <p className="font-mono text-[var(--green)]" style={{ marginBottom: '16px' }}>
+            {freeReportUsed.existingDomain}
+          </p>
+          <p className="text-[var(--text-dim)] text-xs" style={{ marginBottom: '16px' }}>
+            {freeReportUsed.isExpired
+              ? 'Subscribe to unlock your report and add more domains with weekly updates and action plans.'
+              : 'Subscribe to monitor multiple domains with weekly updates, action plans, and competitive insights.'}
+          </p>
+          <div className="flex flex-col gap-3">
+            <Link
+              href="/pricing"
+              className="form-button inline-flex items-center justify-center gap-2"
+            >
+              {freeReportUsed.isExpired ? 'Unlock Your Report' : 'See Subscription Plans'}
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href={`/report/${freeReportUsed.reportToken}`}
+              className="text-[var(--text-dim)] text-sm hover:text-[var(--text)] transition-colors"
+            >
+              {freeReportUsed.isExpired ? 'View expired report' : 'View your existing report'}
+            </Link>
+          </div>
+        </div>
       )}
 
       {/* Progress Modal */}
