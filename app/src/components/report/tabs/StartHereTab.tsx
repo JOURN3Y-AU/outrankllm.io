@@ -365,8 +365,8 @@ export function StartHereTab({
             <span className="font-mono text-xs text-[var(--green)] uppercase tracking-wide">vs Competitors</span>
           </div>
           <div className="flex items-center justify-center gap-2" style={{ marginBottom: '12px' }}>
-            <competitorPosition.icon size={28} style={{ color: competitorPosition.color }} />
-            <span className="font-mono text-3xl" style={{ color: competitorPosition.color }}>
+            <competitorPosition.icon size={24} style={{ color: competitorPosition.color }} />
+            <span className="font-mono text-2xl" style={{ color: competitorPosition.color, whiteSpace: 'nowrap' }}>
               {competitorPosition.label}
             </span>
           </div>
