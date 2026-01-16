@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { FloatingPixels } from '@/components/landing/FloatingPixels'
 import { ReportTabs } from '@/components/report/ReportTabs'
@@ -11,6 +11,11 @@ import {
   Loader2,
   ExternalLink,
   ShieldAlert,
+  Mail,
+  Globe,
+  FileText,
+  Clock,
+  ArrowLeft,
 } from 'lucide-react'
 import type { FeatureFlags } from '@/lib/features/flags'
 
@@ -133,8 +138,52 @@ interface UserInfo {
   }[]
 }
 
+interface SearchResult {
+  type: 'report' | 'lead'
+  token?: string
+  email: string
+  domain: string
+  tier: string
+  visibility_score?: number
+  created_at: string
+  expires_at?: string | null
+  is_expired?: boolean
+  lead_id: string
+}
+
 interface AdminReportViewerProps {
   adminEmail: string
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  if (diffDays < 30) return `${diffDays}d ago`
+  return new Date(dateStr).toLocaleDateString()
+}
+
+function TierBadge({ tier }: { tier: string }) {
+  const isSubscriber = tier !== 'free'
+  return (
+    <span
+      className="font-mono text-xs px-2 py-0.5 rounded"
+      style={{
+        background: isSubscriber ? 'var(--gold)' : 'var(--surface-elevated)',
+        color: isSubscriber ? 'var(--bg)' : 'var(--text-dim)',
+      }}
+    >
+      {tier}
+    </span>
+  )
 }
 
 export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
@@ -142,62 +191,125 @@ export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
   const router = useRouter()
   const tokenFromUrl = searchParams.get('token') || ''
 
-  const [token, setToken] = useState(tokenFromUrl)
-  const [inputToken, setInputToken] = useState(tokenFromUrl)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [queryType, setQueryType] = useState<string | null>(null)
+
+  // Report state
+  const [selectedToken, setSelectedToken] = useState(tokenFromUrl)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
 
-  // Fetch report when token changes
-  useEffect(() => {
-    if (!token) return
+  // Fetch report by token
+  const fetchReport = useCallback(async (token: string) => {
+    setReportLoading(true)
+    setReportError(null)
 
-    const fetchReport = async () => {
-      setLoading(true)
-      setError(null)
+    try {
+      const response = await fetch(`/api/admin/report?token=${encodeURIComponent(token)}`)
+      const data = await response.json()
 
-      try {
-        const response = await fetch(`/api/admin/report?token=${encodeURIComponent(token)}`)
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch report')
-        }
-
-        setReportData(data.reportData)
-        setUserInfo(data.userInfo)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
-        setReportData(null)
-        setUserInfo(null)
-      } finally {
-        setLoading(false)
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch report')
       }
-    }
 
-    fetchReport()
-  }, [token])
+      setReportData(data.reportData)
+      setUserInfo(data.userInfo)
+      setSelectedToken(token)
+
+      // Clear search results when viewing a report
+      setSearchResults(null)
+      setSearchQuery('')
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Unknown error')
+      setReportData(null)
+      setUserInfo(null)
+    } finally {
+      setReportLoading(false)
+    }
+  }, [])
+
+  // Load report from URL on mount
+  useEffect(() => {
+    if (tokenFromUrl) {
+      fetchReport(tokenFromUrl)
+    }
+  }, [tokenFromUrl, fetchReport])
 
   // Update URL when viewing a report
   useEffect(() => {
-    if (token && token !== tokenFromUrl) {
-      router.replace(`/j3y-internal/view?token=${encodeURIComponent(token)}`)
+    if (selectedToken && selectedToken !== tokenFromUrl) {
+      router.replace(`/j3y-internal/view?token=${encodeURIComponent(selectedToken)}`)
     }
-  }, [token, tokenFromUrl, router])
+  }, [selectedToken, tokenFromUrl, router])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Handle search
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    const trimmedToken = inputToken.trim()
-    if (trimmedToken) {
-      setToken(trimmedToken)
+    const query = searchQuery.trim()
+    if (!query) return
+
+    // Check if it looks like a token (12 alphanumeric chars) - go directly to report
+    if (/^[a-zA-Z0-9]{12}$/.test(query)) {
+      fetchReport(query)
+      return
     }
+
+    setSearchLoading(true)
+    setSearchError(null)
+    setSearchResults(null)
+
+    try {
+      const response = await fetch(`/api/admin/search?q=${encodeURIComponent(query)}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Search failed')
+      }
+
+      setSearchResults(data.results)
+      setQueryType(data.queryType)
+
+      // If only one result with a token, go directly to it
+      if (data.results.length === 1 && data.results[0].token) {
+        fetchReport(data.results[0].token)
+      }
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  // Handle clicking a search result
+  const handleResultClick = (result: SearchResult) => {
+    if (result.token) {
+      fetchReport(result.token)
+    }
+  }
+
+  // Go back to search
+  const handleBackToSearch = () => {
+    setReportData(null)
+    setUserInfo(null)
+    setSelectedToken('')
+    router.replace('/j3y-internal/view')
   }
 
   // Dummy upgrade handler (admin can't upgrade for user)
   const handleUpgradeClick = () => {
     // No-op for admin view
   }
+
+  const isLoading = searchLoading || reportLoading
+  const showSearchResults = searchResults && searchResults.length > 0 && !reportData
+  const showNoResults = searchResults && searchResults.length === 0 && !reportData
+  const showReport = reportData && userInfo
 
   return (
     <>
@@ -222,6 +334,18 @@ export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
           style={{ padding: '24px' }}
         >
           <div style={{ maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto' }}>
+            {/* Back button when viewing report */}
+            {showReport && (
+              <button
+                onClick={handleBackToSearch}
+                className="flex items-center gap-2 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors font-mono text-sm"
+                style={{ marginBottom: '16px' }}
+              >
+                <ArrowLeft size={16} />
+                Back to Search
+              </button>
+            )}
+
             <h1
               className="font-mono text-[var(--text)] text-center"
               style={{ fontSize: '1.25rem', marginBottom: '16px' }}
@@ -229,52 +353,150 @@ export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
               Admin Report Viewer
             </h1>
 
-            <form onSubmit={handleSubmit} className="flex gap-2">
+            <form onSubmit={handleSearch} className="flex gap-2">
               <input
                 type="text"
-                value={inputToken}
-                onChange={(e) => setInputToken(e.target.value)}
-                placeholder="Enter report token..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by email, domain, or report token..."
                 className="flex-1 bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] font-mono text-sm"
                 style={{ padding: '12px 16px' }}
               />
               <button
                 type="submit"
-                disabled={loading}
+                disabled={isLoading}
                 className="bg-[var(--green)] text-[var(--bg)] font-mono text-sm flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
                 style={{ padding: '12px 20px' }}
               >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                View
+                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                Search
               </button>
             </form>
 
-            <p className="text-[var(--text-dim)] text-xs font-mono text-center" style={{ marginTop: '12px' }}>
-              Paste a report token (e.g., &quot;abc123xyz789&quot;) to view any user&apos;s report
-            </p>
+            <div className="flex items-center justify-center gap-4 text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '12px' }}>
+              <span className="flex items-center gap-1">
+                <Mail size={12} />
+                email
+              </span>
+              <span className="flex items-center gap-1">
+                <Globe size={12} />
+                domain
+              </span>
+              <span className="flex items-center gap-1">
+                <FileText size={12} />
+                token
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Error state */}
-        {error && (
+        {/* Error states */}
+        {(searchError || reportError) && (
           <div
             className="flex items-center justify-center gap-3 bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-sm"
             style={{ padding: '16px', margin: '24px' }}
           >
             <AlertCircle size={20} />
-            {error}
+            {searchError || reportError}
           </div>
         )}
 
         {/* Loading state */}
-        {loading && (
+        {isLoading && (
           <div className="flex items-center justify-center" style={{ padding: '80px 24px' }}>
             <Loader2 size={32} className="animate-spin text-[var(--green)]" />
           </div>
         )}
 
+        {/* Search results */}
+        {!isLoading && showSearchResults && (
+          <div style={{ padding: '24px' }}>
+            <div style={{ maxWidth: '700px', marginLeft: 'auto', marginRight: 'auto' }}>
+              <p className="font-mono text-sm text-[var(--text-dim)]" style={{ marginBottom: '16px' }}>
+                Found {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+                {queryType && <span className="text-[var(--text-mid)]"> (searched by {queryType})</span>}
+              </p>
+
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {searchResults.map((result, index) => (
+                  <button
+                    key={result.token || `${result.lead_id}-${index}`}
+                    onClick={() => handleResultClick(result)}
+                    disabled={!result.token}
+                    className="w-full text-left bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--green)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ padding: '16px' }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        {/* Domain */}
+                        <div className="flex items-center gap-2" style={{ marginBottom: '6px' }}>
+                          <Globe size={14} className="text-[var(--green)] flex-shrink-0" />
+                          <span className="font-mono text-sm text-[var(--text)] truncate">
+                            {result.domain}
+                          </span>
+                          <TierBadge tier={result.tier} />
+                        </div>
+
+                        {/* Email */}
+                        <div className="flex items-center gap-2" style={{ marginBottom: '6px' }}>
+                          <Mail size={14} className="text-[var(--text-dim)] flex-shrink-0" />
+                          <span className="font-mono text-xs text-[var(--text-mid)] truncate">
+                            {result.email}
+                          </span>
+                        </div>
+
+                        {/* Meta info */}
+                        <div className="flex items-center gap-3 text-[var(--text-dim)]">
+                          <span className="flex items-center gap-1 font-mono text-xs">
+                            <Clock size={12} />
+                            {formatRelativeTime(result.created_at)}
+                          </span>
+
+                          {result.type === 'report' && result.visibility_score !== undefined && (
+                            <span className="font-mono text-xs">
+                              Score: <span className="text-[var(--green)]">{result.visibility_score}%</span>
+                            </span>
+                          )}
+
+                          {result.is_expired && (
+                            <span className="font-mono text-xs text-red-400">
+                              EXPIRED
+                            </span>
+                          )}
+
+                          {result.type === 'lead' && (
+                            <span className="font-mono text-xs text-[var(--gold)]">
+                              No report yet
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* View button */}
+                      {result.token && (
+                        <div className="flex items-center gap-1 text-[var(--green)] font-mono text-xs">
+                          View
+                          <ExternalLink size={12} />
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* No results */}
+        {!isLoading && showNoResults && (
+          <div className="flex flex-col items-center justify-center text-[var(--text-dim)]" style={{ padding: '80px 24px' }}>
+            <Search size={48} className="opacity-30" style={{ marginBottom: '16px' }} />
+            <p className="font-mono text-sm">No results found</p>
+          </div>
+        )}
+
         {/* Report view */}
-        {!loading && reportData && userInfo && (
+        {!isLoading && showReport && (
           <div style={{ padding: '24px' }}>
             <div style={{ maxWidth: '960px', marginLeft: 'auto', marginRight: 'auto' }}>
               {/* Report header */}
@@ -361,16 +583,16 @@ export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
         )}
 
         {/* Empty state */}
-        {!loading && !error && !reportData && (
+        {!isLoading && !searchError && !reportError && !searchResults && !reportData && (
           <div className="flex flex-col items-center justify-center text-[var(--text-dim)]" style={{ padding: '80px 24px' }}>
             <Search size={48} className="opacity-30" style={{ marginBottom: '16px' }} />
-            <p className="font-mono text-sm">Enter a report token above to view</p>
+            <p className="font-mono text-sm">Search by email, domain, or report token</p>
           </div>
         )}
       </main>
 
       {/* Admin overlay with user info - floating button */}
-      {userInfo && <AdminOverlay userInfo={userInfo} reportToken={token} />}
+      {userInfo && <AdminOverlay userInfo={userInfo} reportToken={selectedToken} />}
     </>
   )
 }

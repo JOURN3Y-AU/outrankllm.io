@@ -65,7 +65,7 @@ function HorizontalBarChart({
 
         return (
           <div
-            key={entry.name}
+            key={`${entry.name}-${index}`}
             className="flex items-center"
             style={{
               filter: shouldBlur ? 'blur(4px)' : 'none',
