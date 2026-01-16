@@ -256,7 +256,7 @@ export function StartHereTab({
           <span className="text-[var(--green)]">{analysis?.business_name || domain}</span>
         </h2>
         <p className="text-[var(--text-mid)]" style={{ lineHeight: '1.6' }}>
-          We crawled your website to understand your business, asked ChatGPT, Claude, Gemini, and Perplexity questions your customers might ask, and identified who else is getting recommended instead of you.
+          We crawled your website to understand your business, asked ChatGPT, Claude, Gemini, and Perplexity questions your customers ask, and identified who else is getting recommended instead of you.
         </p>
       </div>
 
