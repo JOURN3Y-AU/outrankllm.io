@@ -140,6 +140,8 @@ export function ReportTabs({
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id)
+                  // Scroll window so tab content starts at top (just below sticky header)
+                  window.scrollTo({ top: tabsRef.current?.offsetTop ?? 0, behavior: 'smooth' })
                   trackEvent(ANALYTICS_EVENTS.REPORT_TAB_CLICK, {
                     tab_name: tab.id,
                     user_tier: tier,
