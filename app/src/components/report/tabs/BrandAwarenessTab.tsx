@@ -379,7 +379,7 @@ export function BrandAwarenessTab({
               </div>
 
               <div
-                className="text-[var(--text-dim)] text-sm"
+                className="text-[var(--text-mid)] text-sm"
                 style={{
                   lineHeight: '1.6',
                   maxHeight: expandedResponse === `recall-${index}` ? 'none' : '72px',

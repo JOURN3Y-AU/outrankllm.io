@@ -838,7 +838,7 @@ export function CompetitorsTab({
                     Your Perceived Strengths
                   </h4>
                 </div>
-                <ul className="text-[var(--text-dim)] text-sm" style={{ lineHeight: '1.7', paddingLeft: '24px' }}>
+                <ul className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.7', paddingLeft: '24px' }}>
                   {competitiveSummary.strengths.map((strength, i) => (
                     <li key={i} style={{ marginBottom: '8px' }}>{strength}</li>
                   ))}
@@ -855,7 +855,7 @@ export function CompetitorsTab({
                     Areas Where Competitors Excel
                   </h4>
                 </div>
-                <ul className="text-[var(--text-dim)] text-sm" style={{ lineHeight: '1.7', paddingLeft: '24px' }}>
+                <ul className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.7', paddingLeft: '24px' }}>
                   {competitiveSummary.weaknesses.map((weakness, i) => (
                     <li key={i} style={{ marginBottom: '8px' }}>{weakness}</li>
                   ))}
@@ -872,7 +872,7 @@ export function CompetitorsTab({
                     Opportunities to Improve
                   </h4>
                 </div>
-                <ul className="text-[var(--text-dim)] text-sm" style={{ lineHeight: '1.7', paddingLeft: '24px' }}>
+                <ul className="text-[var(--text-mid)] text-sm" style={{ lineHeight: '1.7', paddingLeft: '24px' }}>
                   {competitiveSummary.opportunities.map((opp, i) => (
                     <li key={i} style={{ marginBottom: '8px' }}>{opp}</li>
                   ))}
@@ -1035,7 +1035,7 @@ export function CompetitorsTab({
                                   style={{ marginTop: '12px', paddingTop: '12px' }}
                                 >
                                   <div
-                                    className="text-[var(--text-dim)] text-sm"
+                                    className="text-[var(--text-mid)] text-sm"
                                     style={{ lineHeight: '1.7' }}
                                   >
                                     {formatResponseText(result.response_text || '')}

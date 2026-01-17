@@ -214,7 +214,7 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
       <form onSubmit={handleSubmit} className="form-container">
         <input
           type="email"
-          placeholder="you@company.com"
+          placeholder="your work email"
           value={session ? session.email : email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -224,7 +224,7 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
         />
         <input
           type="text"
-          placeholder="yourdomain.com"
+          placeholder="your company website (e.g. acme.com)"
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           required
