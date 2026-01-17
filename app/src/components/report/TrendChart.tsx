@@ -329,28 +329,30 @@ export function MultiLineTrendChart({
 }: MultiLineTrendChartProps) {
   const padding = { top: 16, right: 45, bottom: 32, left: 45 }
 
-  // Separate overall series from platform series
-  const overallSeries = series.find(s => s.isOverall)
-  const platformSeries = series.filter(s => !s.isOverall)
-
   // Calculate chart dimensions and ranges for both axes
-  const { innerHeight, dates, leftAxis, rightAxis } = useMemo(() => {
-    const allDates: string[] = []
+  const { innerHeight, dates, leftAxis, rightAxis, overallSeries, platformSeries } = useMemo(() => {
+    // Separate overall series from platform series
+    const overall = series.find(s => s.isOverall)
+    const platforms = series.filter(s => !s.isOverall)
 
-    // Collect all dates
-    series.forEach(s => {
-      s.data.forEach(d => {
-        if (!allDates.includes(d.date)) {
+    // Collect all unique dates (using exact strings, deduped by Set)
+    const allDates: string[] = []
+    const seenDates = new Set<string>()
+
+    for (const s of series) {
+      for (const d of s.data) {
+        if (!seenDates.has(d.date)) {
+          seenDates.add(d.date)
           allDates.push(d.date)
         }
-      })
-    })
+      }
+    }
 
-    // Sort dates chronologically
+    // Sort dates chronologically by timestamp
     allDates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
 
     // Left axis: Overall visibility (0-100%)
-    const overallValues = overallSeries?.data.map(d => d.value) || [0]
+    const overallValues = overall?.data.map(d => d.value) || [0]
     const overallMin = Math.min(...overallValues)
     const overallMax = Math.max(...overallValues)
     const overallRange = overallMax - overallMin
@@ -358,7 +360,7 @@ export function MultiLineTrendChart({
     const leftMax = Math.min(100, overallMax + overallRange * 0.2)
 
     // Right axis: Dynamic based on values (can be percentages or absolute counts)
-    const platformValues = platformSeries.flatMap(s => s.data.map(d => d.value))
+    const platformValues = platforms.flatMap(s => s.data.map(d => d.value))
     const platformMin = 0 // Always start at 0
     const maxVal = Math.max(1, ...platformValues) // At least 1 to avoid division issues
     // Add 10% padding above max value
@@ -369,13 +371,16 @@ export function MultiLineTrendChart({
       dates: allDates,
       leftAxis: { min: leftMin, max: leftMax, range: leftMax - leftMin || 1 },
       rightAxis: { min: platformMin, max: platformMax, range: platformMax - platformMin || 1 },
+      overallSeries: overall,
+      platformSeries: platforms,
     }
-  }, [series, height, overallSeries, platformSeries])
+  }, [series, height])
 
   // Helper to calculate X position
   const getX = (date: string, viewBoxWidth: number) => {
     const dateIndex = dates.indexOf(date)
-    return padding.left + (dateIndex / Math.max(1, dates.length - 1)) * (viewBoxWidth - padding.left - padding.right)
+    if (dates.length <= 1) return padding.left + (viewBoxWidth - padding.left - padding.right) / 2
+    return padding.left + (dateIndex / (dates.length - 1)) * (viewBoxWidth - padding.left - padding.right)
   }
 
   // Helper to calculate Y position for left axis (overall %)
@@ -534,6 +539,7 @@ export function MultiLineTrendChart({
             date: d.date,
           }))
           const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ')
+
 
           return (
             <g key={s.key}>
