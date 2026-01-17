@@ -127,6 +127,8 @@ export async function POST(request: NextRequest) {
       scanId: scanRun.id,
       domain: targetDomain,
       email: targetEmail,
+      leadId: leadId,
+      domainSubscriptionId: targetDomainSubscriptionId,
     })
 
     await inngest.send({
