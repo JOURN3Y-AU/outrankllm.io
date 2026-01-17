@@ -2,6 +2,7 @@ import { Ghost } from '@/components/ghost/Ghost'
 import { FloatingPixels } from '@/components/landing/FloatingPixels'
 import { Platforms, WorksWith, Journ3yAttribution } from '@/components/landing/Platforms'
 import { EmailForm } from '@/components/landing/EmailForm'
+import { DemoVideo } from '@/components/landing/DemoVideo'
 import { Footer } from '@/components/landing/Footer'
 import { Nav } from '@/components/nav/Nav'
 
@@ -38,9 +39,19 @@ export default function Home() {
           </p>
 
           {/* Tagline */}
-          <p className="tagline max-w-[420px] text-center" style={{ marginBottom: '28px' }}>
+          <p className="tagline max-w-[420px] text-center" style={{ marginBottom: '24px' }}>
             Discover what AI says about your business<br />
             and how to <strong className="text-[var(--text-mid)]">fix it</strong>.
+          </p>
+
+          {/* Product demo video */}
+          <div className="w-full" style={{ maxWidth: '420px', marginBottom: '16px' }}>
+            <DemoVideo />
+          </div>
+
+          {/* CTA text */}
+          <p className="text-[var(--text-mid)] text-sm text-center" style={{ marginBottom: '16px' }}>
+            Enter your details to get your free report
           </p>
 
           {/* Email form */}
