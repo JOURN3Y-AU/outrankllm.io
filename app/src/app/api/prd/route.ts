@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server'
+
+// PRD generation uses extended thinking which can take 4-6 minutes
+// Vercel Pro with Fluid Compute supports up to 800s max
+export const maxDuration = 600
+
 import { requireSession } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getFeatureFlags } from '@/lib/features/flags'
