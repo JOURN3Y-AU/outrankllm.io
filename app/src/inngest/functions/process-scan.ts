@@ -52,6 +52,9 @@ export const processScan = inngest.createFunction(
     const { domain, email, verificationToken, skipEmail, domainSubscriptionId } = event.data
     const startTime = Date.now()
 
+    // DEBUG: Log entire event data at function start
+    console.log('[process-scan] EVENT DATA:', JSON.stringify(event.data, null, 2))
+
     // Step 1: Setup - resolve leadId and create or get scan run
     const { scanId, leadId } = await step.run("setup-scan", async () => {
       const supabase = createServiceClient()
