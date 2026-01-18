@@ -13,6 +13,9 @@ const COMING_SOON_ENABLED = process.env.COMING_SOON_ENABLED !== 'false' // Enabl
 const REGION_COOKIE_NAME = 'pricing_region'
 type PricingRegion = 'AU' | 'INTL'
 
+// Referral URL tracking
+const REFERRAL_COOKIE_NAME = 'referral_url'
+
 // Paths that should always be accessible (even in coming soon mode)
 const PUBLIC_PATHS = [
   '/coming-soon',
@@ -122,11 +125,50 @@ function addExperimentCookies(response: NextResponse, request: NextRequest): Nex
 }
 
 /**
- * Add all tracking cookies (region + experiments)
+ * Add referral URL cookie on first visit
+ * Captures the HTTP Referer header for later attribution
+ */
+function addReferralCookie(response: NextResponse, request: NextRequest): NextResponse {
+  // Don't override if already captured
+  const existingReferral = request.cookies.get(REFERRAL_COOKIE_NAME)?.value
+  if (existingReferral) {
+    return response
+  }
+
+  // Get the Referer header (note: browser spelling is "Referer" not "Referrer")
+  const referer = request.headers.get('referer')
+
+  // Only capture external referrals (not self-referrals from our own site)
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer)
+      const currentHost = request.headers.get('host') || ''
+
+      // Skip if referrer is from our own domain
+      if (refererUrl.host !== currentHost) {
+        response.cookies.set(REFERRAL_COOKIE_NAME, referer, {
+          httpOnly: false, // Allow client-side reading for scan API
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 30, // 30 days
+          path: '/',
+        })
+      }
+    } catch {
+      // Invalid URL, skip
+    }
+  }
+
+  return response
+}
+
+/**
+ * Add all tracking cookies (region + experiments + referral)
  */
 function addTrackingCookies(response: NextResponse, request: NextRequest): NextResponse {
   addRegionCookie(response, request)
   addExperimentCookies(response, request)
+  addReferralCookie(response, request)
   return response
 }
 

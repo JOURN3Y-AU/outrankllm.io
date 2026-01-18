@@ -22,6 +22,9 @@ export async function POST(request: NextRequest) {
     const ipRegion = request.headers.get('x-vercel-ip-country-region')
     const ipTimezone = request.headers.get('x-vercel-ip-timezone')
 
+    // Capture referral URL from cookie (set by middleware on first visit)
+    const referralUrl = request.cookies.get('referral_url')?.value || null
+
     // Parse and validate request body
     const body = await request.json()
     const result = ScanRequestSchema.safeParse(body)
@@ -198,6 +201,7 @@ export async function POST(request: NextRequest) {
     if (ipRegion) upsertData.ip_region = ipRegion
     if (ipTimezone) upsertData.ip_timezone = ipTimezone
     if (homepageVariant) upsertData.homepage_variant = homepageVariant
+    if (referralUrl) upsertData.referral_url = referralUrl
 
     const { data: lead, error: leadError } = await supabase
       .from('leads')
