@@ -5,10 +5,14 @@ import { EmailForm } from '@/components/landing/EmailForm'
 import { DemoVideo } from '@/components/landing/DemoVideo'
 import { Footer } from '@/components/landing/Footer'
 import { Nav } from '@/components/nav/Nav'
+import { ExperimentTracker } from '@/components/experiments/ExperimentTracker'
 
 export default function Home() {
   return (
     <>
+      {/* A/B Test Tracking */}
+      <ExperimentTracker experimentName="homepage" />
+
       {/* Background layers */}
       <div className="grid-bg" />
       <FloatingPixels />

@@ -788,6 +788,74 @@ leads (user account)
 
 ---
 
+## A/B Testing
+
+Simple config-file based A/B testing with GA4 tracking.
+
+### How It Works
+
+1. **Middleware** assigns visitors to a variant via cookie on first visit
+2. **Config file** defines experiments, variants, and weights
+3. **ExperimentTracker** component sends variant to GA4 on page load
+4. **GA4** tracks all events with `ab_variant` user property for filtering
+
+### Key Files
+
+- `src/lib/experiments/config.ts` - Experiment definitions and weights
+- `src/middleware.ts` - Cookie assignment (in `addExperimentCookies`)
+- `src/lib/analytics.ts` - GA4 tracking functions (`trackExperimentImpression`)
+- `src/components/experiments/ExperimentTracker.tsx` - Client component for tracking
+
+### Adding/Modifying Experiments
+
+Edit `src/lib/experiments/config.ts`:
+
+```typescript
+// Add a third variant
+variants: [
+  { id: 'control', weight: 34 },
+  { id: 'variant-b', weight: 33 },
+  { id: 'variant-c', weight: 33 },
+]
+
+// End experiment (pick winner)
+variants: [
+  { id: 'variant-b', weight: 100 },
+]
+```
+
+### Rendering Different Pages
+
+In your page component:
+
+```typescript
+import { cookies } from 'next/headers'
+import { experiments } from '@/lib/experiments/config'
+
+export default function Home() {
+  const variant = cookies().get(experiments.homepage.cookieName)?.value || 'control'
+
+  switch (variant) {
+    case 'variant-b':
+      return <HomePageNew />
+    default:
+      return <HomePageControl />
+  }
+}
+```
+
+### GA4 Reporting
+
+1. **User Properties** → Filter by `ab_variant` to see traffic split
+2. **Events** → `experiment_impression` shows variant assignments
+3. **Conversions** → All existing events (form submissions, checkouts) can be filtered by `ab_variant`
+
+### Testing Locally
+
+Clear the `exp-homepage` cookie to get re-assigned to a variant.
+
+---
+
 ## Design Notes
 
 - **Brand name**: outrankllm.io (with `.io` in white, `llm` in green)

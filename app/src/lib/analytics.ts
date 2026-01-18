@@ -15,7 +15,7 @@
 declare global {
   interface Window {
     gtag?: (
-      command: 'event' | 'config' | 'js',
+      command: 'event' | 'config' | 'js' | 'set',
       action: string,
       params?: Record<string, unknown>
     ) => void
@@ -134,4 +134,52 @@ export const ANALYTICS_EVENTS = {
   REPORT_TAB_CLICK: 'report_tab_click',
   UPSELL_CTA_CLICKED: 'upsell_cta_clicked',
   EXPORT_DOWNLOADED: 'export_downloaded',
+
+  // A/B Testing events
+  EXPERIMENT_IMPRESSION: 'experiment_impression',
 } as const
+
+/**
+ * Set a user property for GA4 (used for A/B test variant tracking)
+ * User properties persist across events for the session
+ */
+export function setUserProperty(name: string, value: string): void {
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag('set', 'user_properties', { [name]: value })
+  }
+}
+
+/**
+ * Track A/B experiment impression
+ * Sets user property and fires impression event for GA4 reporting
+ */
+export function trackExperimentImpression(
+  experimentId: string,
+  variantId: string
+): void {
+  // Set as user property (persists across all events in session)
+  setUserProperty('ab_variant', variantId)
+
+  // Also fire as event for easier funnel analysis
+  trackEventOnce(
+    ANALYTICS_EVENTS.EXPERIMENT_IMPRESSION,
+    `${experimentId}_${variantId}`,
+    {
+      experiment_id: experimentId,
+      variant_id: variantId,
+    }
+  )
+}
+
+/**
+ * Get experiment variant from cookie (client-side)
+ */
+export function getExperimentVariant(cookieName: string): string | null {
+  if (typeof document === 'undefined') return null
+
+  const match = document.cookie
+    .split('; ')
+    .find(row => row.startsWith(`${cookieName}=`))
+
+  return match ? match.split('=')[1] : null
+}

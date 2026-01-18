@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
+import { experiments, selectVariant } from '@/lib/experiments/config'
 
 // Preview mode configuration
 const PREVIEW_SECRET = process.env.PREVIEW_SECRET || 'outrankllm-preview-2024'
@@ -96,6 +97,39 @@ function addRegionCookie(response: NextResponse, request: NextRequest): NextResp
   return response
 }
 
+/**
+ * Add A/B experiment cookies to response
+ * Assigns visitor to a variant if not already assigned
+ */
+function addExperimentCookies(response: NextResponse, request: NextRequest): NextResponse {
+  for (const experiment of Object.values(experiments)) {
+    const existingVariant = request.cookies.get(experiment.cookieName)?.value
+
+    // Only assign if not already in experiment
+    if (!existingVariant) {
+      const variant = selectVariant(experiment)
+      response.cookies.set(experiment.cookieName, variant, {
+        httpOnly: false, // Allow client-side reading for analytics
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      })
+    }
+  }
+
+  return response
+}
+
+/**
+ * Add all tracking cookies (region + experiments)
+ */
+function addTrackingCookies(response: NextResponse, request: NextRequest): NextResponse {
+  addRegionCookie(response, request)
+  addExperimentCookies(response, request)
+  return response
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl
 
@@ -123,17 +157,17 @@ export async function middleware(request: NextRequest) {
     }
 
     // Valid session - allow access
-    return addRegionCookie(NextResponse.next(), request)
+    return addTrackingCookies(NextResponse.next(), request)
   }
 
   // Skip middleware for public paths
   if (PUBLIC_PATHS.some(path => pathname.startsWith(path))) {
-    return addRegionCookie(NextResponse.next(), request)
+    return addTrackingCookies(NextResponse.next(), request)
   }
 
   // If coming soon mode is disabled, allow all access
   if (!COMING_SOON_ENABLED) {
-    return addRegionCookie(NextResponse.next(), request)
+    return addTrackingCookies(NextResponse.next(), request)
   }
 
   // Check for preview secret in URL (sets cookie for future visits)
@@ -146,13 +180,13 @@ export async function middleware(request: NextRequest) {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30, // 30 days
     })
-    return addRegionCookie(response, request)
+    return addTrackingCookies(response, request)
   }
 
   // Check for existing preview cookie
   const hasPreviewAccess = request.cookies.get(PREVIEW_COOKIE_NAME)?.value === 'true'
   if (hasPreviewAccess) {
-    return addRegionCookie(NextResponse.next(), request)
+    return addTrackingCookies(NextResponse.next(), request)
   }
 
   // No preview access - redirect to coming soon page
@@ -160,7 +194,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/coming-soon', request.url))
   }
 
-  return addRegionCookie(NextResponse.next(), request)
+  return addTrackingCookies(NextResponse.next(), request)
 }
 
 export const config = {
