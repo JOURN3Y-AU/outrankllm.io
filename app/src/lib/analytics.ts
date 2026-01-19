@@ -130,6 +130,10 @@ export const ANALYTICS_EVENTS = {
   CHECKOUT_STARTED: 'checkout_started',
   SUBSCRIPTION_COMPLETED: 'subscription_completed',
 
+  // Modal events (Variant C)
+  SCAN_MODAL_OPENED: 'scan_modal_opened',
+  SCAN_MODAL_CLOSED: 'scan_modal_closed',
+
   // Engagement events
   REPORT_TAB_CLICK: 'report_tab_click',
   UPSELL_CTA_CLICKED: 'upsell_cta_clicked',

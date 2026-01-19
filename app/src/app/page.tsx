@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { experiments } from '@/lib/experiments/config'
 import { HomePageControl } from '@/components/landing/HomePageControl'
 import { HomePageB } from '@/components/landing/HomePageB'
+import { HomePageC } from '@/components/landing/HomePageC'
 
 interface HomeProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -22,6 +23,10 @@ export default async function Home({ searchParams }: HomeProps) {
   const variant = variantOverride || cookieVariant || 'control'
 
   // Render the appropriate homepage variant
+  if (variant === 'variant-c') {
+    return <HomePageC />
+  }
+
   if (variant === 'variant-b') {
     return <HomePageB />
   }

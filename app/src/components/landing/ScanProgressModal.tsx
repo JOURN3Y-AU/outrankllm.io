@@ -74,7 +74,7 @@ export function ScanProgressModal({
   const isFailed = status?.isFailed || false
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 10001 }}>
       {/* Backdrop - clicking always closes (users can leave anytime) */}
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm cursor-pointer"

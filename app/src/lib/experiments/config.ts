@@ -35,6 +35,7 @@ export const experiments: Record<string, Experiment> = {
     variants: [
       { id: 'control', weight: 0 },
       { id: 'variant-b', weight: 100 },
+      { id: 'variant-c', weight: 0 },
     ],
   },
 }
