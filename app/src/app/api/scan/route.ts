@@ -257,7 +257,7 @@ export async function POST(request: NextRequest) {
     // Generate verification token for magic link
     const verificationToken = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date()
-    expiresAt.setHours(expiresAt.getHours() + 24) // 24 hour expiry
+    expiresAt.setDate(expiresAt.getDate() + 10) // 10 day expiry
 
     // Store verification token
     const { error: tokenError } = await supabase
