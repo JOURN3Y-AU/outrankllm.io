@@ -157,7 +157,9 @@ export function ScanFormModal({ isOpen, onClose, triggerButtonRef }: ScanFormMod
     })
 
     try {
-      const homepageVariant = getCookie(experiments.homepage.cookieName)
+      // Check URL param first (for testing), then fall back to cookie
+      const urlParams = new URLSearchParams(window.location.search)
+      const homepageVariant = urlParams.get('variant') || getCookie(experiments.homepage.cookieName)
 
       const response = await fetch('/api/scan', {
         method: 'POST',
