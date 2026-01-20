@@ -98,6 +98,21 @@ export async function POST(request: NextRequest) {
       leadId = lead.id
       targetDomain = domain || lead.domain
       targetEmail = lead.email
+
+      // Look up domain subscription for this lead/domain if not provided
+      if (!targetDomainSubscriptionId && targetDomain) {
+        const { data: subscription } = await supabase
+          .from('domain_subscriptions')
+          .select('id')
+          .eq('lead_id', leadId)
+          .eq('domain', targetDomain)
+          .eq('status', 'active')
+          .single()
+
+        if (subscription) {
+          targetDomainSubscriptionId = subscription.id
+        }
+      }
     }
 
     // Create new scan run (bypassing all tier limits)
