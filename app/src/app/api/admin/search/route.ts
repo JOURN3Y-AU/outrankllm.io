@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceClient()
 
     // Detect query type
-    const isToken = /^[a-zA-Z0-9]{12}$/.test(query)
+    // Report tokens are 16-character hex strings (e.g., 68bbc4f0e39003a6)
+    const isToken = /^[a-fA-F0-9]{16}$/.test(query)
     const isDefinitelyEmail = query.includes('@')
 
     interface SearchResult {

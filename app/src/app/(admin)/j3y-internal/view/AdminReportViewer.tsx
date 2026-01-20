@@ -254,8 +254,8 @@ export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
     const query = searchQuery.trim()
     if (!query) return
 
-    // Check if it looks like a token (12 alphanumeric chars) - go directly to report
-    if (/^[a-zA-Z0-9]{12}$/.test(query)) {
+    // Check if it looks like a token (16-char hex string) - go directly to report
+    if (/^[a-fA-F0-9]{16}$/.test(query)) {
       fetchReport(query)
       return
     }

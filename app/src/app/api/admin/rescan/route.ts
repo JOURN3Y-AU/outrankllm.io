@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { inngest } from '@/inngest/client'
+import { getAdminSession } from '@/lib/admin'
 
 // Admin endpoint to force a rescan
-// Requires ADMIN_SECRET header for authentication
+// Supports two auth methods:
+// 1. x-admin-secret header (for programmatic/external access)
+// 2. Admin session cookie (for admin UI)
 export async function POST(request: NextRequest) {
   try {
-    // Check admin authentication
+    // Check admin authentication - try header first, then session
     const adminSecret = request.headers.get('x-admin-secret')
-    if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+    const hasValidSecret = adminSecret && adminSecret === process.env.ADMIN_SECRET
+    const adminSession = await getAdminSession()
+
+    if (!hasValidSecret && !adminSession) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

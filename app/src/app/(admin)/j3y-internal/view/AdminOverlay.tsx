@@ -15,6 +15,10 @@ import {
   ChevronUp,
   ExternalLink,
   X,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 
 interface UserInfo {
@@ -59,6 +63,7 @@ interface UserInfo {
 interface AdminOverlayProps {
   userInfo: UserInfo
   reportToken: string
+  onRescanComplete?: () => void
 }
 
 function formatDate(dateStr: string | null): string {
@@ -142,11 +147,56 @@ function Section({ title, children, defaultOpen = true }: {
   )
 }
 
-export function AdminOverlay({ userInfo, reportToken }: AdminOverlayProps) {
+export function AdminOverlay({ userInfo, reportToken, onRescanComplete }: AdminOverlayProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [rescanState, setRescanState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [rescanError, setRescanError] = useState<string | null>(null)
+  const [rescanResult, setRescanResult] = useState<{ scanId: string } | null>(null)
 
   const tierColor = userInfo.isSubscriber ? 'var(--gold)' : 'var(--text-dim)'
   const tierLabel = userInfo.tier.charAt(0).toUpperCase() + userInfo.tier.slice(1)
+
+  // Trigger a rescan for this subscription
+  const handleRescan = async () => {
+    if (!userInfo.subscription) return
+
+    setRescanState('loading')
+    setRescanError(null)
+    setRescanResult(null)
+
+    try {
+      const response = await fetch('/api/admin/rescan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userInfo.email,
+          domain: userInfo.subscription.domain,
+          domainSubscriptionId: userInfo.subscription.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to trigger rescan')
+      }
+
+      setRescanState('success')
+      setRescanResult({ scanId: data.scanId })
+      onRescanComplete?.()
+
+      // Reset success state after 10 seconds
+      setTimeout(() => {
+        setRescanState('idle')
+        setRescanResult(null)
+      }, 10000)
+    } catch (err) {
+      setRescanState('error')
+      setRescanError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
 
   const locationStr = [userInfo.location.city, userInfo.location.region, userInfo.location.country]
     .filter(Boolean)
@@ -349,6 +399,53 @@ export function AdminOverlay({ userInfo, reportToken }: AdminOverlayProps) {
                       }
                     />
                   )}
+
+                  {/* Rescan Button */}
+                  <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                    <button
+                      onClick={handleRescan}
+                      disabled={rescanState === 'loading'}
+                      className="w-full flex items-center justify-center gap-2 bg-[var(--green)] text-[var(--bg)] font-mono text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                      style={{ padding: '10px 16px', borderRadius: '4px' }}
+                    >
+                      {rescanState === 'loading' ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Triggering Rescan...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={16} />
+                          Trigger Rescan
+                        </>
+                      )}
+                    </button>
+
+                    {/* Success message */}
+                    {rescanState === 'success' && rescanResult && (
+                      <div
+                        className="flex items-center gap-2 text-[var(--green)] font-mono text-xs"
+                        style={{ marginTop: '12px', padding: '8px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}
+                      >
+                        <CheckCircle2 size={14} />
+                        <div>
+                          <p>Scan initiated successfully!</p>
+                          <code className="text-[10px] opacity-70">{rescanResult.scanId}</code>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error message */}
+                    {rescanState === 'error' && rescanError && (
+                      <div
+                        className="flex items-center gap-2 text-red-400 font-mono text-xs"
+                        style={{ marginTop: '12px', padding: '8px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '4px' }}
+                      >
+                        <AlertCircle size={14} />
+                        <span>{rescanError}</span>
+                      </div>
+                    )}
+                  </div>
                 </Section>
               )}
 
