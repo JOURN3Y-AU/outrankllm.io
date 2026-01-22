@@ -15,6 +15,7 @@ import {
   type LLMResponseData,
   type BrandAwarenessData,
   type CompetitiveSummaryData,
+  type PlatformDataInput,
 } from "@/lib/ai/generate-actions"
 import {
   generatePrd,
@@ -433,10 +434,17 @@ export const enrichSubscriber = inngest.createFunction(
           .eq("run_id", scanRunId)
           .single()
 
-        // Get site analysis for technical data
+        // Get site analysis for technical data and platform detection
         const { data: analysis } = await supabase
           .from("site_analyses")
-          .select("has_sitemap, has_robots_txt, schema_types, has_meta_descriptions, pages_crawled")
+          .select(`
+            has_sitemap, has_robots_txt, schema_types, has_meta_descriptions, pages_crawled,
+            detected_cms, detected_cms_confidence, detected_framework, detected_css_framework,
+            detected_ecommerce, detected_hosting, detected_analytics, detected_lead_capture,
+            has_blog, has_case_studies, has_resources, has_faq, has_about_page, has_team_page,
+            has_testimonials, is_ecommerce, has_ai_readability_issues, ai_readability_issues,
+            renders_client_side, likely_ai_generated, ai_generated_signals
+          `)
           .eq("run_id", scanRunId)
           .single()
 
@@ -479,6 +487,33 @@ export const enrichSubscriber = inngest.createFunction(
           log.info(scanRunId, `Found ${completedActionTitles.length} previously completed actions to exclude from generation`)
         }
 
+        // Build platform data from site_analyses
+        const platformData: PlatformDataInput | null = analysis?.detected_cms !== undefined ? {
+          cms: analysis.detected_cms,
+          cmsConfidence: analysis.detected_cms_confidence as 'high' | 'medium' | 'low' | null,
+          framework: analysis.detected_framework || null,
+          cssFramework: analysis.detected_css_framework || null,
+          ecommerce: analysis.detected_ecommerce || null,
+          hosting: analysis.detected_hosting || null,
+          analytics: analysis.detected_analytics || [],
+          leadCapture: analysis.detected_lead_capture || [],
+          contentSections: {
+            hasBlog: analysis.has_blog || false,
+            hasCaseStudies: analysis.has_case_studies || false,
+            hasResources: analysis.has_resources || false,
+            hasFaq: analysis.has_faq || false,
+            hasAboutPage: analysis.has_about_page || false,
+            hasTeamPage: analysis.has_team_page || false,
+            hasTestimonials: analysis.has_testimonials || false,
+          },
+          isEcommerce: analysis.is_ecommerce || false,
+          hasAiReadabilityIssues: analysis.has_ai_readability_issues || false,
+          aiReadabilityIssues: analysis.ai_readability_issues || [],
+          rendersClientSide: analysis.renders_client_side || false,
+          likelyAiGenerated: analysis.likely_ai_generated || false,
+          aiSignals: analysis.ai_generated_signals || [],
+        } : null
+
         // Build action plan input
         const actionPlanInput: ActionPlanInput = {
           analysis: {
@@ -506,6 +541,7 @@ export const enrichSubscriber = inngest.createFunction(
             byPlatform: buildPlatformScores(report?.platform_scores, responses),
           },
           domain: scanData.domain,
+          platformData, // Platform/technology detection data
           completedActionTitles, // Pass to Claude to avoid re-suggesting
         }
 
@@ -682,10 +718,24 @@ export const enrichSubscriber = inngest.createFunction(
         return { skipped: true, reason: "no_action_items" }
       }
 
-      // Get site analysis for context
+      // Get site analysis for context (including platform detection for PRD)
       const { data: analysis } = await supabase
         .from("site_analyses")
-        .select("business_name, business_type, services")
+        .select(`
+          business_name, business_type, services,
+          detected_cms, detected_cms_confidence, detected_framework, detected_css_framework,
+          detected_ecommerce, detected_hosting, detected_analytics, detected_lead_capture,
+          has_blog, has_case_studies, has_resources, has_faq, has_about_page, has_team_page,
+          has_testimonials, is_ecommerce, has_ai_readability_issues, ai_readability_issues,
+          renders_client_side, likely_ai_generated, ai_generated_signals
+        `)
+        .eq("run_id", scanRunId)
+        .single()
+
+      // Get report for visibility score
+      const { data: report } = await supabase
+        .from("reports")
+        .select("visibility_score")
         .eq("run_id", scanRunId)
         .single()
 
@@ -759,12 +809,50 @@ export const enrichSubscriber = inngest.createFunction(
           keywordMap: actionPlan.keyword_map,
         }
 
+        // Build platform data from site_analyses for PRD generation
+        const platformData: PlatformDataInput | null = analysis?.detected_cms !== undefined ? {
+          cms: analysis.detected_cms,
+          cmsConfidence: analysis.detected_cms_confidence as 'high' | 'medium' | 'low' | null,
+          framework: analysis.detected_framework || null,
+          cssFramework: analysis.detected_css_framework || null,
+          ecommerce: analysis.detected_ecommerce || null,
+          hosting: analysis.detected_hosting || null,
+          analytics: analysis.detected_analytics || [],
+          leadCapture: analysis.detected_lead_capture || [],
+          contentSections: {
+            hasBlog: analysis.has_blog || false,
+            hasCaseStudies: analysis.has_case_studies || false,
+            hasResources: analysis.has_resources || false,
+            hasFaq: analysis.has_faq || false,
+            hasAboutPage: analysis.has_about_page || false,
+            hasTeamPage: analysis.has_team_page || false,
+            hasTestimonials: analysis.has_testimonials || false,
+          },
+          isEcommerce: analysis.is_ecommerce || false,
+          hasAiReadabilityIssues: analysis.has_ai_readability_issues || false,
+          aiReadabilityIssues: analysis.ai_readability_issues || [],
+          rendersClientSide: analysis.renders_client_side || false,
+          likelyAiGenerated: analysis.likely_ai_generated || false,
+          aiSignals: analysis.ai_generated_signals || [],
+        } : null
+
+        // Build tech stack from platform detection or use defaults
+        const techStack: string[] = []
+        if (platformData?.framework) techStack.push(platformData.framework)
+        if (platformData?.cms) techStack.push(platformData.cms)
+        if (platformData?.cssFramework) techStack.push(platformData.cssFramework)
+        if (techStack.length === 0) {
+          techStack.push("Next.js", "React", "TypeScript") // Default for modern sites
+        }
+
         const siteContext: SiteContext = {
           domain: scanData.domain,
           businessName: analysis?.business_name || null,
           businessType: analysis?.business_type || null,
-          techStack: ["Next.js", "React", "TypeScript"], // Default for most modern sites
+          techStack,
           services: analysis?.services || null,
+          platformData, // Pass platform detection data
+          visibilityScore: report?.visibility_score || null, // Pass visibility score for context
         }
 
         // Generate PRD

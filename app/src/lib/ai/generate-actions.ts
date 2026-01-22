@@ -66,6 +66,43 @@ export interface CompetitiveSummaryData {
   overallPosition: string
 }
 
+export interface PlatformDataInput {
+  // CMS / Website Builder detection
+  cms: string | null
+  cmsConfidence: 'high' | 'medium' | 'low' | null
+  framework: string | null
+  cssFramework: string | null
+  ecommerce: string | null
+  hosting: string | null
+
+  // Analytics & Lead Capture
+  analytics: string[]
+  leadCapture: string[]
+
+  // Content sections detected
+  contentSections: {
+    hasBlog: boolean
+    hasCaseStudies: boolean
+    hasResources: boolean
+    hasFaq: boolean
+    hasAboutPage: boolean
+    hasTeamPage: boolean
+    hasTestimonials: boolean
+  }
+
+  // E-commerce
+  isEcommerce: boolean
+
+  // AI Readability issues
+  hasAiReadabilityIssues: boolean
+  aiReadabilityIssues: string[]
+  rendersClientSide: boolean
+
+  // AI-generated content signals
+  likelyAiGenerated: boolean
+  aiSignals: string[]
+}
+
 export interface ActionPlanInput {
   // Core business data
   analysis: {
@@ -106,6 +143,9 @@ export interface ActionPlanInput {
   }
 
   domain: string
+
+  // Platform/technology detection data
+  platformData: PlatformDataInput | null
 
   // Previously completed action titles (to avoid regenerating)
   completedActionTitles?: string[]
@@ -330,6 +370,85 @@ function buildCompetitiveAnalysis(
   return analysis
 }
 
+function buildPlatformAnalysis(platformData: PlatformDataInput | null): string {
+  if (!platformData) {
+    return 'Platform detection not available for this scan.'
+  }
+
+  let analysis = ''
+
+  // CMS/Platform identification
+  if (platformData.cms) {
+    const confidence = platformData.cmsConfidence ? ` (${platformData.cmsConfidence} confidence)` : ''
+    analysis += `CMS/PLATFORM: ${platformData.cms}${confidence}\n`
+  } else {
+    analysis += 'CMS/PLATFORM: Unknown (custom build or undetected)\n'
+  }
+
+  // Tech stack
+  const techParts: string[] = []
+  if (platformData.framework) techParts.push(`Framework: ${platformData.framework}`)
+  if (platformData.cssFramework) techParts.push(`CSS: ${platformData.cssFramework}`)
+  if (platformData.hosting) techParts.push(`Hosting: ${platformData.hosting}`)
+  if (platformData.ecommerce) techParts.push(`E-commerce: ${platformData.ecommerce}`)
+
+  if (techParts.length > 0) {
+    analysis += `TECH STACK: ${techParts.join(', ')}\n`
+  }
+
+  // Analytics
+  if (platformData.analytics && platformData.analytics.length > 0) {
+    analysis += `ANALYTICS: ${platformData.analytics.join(', ')}\n`
+  } else {
+    analysis += 'ANALYTICS: None detected\n'
+  }
+
+  // Lead capture
+  if (platformData.leadCapture && platformData.leadCapture.length > 0) {
+    analysis += `LEAD CAPTURE: ${platformData.leadCapture.join(', ')}\n`
+  }
+
+  // Content sections present
+  const sections: string[] = []
+  if (platformData.contentSections.hasBlog) sections.push('Blog')
+  if (platformData.contentSections.hasCaseStudies) sections.push('Case Studies')
+  if (platformData.contentSections.hasResources) sections.push('Resources')
+  if (platformData.contentSections.hasFaq) sections.push('FAQ')
+  if (platformData.contentSections.hasAboutPage) sections.push('About')
+  if (platformData.contentSections.hasTeamPage) sections.push('Team')
+  if (platformData.contentSections.hasTestimonials) sections.push('Testimonials')
+
+  if (sections.length > 0) {
+    analysis += `CONTENT SECTIONS: ${sections.join(', ')}\n`
+  }
+
+  // E-commerce flag
+  if (platformData.isEcommerce) {
+    analysis += 'E-COMMERCE: Yes\n'
+  }
+
+  // AI Readability issues
+  if (platformData.hasAiReadabilityIssues) {
+    analysis += '\n⚠️ AI READABILITY ISSUES DETECTED:\n'
+    if (platformData.rendersClientSide) {
+      analysis += '- Site renders client-side (JS required) - AI crawlers may not see content\n'
+    }
+    for (const issue of platformData.aiReadabilityIssues) {
+      analysis += `- ${issue}\n`
+    }
+  }
+
+  // AI-generated content signals
+  if (platformData.likelyAiGenerated && platformData.aiSignals.length > 0) {
+    analysis += '\n⚠️ AI-GENERATED CONTENT SIGNALS:\n'
+    for (const signal of platformData.aiSignals) {
+      analysis += `- ${signal}\n`
+    }
+  }
+
+  return analysis
+}
+
 function buildSystemPrompt(): string {
   return `You are an expert AI Search Optimization (GEO) consultant with deep expertise in helping businesses improve their visibility in AI assistants like ChatGPT, Claude, Perplexity, and Gemini.
 
@@ -376,6 +495,57 @@ CATEGORY DEFINITIONS:
 - citations: Getting mentioned in authoritative sources
 - local: Geographic/location-based optimizations
 
+PLATFORM-SPECIFIC RECOMMENDATIONS:
+When platform/CMS data is available, you MUST tailor recommendations to the specific technology stack. This is critical for actionable advice.
+
+For WordPress sites:
+- Recommend specific plugins (Yoast SEO, Rank Math, Schema Pro, etc.)
+- Reference wp-admin paths and settings locations
+- Suggest theme-specific optimizations when relevant
+- Mention .htaccess or wp-config.php changes where appropriate
+
+For Webflow sites:
+- Reference Webflow's native SEO settings panel
+- Recommend Webflow-specific schema implementations
+- Suggest using Webflow's CMS collections for content
+- Mention Webflow's built-in 301 redirect manager
+
+For Squarespace sites:
+- Reference Squarespace's SEO panel locations
+- Recommend Squarespace-compatible third-party tools
+- Suggest using built-in blogging and page features
+- Mention limitations of the platform where relevant
+
+For Shopify sites:
+- Recommend Shopify-specific apps (JSON-LD for SEO, etc.)
+- Reference Shopify's native SEO fields in admin
+- Suggest product/collection optimizations
+- Mention Shopify's Liquid templating for advanced changes
+
+For Wix sites:
+- Reference Wix SEO Wiz and advanced SEO settings
+- Suggest Wix-compatible solutions
+- Mention Wix's URL structure limitations
+- Recommend Wix Editor features for content optimization
+
+For custom/React/Next.js sites:
+- Provide code snippets for JSON-LD implementation
+- Suggest using next-seo or similar packages
+- Reference server-side rendering considerations
+- Mention build/deployment optimizations
+
+For sites with AI READABILITY ISSUES (client-side rendering):
+- PRIORITIZE fixing client-side rendering issues
+- Recommend server-side rendering or static generation
+- Suggest pre-rendering services if framework allows
+- This is CRITICAL - AI assistants cannot read JS-rendered content
+
+For sites with AI-GENERATED CONTENT SIGNALS:
+- Recommend humanizing content with specific examples
+- Suggest adding unique expertise and personal insights
+- Recommend including original research or data
+- Suggest varying sentence structure and vocabulary
+
 CONTENT QUALITY GUIDELINES - CRITICAL:
 When suggesting URLs, content, meta tags, or any copy, follow these rules to avoid search engine and AI penalties:
 
@@ -407,7 +577,28 @@ When suggesting URLs, content, meta tags, or any copy, follow these rules to avo
 6. HONEST CLAIMS ONLY:
    - Only suggest claims the business can substantiate
    - Use qualifiers when appropriate: "One of Brisbane's...", "Specialists in..."
-   - Recommend adding proof alongside any positioning statements`
+   - Recommend adding proof alongside any positioning statements
+
+VISIBILITY SCORE LANGUAGE - EXECUTIVE SUMMARY TONE:
+When writing the executive summary, use accurate, calibrated language for visibility scores:
+
+| Score Range | Label      | Description                                    |
+|-------------|------------|------------------------------------------------|
+| 0-5%        | Critical   | Virtually invisible to AI assistants           |
+| 5-15%       | Very Low   | Rarely mentioned by AI assistants              |
+| 15-30%      | Low        | Occasionally mentioned but not prominent       |
+| 30-50%      | Moderate   | Some presence but significant room to grow     |
+| 50-70%      | Good       | Solid visibility with optimization potential   |
+| 70-85%      | Strong     | Well-represented across AI platforms           |
+| 85-100%     | Excellent  | Exceptional AI visibility                      |
+
+Language guidelines:
+- NEVER say "poor" or "only X%" - these are unnecessarily negative
+- Use factual, opportunity-focused framing: "moderate visibility at 49%" not "only 49% visibility"
+- Frame gaps as opportunities: "40% visibility gap to close" not "failing at 60% of queries"
+- Compare to platform averages when relevant: "ChatGPT shows 42% vs your 49% overall"
+- Focus on actionable improvement, not criticism
+- The executive summary should motivate action, not discourage the user`
 }
 
 function buildUserPrompt(
@@ -418,6 +609,7 @@ function buildUserPrompt(
   const pageAnalysis = buildPageAnalysis(input.crawledPages)
   const visibilityAnalysis = buildVisibilityAnalysis(input.responses, input.scores)
   const competitiveAnalysis = buildCompetitiveAnalysis(input.brandAwareness, input.competitiveSummary)
+  const platformAnalysis = buildPlatformAnalysis(input.platformData)
 
   // Build completed actions section if any exist
   const completedSection = input.completedActionTitles && input.completedActionTitles.length > 0
@@ -443,6 +635,10 @@ Key Phrases: ${input.analysis.keyPhrases.join(', ') || 'None detected'}
 - Pages Crawled: ${input.crawlData.pagesCrawled}
 - Meta Descriptions: ${input.crawlData.hasMetaDescriptions ? 'Some present' : 'MISSING on all pages'}
 - Schema Types Found: ${input.crawlData.schemaTypes.length > 0 ? input.crawlData.schemaTypes.join(', ') : 'NONE'}
+
+## PLATFORM & TECHNOLOGY STACK
+
+${platformAnalysis}
 
 ## PAGE-BY-PAGE ANALYSIS
 

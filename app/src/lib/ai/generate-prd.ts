@@ -16,6 +16,7 @@ import { generateText } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
+import { type PlatformDataInput } from './generate-actions'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -68,6 +69,8 @@ export interface SiteContext {
   businessType: string | null
   techStack: string[] | null  // Detected from crawl or default
   services: string[] | null
+  platformData: PlatformDataInput | null  // Platform/technology detection
+  visibilityScore: number | null  // Overall visibility score for context
 }
 
 // ============================================
@@ -211,7 +214,153 @@ For service-based businesses, ALWAYS include these high-impact tasks if not alre
    - Add LocalBusiness or ProfessionalService schema with address, hours, contact info
    - Helps AI platforms recognize the business for local queries
 
-Only skip these if the action plan explicitly indicates they're already implemented.`
+Only skip these if the action plan explicitly indicates they're already implemented.
+
+PLATFORM-SPECIFIC IMPLEMENTATION GUIDANCE:
+When platform/CMS data is provided, you MUST tailor code snippets and file paths to the specific technology stack:
+
+For WordPress sites:
+- Reference specific plugins with installation commands (e.g., "Install Yoast SEO via wp-admin > Plugins")
+- Provide PHP snippets for functions.php when needed
+- Use WordPress-specific paths: /wp-content/themes/[theme]/
+- Reference Gutenberg blocks or classic editor as appropriate
+
+For Webflow sites:
+- Provide Custom Code snippets for Site Settings > Custom Code
+- Reference Webflow's CMS collection structure
+- Use embed elements for custom scripts
+- Note: Webflow doesn't support custom JavaScript in most cases - suggest alternatives
+
+For Squarespace sites:
+- Provide Code Injection snippets (Settings > Advanced > Code Injection)
+- Reference Squarespace template sections
+- Note platform limitations (e.g., limited custom code placement)
+
+For Shopify sites:
+- Provide Liquid template code snippets
+- Reference Shopify app alternatives for complex features
+- Use paths like /snippets/, /sections/, theme.liquid
+- Recommend JSON-LD for SEO app when schema is needed
+
+For Wix sites:
+- Reference Velo (Wix Code) for custom implementations
+- Provide Wix Corvid API examples where applicable
+- Note significant platform limitations
+- Suggest Wix App Market alternatives
+
+For Next.js / React sites:
+- Provide full React component code with TypeScript
+- Use next/head or next-seo for meta tags
+- Include proper imports and exports
+- Reference App Router or Pages Router patterns as appropriate
+- Use proper file paths: /app/, /pages/, /components/, /lib/
+
+For sites with AI READABILITY ISSUES:
+- PRIORITIZE tasks that fix client-side rendering
+- Include SSR/SSG migration code snippets
+- Reference getServerSideProps, getStaticProps, or generateStaticParams
+- This is CRITICAL - unreadable sites will never rank in AI assistants
+
+For sites with AI-GENERATED CONTENT SIGNALS:
+- Include content prompts that emphasize originality
+- Add tasks for humanizing existing content
+- Reference specific pages with AI-detected content
+
+VISIBILITY SCORE CONTEXT:
+Use accurate, calibrated language when referencing visibility scores:
+
+| Score Range | Label      | Description                                    |
+|-------------|------------|------------------------------------------------|
+| 0-5%        | Critical   | Virtually invisible to AI assistants           |
+| 5-15%       | Very Low   | Rarely mentioned by AI assistants              |
+| 15-30%      | Low        | Occasionally mentioned but not prominent       |
+| 30-50%      | Moderate   | Some presence but significant room to grow     |
+| 50-70%      | Good       | Solid visibility with optimization potential   |
+| 70-85%      | Strong     | Well-represented across AI platforms           |
+| 85-100%     | Excellent  | Exceptional AI visibility                      |
+
+- Frame the PRD overview in terms of opportunity, not criticism
+- Focus on "improving from X to Y" rather than "fixing poor performance"
+- Motivate implementation with potential gains`
+}
+
+function buildPlatformSummary(platformData: PlatformDataInput | null): string {
+  if (!platformData) {
+    return 'Platform: Unknown (assume modern web stack)\nProvide Next.js/React code examples by default.'
+  }
+
+  let summary = ''
+
+  // CMS/Platform
+  if (platformData.cms) {
+    const confidence = platformData.cmsConfidence ? ` (${platformData.cmsConfidence} confidence)` : ''
+    summary += `Platform: ${platformData.cms}${confidence}\n`
+  } else {
+    summary += 'Platform: Custom build (no CMS detected)\n'
+  }
+
+  // Framework/tech stack
+  const techParts: string[] = []
+  if (platformData.framework) techParts.push(`Framework: ${platformData.framework}`)
+  if (platformData.cssFramework) techParts.push(`CSS: ${platformData.cssFramework}`)
+  if (platformData.hosting) techParts.push(`Hosting: ${platformData.hosting}`)
+  if (platformData.ecommerce) techParts.push(`E-commerce: ${platformData.ecommerce}`)
+
+  if (techParts.length > 0) {
+    summary += `Tech Stack: ${techParts.join(', ')}\n`
+  }
+
+  // Analytics
+  if (platformData.analytics && platformData.analytics.length > 0) {
+    summary += `Analytics: ${platformData.analytics.join(', ')}\n`
+  }
+
+  // Lead capture tools
+  if (platformData.leadCapture && platformData.leadCapture.length > 0) {
+    summary += `Lead Capture: ${platformData.leadCapture.join(', ')}\n`
+  }
+
+  // Content sections
+  const sections: string[] = []
+  if (platformData.contentSections.hasBlog) sections.push('Blog')
+  if (platformData.contentSections.hasCaseStudies) sections.push('Case Studies')
+  if (platformData.contentSections.hasResources) sections.push('Resources')
+  if (platformData.contentSections.hasFaq) sections.push('FAQ')
+  if (platformData.contentSections.hasAboutPage) sections.push('About')
+  if (platformData.contentSections.hasTeamPage) sections.push('Team')
+  if (platformData.contentSections.hasTestimonials) sections.push('Testimonials')
+
+  if (sections.length > 0) {
+    summary += `Content Sections Present: ${sections.join(', ')}\n`
+  }
+
+  // E-commerce
+  if (platformData.isEcommerce) {
+    summary += 'E-commerce Site: Yes\n'
+  }
+
+  // AI Readability issues - CRITICAL
+  if (platformData.hasAiReadabilityIssues) {
+    summary += '\n⚠️ CRITICAL - AI READABILITY ISSUES:\n'
+    if (platformData.rendersClientSide) {
+      summary += '- Site renders client-side (JS required) - AI crawlers cannot read content!\n'
+    }
+    for (const issue of platformData.aiReadabilityIssues) {
+      summary += `- ${issue}\n`
+    }
+    summary += 'PRIORITIZE fixing these issues - they block all AI visibility improvements.\n'
+  }
+
+  // AI-generated content signals
+  if (platformData.likelyAiGenerated && platformData.aiSignals.length > 0) {
+    summary += '\n⚠️ AI-GENERATED CONTENT DETECTED:\n'
+    for (const signal of platformData.aiSignals) {
+      summary += `- ${signal}\n`
+    }
+    summary += 'Include content prompts that emphasize humanization and originality.\n'
+  }
+
+  return summary
 }
 
 function buildUserPrompt(
@@ -220,6 +369,22 @@ function buildUserPrompt(
   completedTaskTitles: string[] = []
 ): string {
   const businessName = siteContext.businessName || siteContext.domain
+  const platformSummary = buildPlatformSummary(siteContext.platformData)
+
+  // Build visibility score context
+  let visibilityContext = ''
+  if (siteContext.visibilityScore !== null && siteContext.visibilityScore !== undefined) {
+    const score = siteContext.visibilityScore
+    let label = 'moderate'
+    if (score <= 5) label = 'critical'
+    else if (score <= 15) label = 'very low'
+    else if (score <= 30) label = 'low'
+    else if (score <= 50) label = 'moderate'
+    else if (score <= 70) label = 'good'
+    else if (score <= 85) label = 'strong'
+    else label = 'excellent'
+    visibilityContext = `Current AI Visibility: ${score}% (${label})\n`
+  }
 
   // Build actions summary
   const actionsSummary = actionPlan.actions.map((action, index) => {
@@ -260,8 +425,11 @@ ${completedTaskTitles.map(title => `- ${title}`).join('\n')}`
 Business: ${businessName}
 Domain: ${siteContext.domain}
 Type: ${siteContext.businessType || 'Website'}
-Tech Stack: ${siteContext.techStack?.join(', ') || 'Next.js, React, TypeScript'}
 Services: ${siteContext.services?.join(', ') || 'Various services'}
+${visibilityContext}
+## PLATFORM & TECHNOLOGY
+
+${platformSummary}
 
 ## EXECUTIVE SUMMARY
 
