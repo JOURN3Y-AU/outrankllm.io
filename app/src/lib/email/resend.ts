@@ -75,25 +75,25 @@ export async function sendWaitlistNotification(
   <meta charset="utf-8">
   <title>New Waitlist Signup</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #111c30; border: 1px solid #1e3a5f; border-radius: 8px;">
           <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #1e3a5f;">
               <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; margin-top: 4px; letter-spacing: 0.1em;">
                 NEW WAITLIST SIGNUP
               </div>
             </td>
           </tr>
           <tr>
             <td style="padding: 32px; text-align: center;">
-              <p style="margin: 0 0 8px; font-size: 14px; color: #8a8a8a;">Someone joined the waitlist:</p>
-              <p style="margin: 0; font-size: 18px; font-weight: 500; color: #22c55e;">${email}</p>
+              <p style="margin: 0 0 8px; font-size: 14px; color: #8b939e;">Someone joined the waitlist:</p>
+              <p style="margin: 0; font-size: 18px; font-weight: 500; color: #40F16C;">${email}</p>
             </td>
           </tr>
         </table>
@@ -170,18 +170,18 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Verify your email - outrankllm</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #111c30; border: 1px solid #1e3a5f; border-radius: 8px;">
           <!-- Header -->
           <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #1e3a5f;">
               <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; margin-top: 4px; letter-spacing: 0.1em;">
                 AI VISIBILITY REPORTS
               </div>
             </td>
@@ -194,7 +194,7 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
                 Your AI visibility report is almost ready
               </h1>
 
-              <p style="margin: 0 0 24px; font-size: 14px; color: #d4d4d4; line-height: 1.6;">
+              <p style="margin: 0 0 24px; font-size: 14px; color: #c9c9c9; line-height: 1.6;">
                 Click the button below to verify your email and view your report for <strong style="color: #fafafa;">${domain}</strong>
               </p>
 
@@ -203,7 +203,7 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
                 <tr>
                   <td align="center" style="padding: 8px 0 24px;">
                     <a href="${verificationUrl}"
-                       style="display: inline-block; padding: 14px 32px; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
+                       style="display: inline-block; padding: 14px 32px; background-color: #40F16C; color: #0c1525; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
                       Verify &amp; View Report →
                     </a>
                   </td>
@@ -211,11 +211,11 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
               </table>
 
               <!-- What's included -->
-              <div style="background-color: #1a1a1a; border: 1px solid #262626; border-radius: 6px; padding: 20px;">
-                <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; letter-spacing: 0.1em; margin-bottom: 12px;">
+              <div style="background-color: #162340; border: 1px solid #1e3a5f; border-radius: 6px; padding: 20px;">
+                <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; letter-spacing: 0.1em; margin-bottom: 12px;">
                   WHAT'S IN YOUR REPORT
                 </div>
-                <ul style="margin: 0; padding: 0 0 0 16px; color: #d4d4d4; font-size: 13px; line-height: 1.8;">
+                <ul style="margin: 0; padding: 0 0 0 16px; color: #c9c9c9; font-size: 13px; line-height: 1.8;">
                   <li>AI Visibility Score across ChatGPT, Claude &amp; Gemini</li>
                   <li>Top competitors mentioned by AI</li>
                   <li>Sample AI responses about your business</li>
@@ -224,7 +224,7 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
               </div>
 
               <!-- Expiry notice -->
-              <p style="margin: 24px 0 0; font-size: 12px; color: #8a8a8a; text-align: center;">
+              <p style="margin: 24px 0 0; font-size: 12px; color: #8b939e; text-align: center;">
                 This link expires in 24 hours
               </p>
             </td>
@@ -232,8 +232,8 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
-              <p style="margin: 0; font-size: 12px; color: #525252;">
+            <td style="padding: 24px 32px; border-top: 1px solid #1e3a5f; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8b939e;">
                 You're receiving this because you requested an AI visibility report.<br>
                 If you didn't request this, you can safely ignore this email.
               </p>
@@ -242,8 +242,8 @@ function generateVerificationEmailHtml(domain: string, verificationUrl: string):
         </table>
 
         <!-- Bottom link -->
-        <p style="margin: 24px 0 0; font-size: 11px; color: #525252;">
-          <a href="${APP_URL}" style="color: #525252; text-decoration: none;">outrankllm.io</a>
+        <p style="margin: 24px 0 0; font-size: 11px; color: #8b939e;">
+          <a href="${APP_URL}" style="color: #8b939e; text-decoration: none;">outrankllm.io</a>
         </p>
       </td>
     </tr>
@@ -280,7 +280,7 @@ outrankllm.io
 }
 
 function generateReportReadyEmailHtml(domain: string, reportUrl: string, score: number): string {
-  const scoreColor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+  const scoreColor = score >= 70 ? '#40F16C' : score >= 40 ? '#f59e0b' : '#ef4444';
 
   return `
 <!DOCTYPE html>
@@ -290,16 +290,16 @@ function generateReportReadyEmailHtml(domain: string, reportUrl: string, score: 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Your AI Visibility Report - outrankllm</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #111c30; border: 1px solid #1e3a5f; border-radius: 8px;">
           <!-- Header -->
           <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #1e3a5f;">
               <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </div>
             </td>
           </tr>
@@ -309,12 +309,12 @@ function generateReportReadyEmailHtml(domain: string, reportUrl: string, score: 
             <td style="padding: 32px; text-align: center;">
               <div style="margin-bottom: 16px;">
                 <span style="font-size: 48px; font-weight: 600; color: ${scoreColor};">${score}</span>
-                <span style="font-size: 24px; color: #8a8a8a;">/100</span>
+                <span style="font-size: 24px; color: #8b939e;">/100</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #8a8a8a; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #8b939e; letter-spacing: 0.1em;">
                 AI VISIBILITY SCORE
               </div>
-              <p style="margin: 16px 0 0; font-size: 14px; color: #d4d4d4;">
+              <p style="margin: 16px 0 0; font-size: 14px; color: #c9c9c9;">
                 for <strong style="color: #fafafa;">${domain}</strong>
               </p>
             </td>
@@ -324,7 +324,7 @@ function generateReportReadyEmailHtml(domain: string, reportUrl: string, score: 
           <tr>
             <td style="padding: 0 32px 32px; text-align: center;">
               <a href="${reportUrl}"
-                 style="display: inline-block; padding: 14px 32px; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
+                 style="display: inline-block; padding: 14px 32px; background-color: #40F16C; color: #0c1525; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
                 View Full Report →
               </a>
             </td>
@@ -332,8 +332,8 @@ function generateReportReadyEmailHtml(domain: string, reportUrl: string, score: 
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
-              <p style="margin: 0; font-size: 12px; color: #525252;">
+            <td style="padding: 24px 32px; border-top: 1px solid #1e3a5f; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8b939e;">
                 Questions? Reply to this email or visit outrankllm.io
               </p>
             </td>
@@ -411,18 +411,18 @@ function generatePasswordResetEmailHtml(resetUrl: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reset your password - outrankllm</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #111c30; border: 1px solid #1e3a5f; border-radius: 8px;">
           <!-- Header -->
           <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #1e3a5f;">
               <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; margin-top: 4px; letter-spacing: 0.1em;">
                 PASSWORD RESET
               </div>
             </td>
@@ -435,7 +435,7 @@ function generatePasswordResetEmailHtml(resetUrl: string): string {
                 Reset your password
               </h1>
 
-              <p style="margin: 0 0 24px; font-size: 14px; color: #d4d4d4; line-height: 1.6;">
+              <p style="margin: 0 0 24px; font-size: 14px; color: #c9c9c9; line-height: 1.6;">
                 Click the button below to set a new password for your outrankllm account.
               </p>
 
@@ -444,7 +444,7 @@ function generatePasswordResetEmailHtml(resetUrl: string): string {
                 <tr>
                   <td align="center" style="padding: 8px 0 24px;">
                     <a href="${resetUrl}"
-                       style="display: inline-block; padding: 14px 32px; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
+                       style="display: inline-block; padding: 14px 32px; background-color: #40F16C; color: #0c1525; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
                       Reset Password →
                     </a>
                   </td>
@@ -452,7 +452,7 @@ function generatePasswordResetEmailHtml(resetUrl: string): string {
               </table>
 
               <!-- Expiry notice -->
-              <p style="margin: 0; font-size: 12px; color: #8a8a8a; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8b939e; text-align: center;">
                 This link expires in 1 hour
               </p>
             </td>
@@ -460,8 +460,8 @@ function generatePasswordResetEmailHtml(resetUrl: string): string {
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
-              <p style="margin: 0; font-size: 12px; color: #525252;">
+            <td style="padding: 24px 32px; border-top: 1px solid #1e3a5f; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8b939e;">
                 If you didn't request this password reset, you can safely ignore this email.<br>
                 Your password will remain unchanged.
               </p>
@@ -470,8 +470,8 @@ function generatePasswordResetEmailHtml(resetUrl: string): string {
         </table>
 
         <!-- Bottom link -->
-        <p style="margin: 24px 0 0; font-size: 11px; color: #525252;">
-          <a href="${APP_URL}" style="color: #525252; text-decoration: none;">outrankllm.io</a>
+        <p style="margin: 24px 0 0; font-size: 11px; color: #8b939e;">
+          <a href="${APP_URL}" style="color: #8b939e; text-decoration: none;">outrankllm.io</a>
         </p>
       </td>
     </tr>
@@ -546,12 +546,12 @@ function generateScanCompleteEmailHtml(
   score: number,
   scoreChange?: number
 ): string {
-  const scoreColor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+  const scoreColor = score >= 70 ? '#40F16C' : score >= 40 ? '#f59e0b' : '#ef4444';
 
   // Build score change indicator
   let changeHtml = '';
   if (scoreChange !== undefined && scoreChange !== 0) {
-    const changeColor = scoreChange > 0 ? '#22c55e' : '#ef4444';
+    const changeColor = scoreChange > 0 ? '#40F16C' : '#ef4444';
     const changeIcon = scoreChange > 0 ? '↑' : '↓';
     changeHtml = `
       <div style="margin-top: 8px; font-size: 14px; color: ${changeColor};">
@@ -568,18 +568,18 @@ function generateScanCompleteEmailHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Scan Complete - outrankllm</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 480px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+        <table role="presentation" width="100%" style="max-width: 480px; background-color: #111c30; border: 1px solid #1e3a5f; border-radius: 8px;">
           <!-- Header -->
           <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #1e3a5f;">
               <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; margin-top: 4px; letter-spacing: 0.1em;">
                 NEW SCAN COMPLETE
               </div>
             </td>
@@ -588,14 +588,14 @@ function generateScanCompleteEmailHtml(
           <!-- Score display -->
           <tr>
             <td style="padding: 32px; text-align: center;">
-              <p style="margin: 0 0 16px; font-size: 14px; color: #d4d4d4;">
+              <p style="margin: 0 0 16px; font-size: 14px; color: #c9c9c9;">
                 Your weekly AI visibility scan for <strong style="color: #fafafa;">${domain}</strong> is complete.
               </p>
               <div style="margin-bottom: 8px;">
                 <span style="font-size: 48px; font-weight: 600; color: ${scoreColor};">${score}</span>
-                <span style="font-size: 24px; color: #8a8a8a;">/100</span>
+                <span style="font-size: 24px; color: #8b939e;">/100</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #8a8a8a; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #8b939e; letter-spacing: 0.1em;">
                 AI VISIBILITY SCORE
               </div>
               ${changeHtml}
@@ -605,11 +605,11 @@ function generateScanCompleteEmailHtml(
           <!-- What's new section -->
           <tr>
             <td style="padding: 0 32px 32px;">
-              <div style="background-color: #1a1a1a; border: 1px solid #262626; border-radius: 6px; padding: 20px;">
-                <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; letter-spacing: 0.1em; margin-bottom: 12px;">
+              <div style="background-color: #162340; border: 1px solid #1e3a5f; border-radius: 6px; padding: 20px;">
+                <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; letter-spacing: 0.1em; margin-bottom: 12px;">
                   WHAT TO CHECK
                 </div>
-                <ul style="margin: 0; padding: 0 0 0 16px; color: #d4d4d4; font-size: 13px; line-height: 1.8;">
+                <ul style="margin: 0; padding: 0 0 0 16px; color: #c9c9c9; font-size: 13px; line-height: 1.8;">
                   <li>Updated visibility trends over time</li>
                   <li>New AI responses from ChatGPT, Claude &amp; Gemini</li>
                   <li>Competitor mention changes</li>
@@ -623,7 +623,7 @@ function generateScanCompleteEmailHtml(
           <tr>
             <td style="padding: 0 32px 32px; text-align: center;">
               <a href="${reportUrl}"
-                 style="display: inline-block; padding: 14px 32px; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
+                 style="display: inline-block; padding: 14px 32px; background-color: #40F16C; color: #0c1525; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-radius: 4px;">
                 View Your Report →
               </a>
             </td>
@@ -631,18 +631,18 @@ function generateScanCompleteEmailHtml(
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
-              <p style="margin: 0; font-size: 12px; color: #525252;">
+            <td style="padding: 24px 32px; border-top: 1px solid #1e3a5f; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8b939e;">
                 You're receiving this because you have an active outrankllm subscription.<br>
-                <a href="${APP_URL}/dashboard" style="color: #8a8a8a; text-decoration: underline;">Manage your account</a>
+                <a href="${APP_URL}/dashboard" style="color: #c9c9c9; text-decoration: underline;">Manage your account</a>
               </p>
             </td>
           </tr>
         </table>
 
         <!-- Bottom link -->
-        <p style="margin: 24px 0 0; font-size: 11px; color: #525252;">
-          <a href="${APP_URL}" style="color: #525252; text-decoration: none;">outrankllm.io</a>
+        <p style="margin: 24px 0 0; font-size: 11px; color: #8b939e;">
+          <a href="${APP_URL}" style="color: #8b939e; text-decoration: none;">outrankllm.io</a>
         </p>
       </td>
     </tr>

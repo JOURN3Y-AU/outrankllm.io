@@ -54,7 +54,7 @@ export function generateEmailHtml(
   reportUrl: string,
   visibilityScore: number
 ): string {
-  const scoreColor = visibilityScore >= 50 ? '#22c55e' : visibilityScore >= 25 ? '#f59e0b' : '#ef4444'
+  const scoreColor = visibilityScore >= 50 ? '#40F16C' : visibilityScore >= 25 ? '#f59e0b' : '#ef4444'
   const scoreDescription =
     visibilityScore >= 70 ? 'Great' :
     visibilityScore >= 40 ? 'Good' :
@@ -69,8 +69,8 @@ export function generateEmailHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Your AI Visibility Report is Ready</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="min-width: 100%; background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="min-width: 100%; background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px;">
@@ -79,14 +79,14 @@ export function generateEmailHtml(
           <tr>
             <td align="center" style="padding-bottom: 32px;">
               <span style="font-family: 'Courier New', monospace; font-size: 24px; color: #fafafa; letter-spacing: -0.02em;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </span>
             </td>
           </tr>
 
           <!-- Main Card -->
           <tr>
-            <td style="background-color: #141414; border: 1px solid #262626; padding: 40px;">
+            <td style="background-color: #111c30; border: 1px solid #1e3a5f; padding: 40px;">
 
               <!-- Headline -->
               <h1 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 500; color: #fafafa; text-align: center;">
@@ -94,18 +94,18 @@ export function generateEmailHtml(
               </h1>
 
               <!-- Domain -->
-              <p style="margin: 0 0 32px 0; font-family: 'Courier New', monospace; font-size: 14px; color: #a3a3a3; text-align: center;">
+              <p style="margin: 0 0 32px 0; font-family: 'Courier New', monospace; font-size: 14px; color: #8b939e; text-align: center;">
                 ${domain}
               </p>
 
               <!-- Score -->
               <div style="text-align: center; margin-bottom: 32px;">
-                <div style="display: inline-block; width: 100px; height: 100px; border-radius: 50%; background: conic-gradient(${scoreColor} ${visibilityScore * 3.6}deg, #262626 0deg); position: relative;">
-                  <div style="position: absolute; inset: 8px; border-radius: 50%; background-color: #141414; display: flex; align-items: center; justify-content: center;">
+                <div style="display: inline-block; width: 100px; height: 100px; border-radius: 50%; background: conic-gradient(${scoreColor} ${visibilityScore * 3.6}deg, #1e3a5f 0deg); position: relative;">
+                  <div style="position: absolute; inset: 8px; border-radius: 50%; background-color: #111c30; display: flex; align-items: center; justify-content: center;">
                     <span style="font-family: 'Courier New', monospace; font-size: 28px; font-weight: 500; color: #fafafa;">${visibilityScore}</span>
                   </div>
                 </div>
-                <p style="margin: 12px 0 0 0; font-family: 'Courier New', monospace; font-size: 11px; color: #525252; text-transform: uppercase; letter-spacing: 0.1em;">
+                <p style="margin: 12px 0 0 0; font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; text-transform: uppercase; letter-spacing: 0.1em;">
                   AI Visibility Score
                 </p>
                 <p style="margin: 4px 0 0 0; font-family: 'Courier New', monospace; font-size: 14px; color: ${scoreColor};">
@@ -117,7 +117,7 @@ export function generateEmailHtml(
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <a href="${reportUrl}" style="display: inline-block; background-color: #22c55e; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; padding: 14px 32px;">
+                    <a href="${reportUrl}" style="display: inline-block; background-color: #40F16C; color: #0c1525; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 500; text-decoration: none; padding: 14px 32px;">
                       View Full Report →
                     </a>
                   </td>
@@ -125,11 +125,11 @@ export function generateEmailHtml(
               </table>
 
               <!-- What's included -->
-              <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #262626;">
-                <p style="margin: 0 0 12px 0; font-family: 'Courier New', monospace; font-size: 11px; color: #525252; text-transform: uppercase; letter-spacing: 0.1em;">
+              <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #1e3a5f;">
+                <p style="margin: 0 0 12px 0; font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; text-transform: uppercase; letter-spacing: 0.1em;">
                   Your report includes
                 </p>
-                <ul style="margin: 0; padding: 0 0 0 16px; color: #a3a3a3; font-size: 14px; line-height: 1.8;">
+                <ul style="margin: 0; padding: 0 0 0 16px; color: #c9c9c9; font-size: 14px; line-height: 1.8;">
                   <li>Visibility across ChatGPT, Claude & Gemini</li>
                   <li>Competitors being recommended instead</li>
                   <li>Sample AI responses for your niche</li>
@@ -142,7 +142,7 @@ export function generateEmailHtml(
           <!-- Footer -->
           <tr>
             <td style="padding-top: 24px; text-align: center;">
-              <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 12px; color: #525252;">
+              <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 12px; color: #8b939e;">
                 outrankllm.io — GEO for Vibe Coders
               </p>
             </td>

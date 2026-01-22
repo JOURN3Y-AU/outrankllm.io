@@ -189,18 +189,18 @@ function generateFeedbackEmailHtml(data: EmailTemplateData): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Feedback - outrankllm</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a;">
+<body style="margin: 0; padding: 0; background-color: #0c1525; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c1525;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 600px; background-color: #141414; border: 1px solid #262626; border-radius: 8px;">
+        <table role="presentation" width="100%" style="max-width: 600px; background-color: #111c30; border: 1px solid #1e3a5f; border-radius: 8px;">
           <!-- Header -->
           <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #262626;">
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #1e3a5f;">
               <div style="font-family: 'Courier New', monospace; font-size: 24px; font-weight: 500; color: #fafafa;">
-                outrank<span style="color: #22c55e;">llm</span>
+                outrank<span style="color: #40F16C;">llm</span>
               </div>
-              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8a8a8a; margin-top: 4px; letter-spacing: 0.1em;">
+              <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8b939e; margin-top: 4px; letter-spacing: 0.1em;">
                 NEW FEEDBACK RECEIVED
               </div>
             </td>
@@ -209,7 +209,7 @@ function generateFeedbackEmailHtml(data: EmailTemplateData): string {
           <!-- Type Badge -->
           <tr>
             <td style="padding: 24px 32px 0;">
-              <span style="display: inline-block; padding: 6px 12px; background-color: ${getTypeColor(type)}; color: #0a0a0a; font-family: 'Courier New', monospace; font-size: 12px; font-weight: 500; border-radius: 4px;">
+              <span style="display: inline-block; padding: 6px 12px; background-color: ${getTypeColor(type)}; color: #0c1525; font-family: 'Courier New', monospace; font-size: 12px; font-weight: 500; border-radius: 4px;">
                 ${type.toUpperCase()}
               </span>
             </td>
@@ -218,8 +218,8 @@ function generateFeedbackEmailHtml(data: EmailTemplateData): string {
           <!-- Message -->
           <tr>
             <td style="padding: 16px 32px 24px;">
-              <div style="background-color: #1a1a1a; border: 1px solid #262626; border-radius: 6px; padding: 20px;">
-                <p style="margin: 0; font-size: 14px; color: #d4d4d4; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(message)}</p>
+              <div style="background-color: #162340; border: 1px solid #1e3a5f; border-radius: 6px; padding: 20px;">
+                <p style="margin: 0; font-size: 14px; color: #c9c9c9; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(message)}</p>
               </div>
             </td>
           </tr>
@@ -229,27 +229,27 @@ function generateFeedbackEmailHtml(data: EmailTemplateData): string {
             <td style="padding: 0 32px 32px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
                 <tr>
-                  <td style="padding: 8px 0; color: #8a8a8a; width: 80px;">From:</td>
-                  <td style="padding: 8px 0; color: #d4d4d4;">${email || 'Anonymous'}</td>
+                  <td style="padding: 8px 0; color: #8b939e; width: 80px;">From:</td>
+                  <td style="padding: 8px 0; color: #c9c9c9;">${email || 'Anonymous'}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px 0; color: #8a8a8a;">Tier:</td>
-                  <td style="padding: 8px 0; color: #d4d4d4;">${tier || 'Not logged in'}</td>
+                  <td style="padding: 8px 0; color: #8b939e;">Tier:</td>
+                  <td style="padding: 8px 0; color: #c9c9c9;">${tier || 'Not logged in'}</td>
                 </tr>
                 ${pageUrl ? `
                 <tr>
-                  <td style="padding: 8px 0; color: #8a8a8a;">Page:</td>
-                  <td style="padding: 8px 0; color: #d4d4d4;">${escapeHtml(pageUrl)}</td>
+                  <td style="padding: 8px 0; color: #8b939e;">Page:</td>
+                  <td style="padding: 8px 0; color: #c9c9c9;">${escapeHtml(pageUrl)}</td>
                 </tr>
                 ` : ''}
                 <tr>
-                  <td style="padding: 8px 0; color: #8a8a8a;">Time:</td>
-                  <td style="padding: 8px 0; color: #d4d4d4;">${timestamp}</td>
+                  <td style="padding: 8px 0; color: #8b939e;">Time:</td>
+                  <td style="padding: 8px 0; color: #c9c9c9;">${timestamp}</td>
                 </tr>
                 ${userAgent ? `
                 <tr>
-                  <td style="padding: 8px 0; color: #8a8a8a; vertical-align: top;">Device:</td>
-                  <td style="padding: 8px 0; color: #737373; font-size: 11px; word-break: break-all;">${escapeHtml(userAgent)}</td>
+                  <td style="padding: 8px 0; color: #8b939e; vertical-align: top;">Device:</td>
+                  <td style="padding: 8px 0; color: #8b939e; font-size: 11px; word-break: break-all;">${escapeHtml(userAgent)}</td>
                 </tr>
                 ` : ''}
               </table>
@@ -258,8 +258,8 @@ function generateFeedbackEmailHtml(data: EmailTemplateData): string {
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; border-top: 1px solid #262626; text-align: center;">
-              <p style="margin: 0; font-size: 12px; color: #525252;">
+            <td style="padding: 24px 32px; border-top: 1px solid #1e3a5f; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #8b939e;">
                 Feedback ID: ${feedbackId}
               </p>
             </td>
@@ -300,11 +300,11 @@ function getTypeColor(type: string): string {
     case 'bug report':
       return '#ef4444'
     case 'feature request':
-      return '#22c55e'
+      return '#40F16C'
     case 'general feedback':
       return '#3b82f6'
     default:
-      return '#8a8a8a'
+      return '#8b939e'
   }
 }
 
