@@ -991,12 +991,22 @@ export function CompetitorsTab({
   }
 
   // Calculate user's mention count from responses
-  const userMentionCount = responses?.filter(r => r.domain_mentioned).length || 0
+  const domainMentionCount = responses?.filter(r => r.domain_mentioned).length || 0
   const businessName = analysis?.business_name || domain
+
+  // Find if the business appears in competitors list (AI may extract business name separately from domain detection)
+  // If so, combine the counts and exclude from competitors to avoid duplicate entries
+  const businessNameLower = businessName.toLowerCase().trim()
+  const matchingCompetitor = competitors.find(c => c.name.toLowerCase().trim() === businessNameLower)
+  const competitorMentionCount = matchingCompetitor?.count || 0
+  const userMentionCount = domainMentionCount + competitorMentionCount
+
+  // Filter out the business from competitors list (it will be shown as the user's entry)
+  const filteredCompetitors = competitors.filter(c => c.name.toLowerCase().trim() !== businessNameLower)
 
   // Build chart data: competitors + user's brand, sorted by count
   const chartData: ChartEntry[] = [
-    ...competitors.map(c => ({ name: c.name, count: c.count, isUser: false })),
+    ...filteredCompetitors.map(c => ({ name: c.name, count: c.count, isUser: false })),
     { name: businessName, count: userMentionCount, isUser: true }
   ].sort((a, b) => b.count - a.count)
 
