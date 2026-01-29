@@ -585,6 +585,10 @@ export function AdminReportViewer({ adminEmail }: AdminReportViewerProps) {
                 customQuestionLimit={reportData.featureFlags.customQuestionLimit}
                 currentRunId={reportData.report.run_id}
                 enrichmentStatus={reportData.report.enrichment_status}
+                blurCompetitors={reportData.featureFlags.blurCompetitors}
+                showActionPlans={reportData.featureFlags.showActionPlans}
+                showPrdTasks={reportData.featureFlags.showPrdTasks}
+                isTrial={reportData.featureFlags.isTrial}
               />
             </div>
           </div>

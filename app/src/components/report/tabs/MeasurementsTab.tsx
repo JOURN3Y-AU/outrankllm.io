@@ -43,6 +43,7 @@ export function MeasurementsTab({
   domain,
   domainSubscriptionId,
   tier = 'free',
+  isTrial = false,
 }: {
   visibilityScore: number
   platformScores: Record<string, number>
@@ -54,7 +55,10 @@ export function MeasurementsTab({
   domain?: string
   domainSubscriptionId?: string | null
   tier?: 'free' | 'starter' | 'pro' | 'agency'
+  isTrial?: boolean
 }) {
+  // Trial users should see "Subscribe" CTAs, not "Upgrade to Pro"
+  const showSubscribeCta = tier === 'free' || isTrial
   const [showStickyUpsell, setShowStickyUpsell] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [scoreCalloutExpanded, setScoreCalloutExpanded] = useState(true)
@@ -1049,14 +1053,14 @@ export function MeasurementsTab({
                     </span>
                     <span className="text-[var(--text-ghost)]">•</span>
                     <span className="text-[var(--text-dim)] text-sm">
-                      {tier === 'free' && 'Get action plans to improve'}
-                      {tier === 'starter' && 'Track progress with Pro insights'}
+                      {showSubscribeCta && 'Subscribe to track progress of you and your competitors'}
+                      {!showSubscribeCta && tier === 'starter' && 'Track progress with Pro insights'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {tier === 'free' ? (
+              {showSubscribeCta ? (
                 <a
                   href="/pricing?from=report"
                   onClick={handlePricingClick}
@@ -1072,7 +1076,7 @@ export function MeasurementsTab({
                   }}
                 >
                   <Sparkles size={16} />
-                  Get Fixes & Action Plans
+                  Subscribe Now
                 </a>
               ) : (
                 <button

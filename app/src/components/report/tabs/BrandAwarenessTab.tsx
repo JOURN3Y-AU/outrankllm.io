@@ -17,6 +17,7 @@ export function BrandAwarenessTab({
   isSubscriber = false,
   enrichmentStatus = 'not_applicable',
   runId,
+  blurContent,
 }: {
   brandAwareness?: BrandAwarenessResult[] | null
   analysis: Analysis | null
@@ -27,9 +28,14 @@ export function BrandAwarenessTab({
   isSubscriber?: boolean
   enrichmentStatus?: EnrichmentStatus
   runId?: string
+  /** Whether to blur/hide content - defaults to !isSubscriber if not provided */
+  blurContent?: boolean
 }) {
-  // For free tier, show teaser instead of actual data
-  if (!isSubscriber) {
+  // Resolve blur state - use explicit prop or fall back to subscriber check
+  const shouldBlur = blurContent ?? !isSubscriber
+
+  // For free tier (or when blurred), show teaser instead of actual data
+  if (shouldBlur) {
     return (
       <div style={{ display: 'grid', gap: '32px' }}>
         {/* Methodology Explainer */}

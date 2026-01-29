@@ -877,6 +877,7 @@ export function CompetitorsTab({
   domainSubscriptionId,
   onUpgradeClick,
   isSubscriber = false,
+  blurCompetitors,
 }: {
   competitors: Competitor[]
   responses?: Response[] | null
@@ -887,7 +888,11 @@ export function CompetitorsTab({
   domainSubscriptionId?: string | null
   onUpgradeClick: () => void
   isSubscriber?: boolean
+  /** Whether to blur competitor data - defaults to !isSubscriber if not provided */
+  blurCompetitors?: boolean
 }) {
+  // Resolve blur state - use explicit prop or fall back to subscriber check
+  const shouldBlur = blurCompetitors ?? !isSubscriber
   const [expandedResponse, setExpandedResponse] = useState<string | null>(null)
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all')
 
@@ -1059,7 +1064,7 @@ export function CompetitorsTab({
           >
             All Competitors ({competitors.length})
           </h3>
-          {!isSubscriber && (
+          {shouldBlur && (
             <div className="flex items-center gap-2">
               <Lock size={12} style={{ color: 'var(--gold)' }} />
               <span className="font-mono text-xs" style={{ color: 'var(--gold)' }}>
@@ -1069,15 +1074,15 @@ export function CompetitorsTab({
           )}
         </div>
 
-        {/* Chart with conditional blur for free users */}
+        {/* Chart with conditional blur for free/trial users */}
         <div
           className="relative bg-[var(--surface-elevated)] border border-[var(--border)]"
           style={{ padding: '24px' }}
         >
-          <HorizontalBarChart data={chartData} isBlurred={!isSubscriber} />
+          <HorizontalBarChart data={chartData} isBlurred={shouldBlur} />
 
-          {/* Upgrade overlay for free users - positioned over blurred area */}
-          {!isSubscriber && (
+          {/* Upgrade overlay for free/trial users - positioned over blurred area */}
+          {shouldBlur && (
             <div
               className="absolute inset-0 flex flex-col items-center justify-center"
               style={{
@@ -1130,8 +1135,8 @@ export function CompetitorsTab({
         isSubscriber={isSubscriber}
       />
 
-      {/* Positioning Matrix - Visual overview (Subscribers only) */}
-      {isSubscriber && resultsByCompetitor.size > 0 && (
+      {/* Positioning Matrix - Visual overview (Subscribers/Trial) */}
+      {!shouldBlur && resultsByCompetitor.size > 0 && (
         <PositioningMatrix
           resultsByCompetitor={resultsByCompetitor}
           brandRecognition={platformRecognition}
@@ -1139,7 +1144,7 @@ export function CompetitorsTab({
       )}
 
       {/* Competitive Summary Section (AI Synthesized) */}
-      {isSubscriber && competitiveSummary && (
+      {!shouldBlur && competitiveSummary && (
         <div className="card" style={{ padding: '32px' }}>
           <h3
             className="text-[var(--green)] font-mono uppercase tracking-wider"
@@ -1228,7 +1233,7 @@ export function CompetitorsTab({
           >
             Competitive Intelligence
           </h3>
-          {!isSubscriber ? (
+          {shouldBlur ? (
             <div className="flex items-center gap-2">
               <Lock size={12} style={{ color: 'var(--gold)' }} />
               <span className="font-mono text-xs" style={{ color: 'var(--gold)' }}>
@@ -1268,7 +1273,7 @@ export function CompetitorsTab({
           )}
         </div>
 
-        {isSubscriber ? (
+        {!shouldBlur ? (
           <>
             <p className="text-[var(--text-dim)] text-sm" style={{ marginBottom: '20px', lineHeight: '1.6' }}>
               What AI thinks about you vs your competitors. Use this to understand perceived strengths and weaknesses.

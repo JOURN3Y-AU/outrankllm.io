@@ -708,19 +708,90 @@ export const processScan = inngest.createFunction(
       }
     })
 
-    // Step 10: Trigger subscriber enrichment (subscribers only)
-    // This sends an event to the enrich-subscriber function which handles:
-    // - Brand awareness queries
-    // - Competitive intelligence summary
-    // - AI-powered action plan generation
-    const userTier = await getUserTier(leadId)
-    const isSubscriberForEnrichment = userTier !== "free"
+    // Step 10: Auto-apply 7-day trial for new free users
+    // This gives all new users access to Starter features (read-only) for 7 days
+    // Trial users get: see competitors, action plans, brand awareness (but can't edit prompts)
+    await step.run("apply-trial-for-free-users", async () => {
+      const supabase = createServiceClient()
 
-    if (isSubscriberForEnrichment) {
+      // Check if user already has a paid subscription or trial
+      // We check subscriptions directly (not getUserTier) to avoid circular logic
+      const { data: activeSubs } = await supabase
+        .from("domain_subscriptions")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("status", "active")
+        .limit(1)
+
+      if (activeSubs && activeSubs.length > 0) {
+        log.info(scanId, "User has active subscription - skipping trial")
+        return { trialApplied: false, reason: "has_subscription" }
+      }
+
+      // Check legacy subscriptions
+      const { data: legacySubs } = await supabase
+        .from("subscriptions")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("status", "active")
+        .limit(1)
+
+      if (legacySubs && legacySubs.length > 0) {
+        log.info(scanId, "User has legacy subscription - skipping trial")
+        return { trialApplied: false, reason: "has_legacy_subscription" }
+      }
+
+      // Check if user already has a trial
+      const { data: leadData } = await supabase
+        .from("leads")
+        .select("trial_tier, trial_expires_at")
+        .eq("id", leadId)
+        .single()
+
+      if (leadData?.trial_tier && leadData?.trial_expires_at) {
+        const trialExpiry = new Date(leadData.trial_expires_at)
+        if (trialExpiry > new Date()) {
+          log.info(scanId, "User already has active trial - skipping")
+          return { trialApplied: false, reason: "has_trial" }
+        }
+      }
+
+      // Apply 7-day trial
+      const trialExpiry = new Date()
+      trialExpiry.setDate(trialExpiry.getDate() + 7)
+      const trialExpiryStr = trialExpiry.toISOString()
+
+      // Set trial fields on lead
+      await supabase
+        .from("leads")
+        .update({
+          trial_tier: "starter",
+          trial_expires_at: trialExpiryStr,
+        })
+        .eq("id", leadId)
+
+      // Update report expiry to match trial
+      await supabase
+        .from("reports")
+        .update({ expires_at: trialExpiryStr })
+        .eq("run_id", scanId)
+
+      log.done(scanId, "Applied 7-day trial", `expires: ${trialExpiryStr}`)
+      return { trialApplied: true, trialExpiresAt: trialExpiryStr }
+    })
+
+    // Step 11: Trigger enrichment (subscribers and trial users)
+    // After trial is applied, getUserTier will return 'starter' for trial users
+    // This triggers enrichment for: brand awareness, competitive summary, action plans
+    const userTier = await getUserTier(leadId)
+    const shouldEnrich = userTier !== "free"
+
+    if (shouldEnrich) {
       // Use step.invoke to directly call enrichSubscriber function
       // This ensures enrichment only starts after process-scan data is fully committed
       // Unlike inngest.send(), step.invoke waits for the child function to complete
-      log.step(scanId, "Invoking subscriber enrichment")
+      // NOTE: For trial users, domainSubscriptionId is undefined - data links via run_id
+      log.step(scanId, `Invoking enrichment (tier: ${userTier})`)
 
       await step.invoke("invoke-enrichment", {
         function: enrichSubscriber,
@@ -734,7 +805,7 @@ export const processScan = inngest.createFunction(
 
       log.done(scanId, "Enrichment complete")
     } else {
-      // Mark as not applicable for free users
+      // Mark as not applicable for users without trial or subscription
       await step.run("mark-enrichment-not-applicable", async () => {
         const supabase = createServiceClient()
         await supabase
@@ -744,7 +815,7 @@ export const processScan = inngest.createFunction(
       })
     }
 
-    // Step 11: Send email
+    // Step 12: Send email
     await step.run("send-email", async () => {
       if (skipEmail) {
         log.info(scanId, "Skipping email (admin rescan)")

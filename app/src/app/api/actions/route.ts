@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireSession } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getFeatureFlags } from '@/lib/features/flags'
+import { getFeatureFlags, getFeatureFlagsForLead } from '@/lib/features/flags'
 
 export interface ActionItem {
   id: string
@@ -59,14 +59,56 @@ export interface ActionPlan {
  *
  * Action plans are now generated automatically during the enrichment pipeline
  * (enrich-subscriber.ts) using AI-powered analysis with Claude's extended thinking.
+ *
+ * Supports both authenticated (session) and unauthenticated (run_id) access:
+ * - Authenticated: Uses session to verify user and get their latest plan
+ * - Unauthenticated: Uses run_id to look up lead and verify feature flags (for trial users)
  */
 export async function GET(request: Request) {
   try {
-    const session = await requireSession()
     const supabase = createServiceClient()
 
+    // Parse query params first
+    const { searchParams } = new URL(request.url)
+    const runId = searchParams.get('run_id')
+    const domainSubscriptionId = searchParams.get('domain_subscription_id')
+
+    // Try to get session (may be null for unauthenticated users)
+    const session = await getSession()
+
+    let leadId: string
+    let flags: Awaited<ReturnType<typeof getFeatureFlags>>
+
+    if (runId) {
+      // When run_id is provided, always derive lead_id from scan_runs
+      // This allows viewing action plans for any report you have access to
+      // (same logic as report pages - anyone with the token/run_id can view)
+      const { data: scanRun, error: scanError } = await supabase
+        .from('scan_runs')
+        .select('lead_id')
+        .eq('id', runId)
+        .single()
+
+      if (scanError || !scanRun) {
+        return NextResponse.json(
+          { error: 'Invalid run_id' },
+          { status: 400 }
+        )
+      }
+
+      leadId = scanRun.lead_id
+      // Get feature flags for the report owner (handles trial status)
+      flags = await getFeatureFlagsForLead(leadId)
+    } else if (session) {
+      // No run_id but has session - get latest plan for logged-in user
+      leadId = session.lead_id
+      flags = await getFeatureFlags(session.tier)
+    } else {
+      // No session and no run_id - unauthorized
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Check feature flags
-    const flags = await getFeatureFlags(session.tier)
     if (!flags.showActionPlans) {
       return NextResponse.json(
         { error: 'Upgrade to access action plans' },
@@ -74,27 +116,23 @@ export async function GET(request: Request) {
       )
     }
 
-    // Parse query params
-    const { searchParams } = new URL(request.url)
-    const runId = searchParams.get('run_id')
-    const domainSubscriptionId = searchParams.get('domain_subscription_id')
-
     // Get the action plan with new fields
-    // Use domain_subscription_id if provided for multi-domain isolation
+    // When run_id is provided, lead_id is derived from scan_runs (validated above)
+    // Otherwise, lead_id comes from session
     let planQuery = supabase
       .from('action_plans')
       .select('*, page_edits, keyword_map, key_takeaways')
 
-    if (domainSubscriptionId) {
-      planQuery = planQuery.eq('domain_subscription_id', domainSubscriptionId)
-    } else {
-      // Legacy fallback
-      planQuery = planQuery.eq('lead_id', session.lead_id)
-    }
-
     if (runId) {
+      // Specific run requested - lead_id already validated via scan_runs lookup
       planQuery = planQuery.eq('run_id', runId)
+    } else if (domainSubscriptionId) {
+      // Multi-domain isolation - get latest for this domain
+      planQuery = planQuery.eq('domain_subscription_id', domainSubscriptionId)
+      planQuery = planQuery.order('created_at', { ascending: false }).limit(1)
     } else {
+      // No specific run - get latest for this lead
+      planQuery = planQuery.eq('lead_id', leadId)
       planQuery = planQuery.order('created_at', { ascending: false }).limit(1)
     }
 
@@ -136,7 +174,7 @@ export async function GET(request: Request) {
       const { data, error } = await supabase
         .from('action_items_history')
         .select('id, original_action_id, title, description, category, completed_at')
-        .eq('lead_id', session.lead_id)
+        .eq('lead_id', leadId)
         .or(`domain_subscription_id.eq.${domainSubscriptionId},domain_subscription_id.is.null`)
         .order('completed_at', { ascending: false })
       historyFromTable = data
@@ -145,7 +183,7 @@ export async function GET(request: Request) {
       const { data, error } = await supabase
         .from('action_items_history')
         .select('id, original_action_id, title, description, category, completed_at')
-        .eq('lead_id', session.lead_id)
+        .eq('lead_id', leadId)
         .order('completed_at', { ascending: false })
       historyFromTable = data
       historyError = error
@@ -210,11 +248,15 @@ export async function GET(request: Request) {
  *
  * Note: Action plans are automatically generated during enrichment.
  * This endpoint can be used for manual regeneration if needed.
+ * Requires authentication (session).
  */
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const session = await requireSession()
-    const supabase = createServiceClient()
+    const session = await getSession()
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Check feature flags
     const flags = await getFeatureFlags(session.tier)
@@ -232,9 +274,6 @@ export async function POST(request: Request) {
       message: 'Action plans are generated automatically during scan enrichment. If your plan is missing, please wait for enrichment to complete or contact support.',
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
     console.error('Error in POST /api/actions:', error)
     return NextResponse.json(
       { error: 'Internal server error' },

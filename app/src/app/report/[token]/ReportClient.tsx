@@ -424,6 +424,10 @@ export function ReportClient({ data, showLockedModal = false }: ReportClientProp
             customQuestionLimit={featureFlags.customQuestionLimit}
             currentRunId={report.run_id}
             enrichmentStatus={report.enrichment_status}
+            blurCompetitors={featureFlags.blurCompetitors}
+            showActionPlans={featureFlags.showActionPlans}
+            showPrdTasks={featureFlags.showPrdTasks}
+            isTrial={featureFlags.isTrial}
           />
 
           {/* CTA section - only for non-subscribers */}

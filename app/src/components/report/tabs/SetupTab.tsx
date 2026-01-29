@@ -1333,7 +1333,7 @@ export function SetupTab({
                   }}
                 >
                   <Sparkles size={14} />
-                  Unlock Editing
+                  Subscribe to Unlock
                 </a>
               </div>
             </>

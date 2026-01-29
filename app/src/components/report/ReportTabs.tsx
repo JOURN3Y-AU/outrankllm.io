@@ -44,6 +44,14 @@ interface ReportTabsProps {
   customQuestionLimit?: number
   currentRunId?: string
   enrichmentStatus?: EnrichmentStatus
+  /** Whether to blur competitor data (separate from isSubscriber for trial users) */
+  blurCompetitors?: boolean
+  /** Whether to show action plans (for trial users who have access) */
+  showActionPlans?: boolean
+  /** Whether to show PRD tasks (Pro/Agency only) */
+  showPrdTasks?: boolean
+  /** Whether user is on trial (for CTA messaging) */
+  isTrial?: boolean
 }
 
 export function ReportTabs({
@@ -65,7 +73,17 @@ export function ReportTabs({
   customQuestionLimit = 0,
   currentRunId,
   enrichmentStatus = 'not_applicable',
+  blurCompetitors,
+  showActionPlans,
+  showPrdTasks,
+  isTrial = false,
 }: ReportTabsProps) {
+  // Default blurCompetitors based on isSubscriber if not explicitly provided
+  const shouldBlurCompetitors = blurCompetitors ?? !isSubscriber
+  // Default showActionPlans - show if subscriber OR explicitly set (for trial users)
+  const shouldShowActionPlans = showActionPlans ?? isSubscriber
+  // Default showPrdTasks - only for Pro/Agency subscribers
+  const shouldShowPrdTasks = showPrdTasks ?? isSubscriber
   // Always start with default tab on server/initial render to avoid hydration mismatch
   const [activeTab, setActiveTab] = useState<TabId>('startHere')
   const [isTabRestored, setIsTabRestored] = useState(false)
@@ -134,8 +152,16 @@ export function ReportTabs({
             const Icon = tab.icon
             const isActive = activeTab === tab.id
             const isLast = index === tabs.length - 1
-            // Only show gold lock for non-subscribers on premium/locked tabs
-            const showGoldLock = !isSubscriber && (tab.premium || tab.locked)
+            // Determine if tab should show lock based on user's actual access
+            // Trial users have access to competitors, brand awareness, and actions but NOT prd
+            let showGoldLock = false
+            if (tab.id === 'competitors' || tab.id === 'brandAwareness') {
+              showGoldLock = shouldBlurCompetitors
+            } else if (tab.id === 'actions') {
+              showGoldLock = !shouldShowActionPlans
+            } else if (tab.id === 'prd') {
+              showGoldLock = !shouldShowPrdTasks
+            }
 
             return (
               <button
@@ -236,6 +262,7 @@ export function ReportTabs({
             domain={domain}
             domainSubscriptionId={domainSubscriptionId}
             tier={tier}
+            isTrial={isTrial}
           />
         )}
         {activeTab === 'competitors' && (
@@ -249,6 +276,7 @@ export function ReportTabs({
             domainSubscriptionId={domainSubscriptionId}
             onUpgradeClick={onUpgradeClick}
             isSubscriber={isSubscriber}
+            blurCompetitors={shouldBlurCompetitors}
           />
         )}
         {activeTab === 'brandAwareness' && (
@@ -262,10 +290,11 @@ export function ReportTabs({
             isSubscriber={isSubscriber}
             enrichmentStatus={enrichmentStatus}
             runId={currentRunId}
+            blurContent={shouldBlurCompetitors}
           />
         )}
         {activeTab === 'actions' && (
-          isSubscriber ? (
+          shouldShowActionPlans ? (
             <ActionsTab
               runId={currentRunId}
               domainSubscriptionId={domainSubscriptionId}
@@ -289,7 +318,7 @@ export function ReportTabs({
           )
         )}
         {activeTab === 'prd' && (
-          isSubscriber ? (
+          shouldShowPrdTasks ? (
             <PrdTab runId={currentRunId} domainSubscriptionId={domainSubscriptionId} enrichmentStatus={enrichmentStatus} />
           ) : (
             <LockedTab
