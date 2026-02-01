@@ -34,9 +34,9 @@ export const experiments: Record<string, Experiment> = {
     cookieName: 'exp-homepage',
     variants: [
       { id: 'control', weight: 0 },
-      { id: 'variant-b', weight: 50 },
-      { id: 'variant-c', weight: 50 },
-      { id: 'variant-d', weight: 0 }, // Price-led squeeze page - set to 100 after verification
+      { id: 'variant-b', weight: 0 },
+      { id: 'variant-c', weight: 0 },
+      { id: 'variant-d', weight: 100 }, // Price-led squeeze page - LIVE
     ],
   },
 }
