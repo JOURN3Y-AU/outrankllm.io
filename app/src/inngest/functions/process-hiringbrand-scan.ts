@@ -822,7 +822,15 @@ export const processHiringBrandScan = inngest.createFunction(
       }
 
       // Freeze the research results for future scans
-      if (result.questions.length > 0) {
+      // Check if frozen data already exists (Inngest retries can re-execute this code)
+      const { count: existingFrozenQ } = await supabase
+        .from('hb_frozen_questions')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .eq('monitored_domain_id', monitoredDomainId)
+        .eq('is_active', true)
+
+      if (result.questions.length > 0 && (!existingFrozenQ || existingFrozenQ === 0)) {
         log.info(scanId, 'Freezing questions for future scans')
         await supabase.from('hb_frozen_questions').insert(
           result.questions.map((q, i) => ({
@@ -836,7 +844,14 @@ export const processHiringBrandScan = inngest.createFunction(
         )
       }
 
-      if (result.competitors.length > 0) {
+      const { count: existingFrozenC } = await supabase
+        .from('hb_frozen_competitors')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .eq('monitored_domain_id', monitoredDomainId)
+        .eq('is_active', true)
+
+      if (result.competitors.length > 0 && (!existingFrozenC || existingFrozenC === 0)) {
         log.info(scanId, 'Freezing competitors for future scans')
         await supabase.from('hb_frozen_competitors').insert(
           result.competitors.map((c, i) => ({
