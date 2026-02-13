@@ -44,13 +44,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Send invite email
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // Send invite email — use HB-specific URL so links point to hiringbrand.io
+    const appUrl = process.env.HB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const inviteUrl = `${appUrl}/hiringbrand/invite?token=${invite.token}`
 
     try {
       await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'HiringBrand <noreply@hiringbrand.io>',
+        from: 'HiringBrand <noreply@hiringbrand.io>',
         to: email.toLowerCase(),
         subject: `You've been invited to ${org.name} on HiringBrand`,
         html: buildInviteEmailHtml(org.name, session.email, inviteUrl, inviteRole),
