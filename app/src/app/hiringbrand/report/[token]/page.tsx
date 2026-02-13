@@ -73,7 +73,8 @@ async function getTrendsData(
   const competitorByDate = new Map<string, HBCompetitorHistorySnapshot>()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const h of competitorHistoryRaw || []) {
-    const dateKey = h.scan_date.split('T')[0] // Group by date (ignore time)
+    // Group by full timestamp (not just date) so multiple scans per day each get their own snapshot
+    const dateKey = h.scan_date
     if (!competitorByDate.has(dateKey)) {
       competitorByDate.set(dateKey, {
         scanDate: h.scan_date,
