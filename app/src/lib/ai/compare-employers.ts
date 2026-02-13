@@ -236,7 +236,9 @@ Then provide insights:
 2. Which dimensions is ${targetEmployer} WEAKER than competitors? (list dimension names)
 3. Give 2-3 specific recommendations for ${targetEmployer} to improve competitive positioning
 
-Be honest and use differentiated scores. Job seekers rely on accurate comparisons.`
+Be honest and use differentiated scores. Job seekers rely on accurate comparisons.
+
+IMPORTANT: Use the EXACT employer names as listed above. Do not rename, expand, or add parenthetical clarifications.`
 
   try {
     const result = await generateObject({
@@ -263,10 +265,23 @@ Be honest and use differentiated scores. Job seekers rely on accurate comparison
     // Process and validate the result
     const { employers, insights } = result.object
 
+    // Normalize AI-returned names back to the exact names we provided
+    // (AI may expand "WOW" → "WOW (Woolworths Group)" etc.)
+    const normalizeEmployerName = (aiName: string): string => {
+      const lower = aiName.toLowerCase()
+      // Exact match first
+      const exact = allEmployers.find((n) => n.toLowerCase() === lower)
+      if (exact) return exact
+      // Fuzzy: check if the AI name starts with or contains the input name
+      const fuzzy = allEmployers.find((n) => lower.startsWith(n.toLowerCase()) || lower.includes(n.toLowerCase()))
+      if (fuzzy) return fuzzy
+      return aiName // Fallback to AI name if no match
+    }
+
     // Ensure target employer is marked correctly and add base scores
     const baseEmployers = employers.map((emp) => ({
-      name: emp.name,
-      isTarget: emp.name.toLowerCase() === targetEmployer.toLowerCase(),
+      name: normalizeEmployerName(emp.name),
+      isTarget: normalizeEmployerName(emp.name).toLowerCase() === targetEmployer.toLowerCase(),
       scores: Object.fromEntries(
         EMPLOYER_DIMENSIONS.map((d) => [d, emp.scores[d as string] || 5])
       ) as Record<EmployerDimension, number>,
