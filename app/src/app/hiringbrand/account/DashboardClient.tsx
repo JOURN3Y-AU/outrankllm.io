@@ -176,11 +176,12 @@ function ScoreRing({ score, size = 72 }: { score: number | null; size?: number }
 // BRAND CARD
 // ============================================
 
-function BrandCard({ brand }: { brand: Brand }) {
+function BrandCard({ brand, onRescan }: { brand: Brand; onRescan?: (domain: string, monitoredDomainId: string) => Promise<void> }) {
+  const [rescanning, setRescanning] = useState(false)
   const displayName = brand.companyName || brand.domain.split('.')[0]
   const hasReport = !!brand.latestReportToken
   // If there's a scan but no report yet, it's still in progress
-  const isScanning = brand.scanStatus === 'running' || brand.scanStatus === 'pending' || brand.scanStatus === 'researching' || (brand.lastScanDate && !hasReport && brand.scanStatus !== 'failed' && brand.scanStatus !== 'complete')
+  const isScanning = rescanning || brand.scanStatus === 'running' || brand.scanStatus === 'pending' || brand.scanStatus === 'researching' || (brand.lastScanDate && !hasReport && brand.scanStatus !== 'failed' && brand.scanStatus !== 'complete')
 
   const cardStyle: React.CSSProperties = {
     background: hb.surface,
@@ -250,9 +251,35 @@ function BrandCard({ brand }: { brand: Brand }) {
               Scanning...
             </span>
           ) : brand.scanStatus === 'failed' ? (
-            <span style={{ fontSize: '13px', color: '#e53e3e', fontWeight: 500 }}>
-              Scan failed — rescan to retry
-            </span>
+            <button
+              onClick={async (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (onRescan) {
+                  setRescanning(true)
+                  await onRescan(brand.domain, brand.id)
+                }
+              }}
+              style={{
+                fontSize: '13px',
+                color: hb.coral,
+                fontWeight: 600,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                fontFamily: fonts.body,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hb.coral} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              Rescan
+            </button>
           ) : brand.lastScanDate ? (
             <span style={{ fontSize: '13px', color: hb.slateLight }}>
               Last scan: {timeAgo(brand.lastScanDate)}
@@ -908,6 +935,20 @@ export function DashboardClient() {
     }
   }, [data, fetchData])
 
+  const handleRescan = async (domain: string, monitoredDomainId: string) => {
+    try {
+      await fetch('/api/hiringbrand/dashboard/run-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, monitoredDomainId }),
+      })
+      // Refresh data after triggering
+      await fetchData()
+    } catch {
+      // Silently fail — polling will pick up the status
+    }
+  }
+
   const handleInvite = async (email: string, role: 'admin' | 'viewer') => {
     const res = await fetch('/api/hiringbrand/dashboard/invite', {
       method: 'POST',
@@ -1201,7 +1242,7 @@ export function DashboardClient() {
             }}
           >
             {brands.map((brand) => (
-              <BrandCard key={brand.id} brand={brand} />
+              <BrandCard key={brand.id} brand={brand} onRescan={handleRescan} />
             ))}
           </div>
         )}
