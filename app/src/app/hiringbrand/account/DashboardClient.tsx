@@ -180,8 +180,11 @@ function BrandCard({ brand, onRescan }: { brand: Brand; onRescan?: (domain: stri
   const [rescanning, setRescanning] = useState(false)
   const displayName = brand.companyName || brand.domain.split('.')[0]
   const hasReport = !!brand.latestReportToken
-  // If there's a scan but no report yet, it's still in progress
-  const isScanning = rescanning || brand.scanStatus === 'running' || brand.scanStatus === 'pending' || brand.scanStatus === 'researching' || (brand.lastScanDate && !hasReport && brand.scanStatus !== 'failed' && brand.scanStatus !== 'complete')
+  const scanActive = rescanning || brand.scanStatus === 'running' || brand.scanStatus === 'pending' || brand.scanStatus === 'researching' || (brand.lastScanDate && !hasReport && brand.scanStatus !== 'failed' && brand.scanStatus !== 'complete')
+  // Only show full "Scanning..." state if there's no existing report
+  const isScanning = scanActive && !hasReport
+  // Show subtle "Updating..." if rescanning but report already exists
+  const isUpdating = scanActive && hasReport
 
   const cardStyle: React.CSSProperties = {
     background: hb.surface,
@@ -249,6 +252,22 @@ function BrandCard({ brand, onRescan }: { brand: Brand; onRescan?: (domain: stri
                 <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
               </svg>
               Scanning...
+            </span>
+          ) : isUpdating ? (
+            <span
+              style={{
+                fontSize: '13px',
+                color: hb.teal,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hb.teal} strokeWidth="2" style={{ animation: 'spin 1.5s linear infinite' }}>
+                <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+              </svg>
+              Updating...
             </span>
           ) : brand.scanStatus === 'failed' ? (
             <button
@@ -910,8 +929,7 @@ export function DashboardClient() {
 
   useEffect(() => {
     const hasScanning = data?.brands.some((b) => {
-      const hasReport = !!b.latestReportToken
-      return b.scanStatus === 'running' || b.scanStatus === 'pending' || b.scanStatus === 'researching' || (b.lastScanDate && !hasReport && b.scanStatus !== 'failed' && b.scanStatus !== 'complete')
+      return b.scanStatus === 'running' || b.scanStatus === 'pending' || b.scanStatus === 'researching'
     })
 
     if (hasScanning) {
