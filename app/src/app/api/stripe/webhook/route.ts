@@ -11,6 +11,13 @@ import {
   getHighestTierForLead,
 } from '@/lib/subscriptions'
 import { trackServerEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
+import {
+  isHiringBrandEvent,
+  handleHBCheckoutCompleted,
+  handleHBSubscriptionUpdated,
+  handleHBSubscriptionDeleted,
+  handleHBPaymentFailed,
+} from '@/lib/hiringbrand-webhook'
 
 // Use service role client for webhook operations (no user session)
 function createServiceClient() {
@@ -51,28 +58,45 @@ export async function POST(request: NextRequest) {
   const supabase = createServiceClient()
 
   try {
+    // Check if this is a HiringBrand event
+    const isHB = isHiringBrandEvent(event)
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
-        await handleCheckoutCompleted(supabase, session)
+        if (isHB) {
+          await handleHBCheckoutCompleted(session, stripe)
+        } else {
+          await handleCheckoutCompleted(supabase, session)
+        }
         break
       }
 
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
-        await handleSubscriptionUpdated(supabase, subscription)
+        // Try HiringBrand first, falls back to outrankllm if not HB
+        const handledByHB = await handleHBSubscriptionUpdated(subscription)
+        if (!handledByHB) {
+          await handleSubscriptionUpdated(supabase, subscription)
+        }
         break
       }
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
-        await handleSubscriptionDeleted(supabase, subscription)
+        const handledByHB = await handleHBSubscriptionDeleted(subscription)
+        if (!handledByHB) {
+          await handleSubscriptionDeleted(supabase, subscription)
+        }
         break
       }
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice
-        await handlePaymentFailed(supabase, invoice)
+        const handledByHB = await handleHBPaymentFailed(invoice)
+        if (!handledByHB) {
+          await handlePaymentFailed(supabase, invoice)
+        }
         break
       }
 

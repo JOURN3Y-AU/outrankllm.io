@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <rect width="180" height="180" rx="40" fill="#4ABDAC"/>
+  <!-- H -->
+  <rect x="20" y="40" width="16" height="100" rx="4" fill="#fff"/>
+  <rect x="20" y="82" width="54" height="16" rx="4" fill="#fff"/>
+  <rect x="58" y="40" width="16" height="100" rx="4" fill="#fff"/>
+  <!-- B: stem y=40..140, midpoint y=90, top bump y=40..90, bottom bump y=90..140 -->
+  <rect x="94" y="40" width="16" height="100" rx="4" fill="#fff"/>
+  <!-- Top bump: y=40 to y=90 (h=50), semicircle radius 25 -->
+  <path d="M110 40h17a25 25 0 0 1 0 50h-17z" fill="#fff"/>
+  <!-- Bottom bump: y=90 to y=140 (h=50), semicircle radius 25, slightly wider -->
+  <path d="M110 90h22a25 25 0 0 1 0 50h-22z" fill="#fff"/>
+  <!-- B inner cutouts -->
+  <path d="M110 52h7a13 13 0 0 1 0 26h-7z" fill="#4ABDAC"/>
+  <path d="M110 102h10a13 13 0 0 1 0 26h-10z" fill="#4ABDAC"/>
+</svg>

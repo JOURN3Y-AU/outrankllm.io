@@ -32,11 +32,13 @@ const PUBLIC_PATHS = [
   '/reset-password', // Allow reset password page
   '/subscribe', // Allow subscription pages
   '/pricing', // Allow pricing page
+  '/hiringbrand', // Allow all HiringBrand routes (account protected via PROTECTED_PATHS)
 ]
 
 // Paths that require authentication
 const PROTECTED_PATHS = [
   '/dashboard',
+  '/hiringbrand/account',
 ]
 
 async function verifySession(token: string): Promise<boolean> {
@@ -175,15 +177,47 @@ function addTrackingCookies(response: NextResponse, request: NextRequest): NextR
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl
 
+  // --- Hostname-based routing for hiringbrand.io ---
+  const hostname = request.headers.get('host') || ''
+  const isHiringBrand = hostname.includes('hiringbrand.io')
+
+  if (isHiringBrand) {
+    // Rewrite root to /hiringbrand landing page (URL stays as hiringbrand.io/)
+    if (pathname === '/') {
+      return addTrackingCookies(
+        NextResponse.rewrite(new URL('/hiringbrand', request.url)),
+        request
+      )
+    }
+
+    // Allow HB routes, shared API routes, and static assets
+    const isAllowed =
+      pathname.startsWith('/hiringbrand') ||
+      pathname.startsWith('/api/hiringbrand') ||
+      pathname.startsWith('/api/inngest') ||
+      pathname.startsWith('/api/stripe') ||
+      pathname.startsWith('/_next') ||
+      pathname === '/favicon.ico'
+
+    if (!isAllowed) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    // Fall through to normal auth/cookie logic for allowed paths
+  }
+
   // Check if this is a protected path
   const isProtectedPath = PROTECTED_PATHS.some(path => pathname.startsWith(path))
 
   if (isProtectedPath) {
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
+    // Determine login page based on brand
+    const loginPath = pathname.startsWith('/hiringbrand/') ? '/hiringbrand/login' : '/login'
+
     if (!sessionToken) {
       // No session - redirect to login
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = new URL(loginPath, request.url)
       loginUrl.searchParams.set('redirect', pathname)
       return NextResponse.redirect(loginUrl)
     }
@@ -191,7 +225,7 @@ export async function middleware(request: NextRequest) {
     const isValid = await verifySession(sessionToken)
     if (!isValid) {
       // Invalid session - clear cookie and redirect to login
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = new URL(loginPath, request.url)
       loginUrl.searchParams.set('redirect', pathname)
       const response = NextResponse.redirect(loginUrl)
       response.cookies.delete(SESSION_COOKIE_NAME)

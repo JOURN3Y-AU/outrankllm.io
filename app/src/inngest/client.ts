@@ -29,5 +29,15 @@ export type SubscriberEnrichEvent = {
   }
 }
 
+// HiringBrand employer reputation scan
+export type HiringBrandScanEvent = {
+  name: "hiringbrand/scan"
+  data: {
+    domain: string
+    organizationId: string
+    monitoredDomainId: string
+  }
+}
+
 // Union type of all events for type inference
-export type InngestEvents = ScanProcessEvent | SubscriberEnrichEvent
+export type InngestEvents = ScanProcessEvent | SubscriberEnrichEvent | HiringBrandScanEvent
