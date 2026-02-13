@@ -399,27 +399,33 @@ export default async function HiringBrandReportPage({ params }: PageProps) {
     notFound()
   }
 
-  // Optional auth — detect user role without breaking public access
+  // Optional auth — detect user role and super-admin status without breaking public access
   let userRole: 'owner' | 'admin' | 'viewer' | null = null
+  let isSuperAdmin = false
   try {
     const session = await getSession()
-    if (session && reportData.organization) {
-      const supabase = createServiceClient()
-      const { data: membership } = await supabase
-        .from('organization_members')
-        .select('role')
-        .eq('lead_id', session.lead_id)
-        .eq('organization_id', reportData.organization.id)
-        .single()
-      if (membership) {
-        userRole = membership.role as 'owner' | 'admin' | 'viewer'
+    if (session) {
+      const SUPER_ADMIN_EMAILS = ['kevin.morrell@journ3y.com.au', 'adam.king@journ3y.com.au']
+      isSuperAdmin = SUPER_ADMIN_EMAILS.includes(session.email.toLowerCase())
+
+      if (reportData.organization) {
+        const supabase = createServiceClient()
+        const { data: membership } = await supabase
+          .from('organization_members')
+          .select('role')
+          .eq('lead_id', session.lead_id)
+          .eq('organization_id', reportData.organization.id)
+          .single()
+        if (membership) {
+          userRole = membership.role as 'owner' | 'admin' | 'viewer'
+        }
       }
     }
   } catch {
     // Not logged in — userRole stays null
   }
 
-  return <ReportClient data={reportData} userRole={userRole} />
+  return <ReportClient data={reportData} userRole={userRole} isSuperAdmin={isSuperAdmin} />
 }
 
 // Metadata

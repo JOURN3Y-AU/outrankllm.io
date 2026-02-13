@@ -33,6 +33,7 @@ import type { HBReportData, HBTabId, HBPlatform, HBQuestionCategory, HBSentiment
 interface ReportClientProps {
   data: HBReportData & { trends: HBTrendsData; navBrands: NavBrand[] }
   userRole?: 'owner' | 'admin' | 'viewer' | null
+  isSuperAdmin?: boolean
 }
 
 // Sentiment filter type (4-tier: strong, positive, mixed, negative)
@@ -222,7 +223,7 @@ function generateDynamicSummary(
   return parts.join(' ')
 }
 
-export function ReportClient({ data, userRole = null }: ReportClientProps) {
+export function ReportClient({ data, userRole = null, isSuperAdmin = false }: ReportClientProps) {
   const [activeTab, setActiveTab] = useState<HBTabId>('start')
   const canSetup = userRole === 'owner' || userRole === 'admin'
   const visibleTabs = useMemo(() => canSetup ? hbTabs : hbTabs.filter(t => t.id !== 'setup'), [canSetup])
@@ -415,6 +416,33 @@ export function ReportClient({ data, userRole = null }: ReportClientProps) {
         brands={navBrands}
         currentReportToken={report.urlToken}
       />
+      {isSuperAdmin && (
+        <div style={{
+          background: `${hbColors.coral}12`,
+          borderBottom: `2px solid ${hbColors.coral}`,
+          padding: '8px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontFamily: hbFonts.body,
+          fontSize: '13px',
+          color: hbColors.coral,
+        }}>
+          <span style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            background: hbColors.coral,
+            color: 'white',
+            padding: '2px 8px',
+            borderRadius: '100px',
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.5px',
+          }}>
+            Admin View
+          </span>
+          Viewing as super admin &mdash; {organization?.name}
+        </div>
+      )}
 
       {/* Report Header */}
       <header

@@ -27,7 +27,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to load organizations' }, { status: 500 })
     }
 
-    // For each org, get member count, pending invite count, domain count, and owner email
+    // For each org, get member count, pending invite count, domains with scan data, and owner email
     const enriched = await Promise.all(
       (orgs || []).map(async (org: Record<string, unknown>) => {
         const [
@@ -47,8 +47,10 @@ export async function GET() {
             .is('accepted_at', null),
           supabase
             .from('monitored_domains')
-            .select('domain, company_name')
-            .eq('organization_id', org.id),
+            .select('id, domain, company_name, created_at')
+            .eq('organization_id', org.id)
+            .eq('is_primary', true)
+            .order('created_at', { ascending: true }),
           supabase
             .from('organization_members')
             .select('leads!inner(email)')
@@ -58,6 +60,68 @@ export async function GET() {
         ])
 
         const ownerEmail = (ownerMember as { leads?: { email?: string } } | null)?.leads?.email || null
+
+        // Enrich each domain with scan data
+        const enrichedDomains = await Promise.all(
+          (domains || []).map(async (d: { id: string; domain: string; company_name: string | null; created_at: string }) => {
+            const [
+              { data: latestRun },
+              { count: scanCount },
+              { count: frozenQCount },
+              { count: frozenCCount },
+            ] = await Promise.all([
+              supabase
+                .from('scan_runs')
+                .select('id, status, created_at, completed_at')
+                .eq('monitored_domain_id', d.id)
+                .eq('brand', 'hiringbrand')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single(),
+              supabase
+                .from('scan_runs')
+                .select('id', { count: 'exact', head: true })
+                .eq('monitored_domain_id', d.id)
+                .eq('brand', 'hiringbrand')
+                .eq('status', 'complete'),
+              supabase
+                .from('hb_frozen_questions')
+                .select('id', { count: 'exact', head: true })
+                .eq('monitored_domain_id', d.id)
+                .eq('is_active', true),
+              supabase
+                .from('hb_frozen_competitors')
+                .select('id', { count: 'exact', head: true })
+                .eq('monitored_domain_id', d.id)
+                .eq('is_active', true),
+            ])
+
+            // Get latest report if there's a completed scan
+            let latestReport = null
+            if (latestRun) {
+              const { data: rpt } = await supabase
+                .from('reports')
+                .select('url_token, visibility_score, created_at')
+                .eq('run_id', latestRun.id)
+                .single()
+              latestReport = rpt
+            }
+
+            return {
+              id: d.id,
+              domain: d.domain,
+              companyName: d.company_name,
+              firstSetupDate: d.created_at,
+              lastScanDate: latestRun?.completed_at || latestRun?.created_at || null,
+              scanCount: scanCount || 0,
+              scanStatus: latestRun?.status || null,
+              latestReportToken: latestReport?.url_token || null,
+              latestScore: latestReport?.visibility_score || null,
+              frozenQuestionCount: frozenQCount || 0,
+              frozenCompetitorCount: frozenCCount || 0,
+            }
+          })
+        )
 
         return {
           id: org.id,
@@ -71,10 +135,7 @@ export async function GET() {
           ownerEmail,
           memberCount: memberCount || 0,
           pendingInviteCount: inviteCount || 0,
-          domains: (domains || []).map((d: { domain: string; company_name: string | null }) => ({
-            domain: d.domain,
-            companyName: d.company_name,
-          })),
+          domains: enrichedDomains,
           createdAt: org.created_at,
         }
       })
