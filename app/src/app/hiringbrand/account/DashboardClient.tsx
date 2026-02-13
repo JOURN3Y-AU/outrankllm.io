@@ -210,22 +210,6 @@ function BrandCard({ brand }: { brand: Brand }) {
           >
             {displayName}
           </h3>
-          {brand.isPrimary && (
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 600,
-                color: hb.tealDeep,
-                background: hb.tealLight,
-                padding: '2px 8px',
-                borderRadius: '100px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}
-            >
-              Primary
-            </span>
-          )}
         </div>
 
         <p
