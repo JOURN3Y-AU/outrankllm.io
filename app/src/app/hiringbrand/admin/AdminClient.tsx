@@ -498,7 +498,23 @@ function BrandCard({
                 flexWrap: 'wrap',
               }}
             >
-              <span>Last scan: <strong style={{ color: hb.slateMid }}>{relativeDate(brand.lastScanDate)}</strong></span>
+              <span>Last: <strong style={{ color: hb.slateMid }}>{brand.lastScanDate
+                ? new Date(brand.lastScanDate).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
+                : '—'
+              }</strong></span>
+              <span style={{ color: (() => {
+                if (!brand.lastScanDate) return hb.slateLight
+                const next = new Date(new Date(brand.lastScanDate).getTime() + 7 * 86400000)
+                return next <= new Date() ? hb.coral : hb.slateLight
+              })() }}>
+                Next: <strong style={{ color: 'inherit' }}>{brand.lastScanDate
+                  ? new Date(new Date(brand.lastScanDate).getTime() + 7 * 86400000).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
+                  : '—'
+                }</strong>
+                {brand.lastScanDate && new Date(new Date(brand.lastScanDate).getTime() + 7 * 86400000) <= new Date() && (
+                  <span style={{ marginLeft: '4px', fontWeight: 600 }}>(overdue)</span>
+                )}
+              </span>
               <span>{brand.scanCount} refresh{brand.scanCount !== 1 ? 'es' : ''}</span>
               <span>Added: {formatDate(brand.firstSetupDate)}</span>
             </div>
