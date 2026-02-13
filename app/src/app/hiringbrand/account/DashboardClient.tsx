@@ -180,7 +180,7 @@ function BrandCard({ brand }: { brand: Brand }) {
   const displayName = brand.companyName || brand.domain.split('.')[0]
   const hasReport = !!brand.latestReportToken
   // If there's a scan but no report yet, it's still in progress
-  const isScanning = brand.scanStatus === 'running' || brand.scanStatus === 'pending' || (brand.lastScanDate && !hasReport)
+  const isScanning = brand.scanStatus === 'running' || brand.scanStatus === 'pending' || brand.scanStatus === 'researching' || (brand.lastScanDate && !hasReport && brand.scanStatus !== 'failed' && brand.scanStatus !== 'complete')
 
   const cardStyle: React.CSSProperties = {
     background: hb.surface,
@@ -248,6 +248,10 @@ function BrandCard({ brand }: { brand: Brand }) {
                 <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
               </svg>
               Scanning...
+            </span>
+          ) : brand.scanStatus === 'failed' ? (
+            <span style={{ fontSize: '13px', color: '#e53e3e', fontWeight: 500 }}>
+              Scan failed — rescan to retry
             </span>
           ) : brand.lastScanDate ? (
             <span style={{ fontSize: '13px', color: hb.slateLight }}>
@@ -880,7 +884,7 @@ export function DashboardClient() {
   useEffect(() => {
     const hasScanning = data?.brands.some((b) => {
       const hasReport = !!b.latestReportToken
-      return b.scanStatus === 'running' || b.scanStatus === 'pending' || (b.lastScanDate && !hasReport)
+      return b.scanStatus === 'running' || b.scanStatus === 'pending' || b.scanStatus === 'researching' || (b.lastScanDate && !hasReport && b.scanStatus !== 'failed' && b.scanStatus !== 'complete')
     })
 
     if (hasScanning) {
@@ -953,7 +957,7 @@ export function DashboardClient() {
       companyName: b.companyName,
       latestReportToken: b.latestReportToken,
       latestScore: b.latestScore,
-      isScanning: b.scanStatus === 'running' || b.scanStatus === 'pending' || (!!b.lastScanDate && !b.latestReportToken),
+      isScanning: b.scanStatus === 'running' || b.scanStatus === 'pending' || b.scanStatus === 'researching' || (!!b.lastScanDate && !b.latestReportToken && b.scanStatus !== 'failed' && b.scanStatus !== 'complete'),
     }))
   }, [data])
 
