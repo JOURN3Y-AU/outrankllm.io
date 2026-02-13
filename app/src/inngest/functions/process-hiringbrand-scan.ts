@@ -548,7 +548,7 @@ export const processHiringBrandScan = inngest.createFunction(
     id: 'process-hiringbrand-scan',
     retries: 3,
     timeouts: { finish: '12m' },
-    cancelOn: [{ event: 'hiringbrand/scan', match: 'data.scanId' }],
+    cancelOn: [{ event: 'hiringbrand/scan', match: 'data.monitoredDomainId' }],
   },
   { event: 'hiringbrand/scan' },
   async ({ event, step }) => {
