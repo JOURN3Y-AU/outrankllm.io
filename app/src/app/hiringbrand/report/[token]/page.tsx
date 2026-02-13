@@ -3,6 +3,9 @@
  * Completely separate from outrankllm report
  */
 
+// Force dynamic rendering — report data changes after scans complete
+export const dynamic = 'force-dynamic'
+
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'

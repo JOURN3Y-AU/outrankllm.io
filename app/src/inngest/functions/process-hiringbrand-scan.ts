@@ -1451,8 +1451,8 @@ export const processHiringBrandScan = inngest.createFunction(
     await step.run('compare-employers', async () => {
       const supabase = createServiceClient()
 
-      // Get competitor names from mentions
-      const competitorNames = report.topCompetitors.map((c: { name: string }) => c.name)
+      // Use frozen/researched competitors (from Setup tab), not AI-mentioned competitors
+      const competitorNames = (report.competitors as CompetitorEmployer[]).map((c) => c.name)
 
       if (competitorNames.length === 0) {
         log.info(scanId, 'No competitors to compare, skipping analysis')
@@ -1549,8 +1549,8 @@ export const processHiringBrandScan = inngest.createFunction(
     await step.run('generate-strategic-summary', async () => {
       const supabase = createServiceClient()
 
-      // Get competitor names from mentions
-      const competitorNames = report.topCompetitors.map((c: { name: string }) => c.name)
+      // Use frozen/researched competitors (from Setup tab), not AI-mentioned competitors
+      const competitorNames = (report.competitors as CompetitorEmployer[]).map((c) => c.name)
 
       if (competitorNames.length === 0) {
         log.info(scanId, 'No competitors for strategic summary, skipping')
