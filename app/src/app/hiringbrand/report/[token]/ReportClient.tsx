@@ -5,7 +5,7 @@
  * Main orchestration component for the employer reputation report
  */
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { HBNav } from '../components/HBNav'
 import type { NavBrand } from '../components/HBNav'
 import { HBTabs } from '../components/HBTabs'
@@ -28,7 +28,7 @@ import {
   hbTabs,
   getScoreColor,
 } from '../components/shared/constants'
-import type { HBReportData, HBTabId, HBPlatform, HBQuestionCategory, HBSentimentCategory, HBStrategicSummary, HBEffortLevel, HBImpactLevel, HBPriority, HBTrendsData } from '../components/shared/types'
+import type { HBReportData, HBTabId, HBPlatform, HBQuestionCategory, HBSentimentCategory, HBEffortLevel, HBImpactLevel, HBTrendsData } from '../components/shared/types'
 
 interface ReportClientProps {
   data: HBReportData & { trends: HBTrendsData; navBrands: NavBrand[] }
@@ -47,182 +47,6 @@ const sentimentColors: Record<HBSentimentCategory, string> = {
   negative: '#FC4A1A',  // Coral for negative
 }
 
-// Helper to extract and count themes from responses
-function analyzeResponseThemes(responses: HBReportData['responses']) {
-  // Collect all phrases by type
-  const positives: string[] = []
-  const negatives: string[] = []
-  const competitors: string[] = []
-
-  responses.forEach(r => {
-    // Green flags and positive phrases are more specific than highlights
-    positives.push(...(r.greenFlags || []))
-    positives.push(...(r.sentimentPositivePhrases || []))
-    negatives.push(...(r.redFlags || []))
-    negatives.push(...(r.sentimentNegativePhrases || []))
-    r.competitorsMentioned.forEach(c => competitors.push(c.name))
-  })
-
-  // Extract meaningful employer-related themes from phrases
-  // Look for phrases containing key employer topics
-  const employerKeywords = {
-    compensation: ['pay', 'salary', 'compensation', 'stock', 'equity', 'bonus', 'competitive pay', 'well-paid'],
-    benefits: ['benefits', 'health', 'insurance', '401k', 'perks', 'vacation', 'pto'],
-    culture: ['culture', 'environment', 'collaborative', 'innovative', 'fast-paced', 'startup', 'inclusive'],
-    growth: ['growth', 'career', 'learning', 'development', 'opportunities', 'advancement', 'promotion'],
-    balance: ['balance', 'work-life', 'hours', 'flexibility', 'remote', 'flexible'],
-    leadership: ['leadership', 'management', 'managers', 'executives', 'ceo', 'founders'],
-    tech: ['technology', 'engineering', 'technical', 'cutting-edge', 'innovation', 'stack'],
-    mission: ['mission', 'impact', 'meaningful', 'purpose', 'changing'],
-  }
-
-  const findThemes = (phrases: string[]) => {
-    const themeCounts: Record<string, number> = {}
-    const themeExamples: Record<string, string> = {}
-
-    phrases.forEach(phrase => {
-      const lower = phrase.toLowerCase()
-      Object.entries(employerKeywords).forEach(([theme, keywords]) => {
-        if (keywords.some(kw => lower.includes(kw))) {
-          themeCounts[theme] = (themeCounts[theme] || 0) + 1
-          if (!themeExamples[theme] && phrase.length < 50) {
-            themeExamples[theme] = phrase
-          }
-        }
-      })
-    })
-
-    return Object.entries(themeCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([theme, count]) => ({
-        theme,
-        count,
-        example: themeExamples[theme]
-      }))
-  }
-
-  // Get top 3 short, specific phrases directly (fallback)
-  const getTopPhrases = (phrases: string[]) => {
-    // Filter to short, specific phrases
-    return phrases
-      .filter(p => p.length >= 10 && p.length <= 60)
-      .slice(0, 3)
-  }
-
-  // Count competitor mentions
-  const competitorCounts: Record<string, number> = {}
-  competitors.forEach(c => {
-    competitorCounts[c] = (competitorCounts[c] || 0) + 1
-  })
-  const topCompetitor = Object.entries(competitorCounts)
-    .sort((a, b) => b[1] - a[1])[0]
-
-  return {
-    positiveThemes: findThemes(positives),
-    negativeThemes: findThemes(negatives),
-    topPositivePhrases: getTopPhrases(positives),
-    topNegativePhrases: getTopPhrases(negatives),
-    topCompetitor: topCompetitor ? topCompetitor[0] : null,
-    totalPositives: positives.length,
-    totalNegatives: negatives.length,
-  }
-}
-
-// Generate dynamic summary from response analysis
-function generateDynamicSummary(
-  company: HBReportData['company'],
-  report: HBReportData['report'],
-  responses: HBReportData['responses'],
-  sentimentCounts: HBReportData['sentimentCounts']
-) {
-  const analysis = analyzeResponseThemes(responses)
-  const total = responses.length
-  const favorable = sentimentCounts.strong + sentimentCounts.positive
-  const favorablePct = Math.round((favorable / total) * 100)
-
-  // Determine overall tone
-  let tone: 'positive' | 'mixed' | 'negative'
-  if (favorablePct >= 60) tone = 'positive'
-  else if (favorablePct >= 40) tone = 'mixed'
-  else tone = 'negative'
-
-  // Build the summary
-  const parts: string[] = []
-
-  // Opening line based on tone
-  if (tone === 'positive') {
-    parts.push(`AI assistants generally describe ${company.name} favorably to job seekers.`)
-  } else if (tone === 'mixed') {
-    parts.push(`AI assistants present a nuanced view of ${company.name}, highlighting both strengths and areas of concern.`)
-  } else {
-    parts.push(`AI assistants flag several concerns when job seekers ask about ${company.name}.`)
-  }
-
-  // Key strengths from themes
-  if (analysis.positiveThemes.length > 0) {
-    const themes = analysis.positiveThemes
-    const themeLabels: Record<string, string> = {
-      compensation: 'competitive compensation',
-      benefits: 'strong benefits',
-      culture: 'company culture',
-      growth: 'career growth opportunities',
-      balance: 'work-life balance',
-      leadership: 'leadership quality',
-      tech: 'technical environment',
-      mission: 'meaningful mission',
-    }
-    const labels = themes.map(t => themeLabels[t.theme] || t.theme)
-    if (labels.length === 1) {
-      parts.push(`Responses consistently praise ${labels[0]}.`)
-    } else if (labels.length === 2) {
-      parts.push(`Key strengths include ${labels[0]} and ${labels[1]}.`)
-    } else {
-      parts.push(`Key strengths include ${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}.`)
-    }
-  } else if (analysis.topPositivePhrases.length > 0) {
-    // Fallback to showing a direct quote
-    parts.push(`AI frequently mentions: "${analysis.topPositivePhrases[0]}".`)
-  }
-
-  // Key concerns from themes
-  if (analysis.negativeThemes.length > 0) {
-    const themes = analysis.negativeThemes
-    const themeLabels: Record<string, string> = {
-      compensation: 'compensation concerns',
-      benefits: 'benefits',
-      culture: 'workplace culture',
-      growth: 'growth opportunities',
-      balance: 'work-life balance challenges',
-      leadership: 'management issues',
-      tech: 'technical environment',
-      mission: 'company direction',
-    }
-    const labels = themes.map(t => themeLabels[t.theme] || t.theme)
-    if (labels.length === 1) {
-      parts.push(`Some responses raise ${labels[0]} as a concern.`)
-    } else {
-      parts.push(`Areas to address include ${labels.slice(0, 2).join(' and ')}.`)
-    }
-  } else if (analysis.topNegativePhrases.length > 0 && analysis.totalNegatives >= 3) {
-    // Only show if there are meaningful negative mentions
-    parts.push(`Some responses note: "${analysis.topNegativePhrases[0]}".`)
-  }
-
-  // Topic gaps - actionable insight
-  if (report.topicsMissing && report.topicsMissing.length > 0) {
-    const missing = report.topicsMissing.slice(0, 2).map(t => t.replace(/_/g, ' '))
-    parts.push(`Consider adding content about ${missing.join(' and ')} to improve AI knowledge.`)
-  }
-
-  // Competitor context (only if insightful)
-  if (analysis.topCompetitor && analysis.topCompetitor !== company.name) {
-    parts.push(`AI frequently compares you to ${analysis.topCompetitor}.`)
-  }
-
-  return parts.join(' ')
-}
-
 export function ReportClient({ data, userRole = null, isSuperAdmin = false }: ReportClientProps) {
   const [activeTab, setActiveTab] = useState<HBTabId>('start')
   const canSetup = userRole === 'owner' || userRole === 'admin'
@@ -231,15 +55,8 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
   const [sentimentFilter, setSentimentFilter] = useState<SentimentFilter>('all')
   const [showMethodology, setShowMethodology] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<HBQuestionCategory | 'all'>('all')
-  const tabContentRef = useRef<HTMLDivElement>(null)
-
   const { report, company, organization, navBrands: initialNavBrands, responses, prompts, sentimentCounts } = data
   const [navBrands, setNavBrands] = useState(initialNavBrands)
-
-  const reportUrl = typeof window !== 'undefined' ? window.location.href : ''
-
-  // Generate dynamic summary from actual response data
-  const dynamicSummary = generateDynamicSummary(company, report, responses, sentimentCounts)
 
   // Calculate mention counts per platform
   const platformMentions = (Object.keys(hbPlatformConfig) as HBPlatform[]).reduce(
@@ -272,135 +89,6 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
     (sentimentFilter === 'all' || r.sentimentCategory === sentimentFilter) &&
     (categoryFilter === 'all' || r.promptCategory === categoryFilter)
   )
-
-  // Clipboard text generators per tab
-  const clipboardText = useMemo(() => {
-    const footer = `\n\n---\nGenerated by HiringBrand.io${reportUrl ? `\n${reportUrl}` : ''}`
-
-    const texts: Record<HBTabId, string> = {
-      start: [
-        `${company.name} — HiringBrand Report`,
-        ``,
-        `This report shows how AI assistants describe ${company.name} to job seekers.`,
-        `We queried ${Object.keys(hbPlatformConfig).length} AI platforms (${Object.values(hbPlatformConfig).map(p => p.name).join(', ')}) with ${prompts.length} questions about employer reputation, culture, compensation, and more.`,
-        ``,
-        report.competitorAnalysis ? `Competitors researched: ${report.competitorAnalysis.employers.filter(e => !e.isTarget).map(e => e.name).join(', ')}` : null,
-        footer,
-      ].filter(Boolean).join('\n'),
-
-      overview: [
-        `${company.name} — Employer Brand Summary`,
-        ``,
-        `Desirability: ${report.visibilityScore}/100`,
-        report.researchabilityScore !== null ? `Awareness: ${report.researchabilityScore}/100` : null,
-        report.differentiationScore !== null ? `Differentiation: ${report.differentiationScore}/100` : null,
-        ``,
-        dynamicSummary,
-        ``,
-        `Sentiment Breakdown:`,
-        `  Strong: ${sentimentCounts.strong}`,
-        `  Positive: ${sentimentCounts.positive}`,
-        `  Mixed: ${sentimentCounts.mixed}`,
-        `  Negative: ${sentimentCounts.negative}`,
-        footer,
-      ].filter(Boolean).join('\n'),
-
-      responses: [
-        `${company.name} — AI Responses Summary`,
-        ``,
-        `${responses.length} responses across ${Object.keys(hbPlatformConfig).length} AI platforms`,
-        ``,
-        `Sentiment Breakdown:`,
-        `  Strong: ${sentimentCounts.strong}`,
-        `  Positive: ${sentimentCounts.positive}`,
-        `  Mixed: ${sentimentCounts.mixed}`,
-        `  Negative: ${sentimentCounts.negative}`,
-        ``,
-        `Topics covered: ${report.topicsCovered.join(', ')}`,
-        report.topicsMissing.length > 0 ? `Topics missing: ${report.topicsMissing.join(', ')}` : null,
-        footer,
-      ].filter(Boolean).join('\n'),
-
-      clippings: [
-        `${company.name} — Employer Brand Clippings`,
-        ``,
-        ...(report.mentionStats ? [
-          `Total clippings: ${report.mentionStats.total}`,
-          `Positive: ${report.mentionStats.bySentiment.positive}, Negative: ${report.mentionStats.bySentiment.negative}`,
-          `Avg sentiment: ${report.mentionStats.avgSentimentScore}/10`,
-          ``,
-          ...(report.mentionStats.insights?.map(i => `• [${i.type}] ${i.text}`) || []),
-          ``,
-          `Top sources: ${report.mentionStats.topDomains.slice(0, 5).map(d => d.domain).join(', ')}`,
-          ``,
-          `Key clippings:`,
-          ...data.mentions.slice(0, 10).map((m, i) => `${i + 1}. [${m.sentiment}] ${m.title || m.url} (${m.domainName})`),
-        ] : ['No web clippings data available.']),
-        footer,
-      ].join('\n'),
-
-      competitors: [
-        `${company.name} — Competitor Analysis`,
-        ``,
-        ...(report.competitorAnalysis ? [
-          `Employers analyzed: ${report.competitorAnalysis.employers.map(e => e.name).join(', ')}`,
-          ``,
-          `Dimension Scores (0-10):`,
-          ...report.competitorAnalysis.employers.map(e =>
-            `  ${e.name}: ${Object.entries(e.scores).map(([d, s]) => `${d}: ${s}`).join(', ')}`
-          ),
-          ``,
-          `Strengths: ${report.competitorAnalysis.insights.strengths.join(', ')}`,
-          `Weaknesses: ${report.competitorAnalysis.insights.weaknesses.join(', ')}`,
-        ] : ['No competitor analysis available.']),
-        footer,
-      ].join('\n'),
-
-      trends: [
-        `${company.name} — Trends Overview`,
-        ``,
-        `Current Scores:`,
-        `  Desirability: ${report.visibilityScore}/100`,
-        report.researchabilityScore !== null ? `  Awareness: ${report.researchabilityScore}/100` : null,
-        report.differentiationScore !== null ? `  Differentiation: ${report.differentiationScore}/100` : null,
-        ``,
-        `Track changes over time with weekly scans.`,
-        footer,
-      ].filter(Boolean).join('\n'),
-
-      actions: [
-        `${company.name} — Action Plan`,
-        ``,
-        ...(report.strategicSummary ? [
-          report.strategicSummary.executiveSummary,
-          ``,
-          `Your 90-Day Plan:`,
-          ``,
-          ...report.strategicSummary.recommendations
-            .filter(r => r.priority === 'immediate')
-            .map((r, i) => `This Week #${i + 1}: ${r.title} — ${r.description}`),
-          ``,
-          ...report.strategicSummary.recommendations
-            .filter(r => r.priority === 'short_term')
-            .map((r, i) => `This Month #${i + 1}: ${r.title} — ${r.description}`),
-          ``,
-          ...report.strategicSummary.recommendations
-            .filter(r => r.priority === 'long_term')
-            .map((r, i) => `This Quarter #${i + 1}: ${r.title} — ${r.description}`),
-        ] : ['No action plan available yet.']),
-        footer,
-      ].join('\n'),
-
-      setup: [
-        `${company.name} — Setup`,
-        ``,
-        `Configure scan questions and competitors for your next employer brand scan.`,
-        footer,
-      ].join('\n'),
-    }
-
-    return texts
-  }, [company.name, report, data.mentions, responses.length, sentimentCounts, dynamicSummary, reportUrl, prompts.length])
 
   return (
     <div
@@ -563,13 +251,13 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
           padding: '32px',
         }}
       >
-        <HBDownloadBar
-          activeTab={activeTab}
-          clipboardText={clipboardText[activeTab]}
-          tabContentRef={tabContentRef}
-          companyName={company.name}
-        />
-        <div ref={tabContentRef}>
+        {activeTab !== 'start' && activeTab !== 'setup' && (
+          <HBDownloadBar
+            activeTab={activeTab}
+            reportToken={report.urlToken}
+            companyName={company.name}
+          />
+        )}
         {/* Start Here Tab */}
         {activeTab === 'start' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -2830,7 +2518,6 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
             }}
           />
         )}
-        </div>
       </main>
     </div>
   )

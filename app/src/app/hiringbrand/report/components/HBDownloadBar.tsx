@@ -1,6 +1,6 @@
 /**
- * HBDownloadBar - Per-tab copy/download controls
- * Renders at top-right of each tab with clipboard and image export
+ * HBDownloadBar - Per-tab PDF download button
+ * Generates a branded one-page PDF summary for the active tab
  */
 
 'use client'
@@ -22,125 +22,96 @@ const tabNames: Record<HBTabId, string> = {
 
 interface HBDownloadBarProps {
   activeTab: HBTabId
-  clipboardText: string
-  tabContentRef: React.RefObject<HTMLDivElement | null>
+  reportToken: string
   companyName: string
 }
 
-export function HBDownloadBar({ activeTab, clipboardText, tabContentRef, companyName }: HBDownloadBarProps) {
-  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+export function HBDownloadBar({ activeTab, reportToken, companyName }: HBDownloadBarProps) {
+  const [state, setState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
 
-  const handleCopy = useCallback(async () => {
+  const handleDownloadPdf = useCallback(async () => {
+    if (state === 'generating') return
+    setState('generating')
     try {
-      await navigator.clipboard.writeText(clipboardText)
-      setCopyState('copied')
-      setTimeout(() => setCopyState('idle'), 2000)
-    } catch {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea')
-      textarea.value = clipboardText
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setCopyState('copied')
-      setTimeout(() => setCopyState('idle'), 2000)
-    }
-  }, [clipboardText])
-
-  const handleSaveImage = useCallback(async () => {
-    if (!tabContentRef.current) return
-    setSaveState('saving')
-    try {
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(tabContentRef.current, {
-        background: '#F1F5F9',
-        useCORS: true,
-        logging: false,
-      } as Parameters<typeof html2canvas>[1])
+      const res = await fetch(`/api/hiringbrand/report/${reportToken}/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tab: activeTab }),
+      })
+      if (!res.ok) throw new Error('PDF generation failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       const tabSlug = tabNames[activeTab].toLowerCase().replace(/\s+/g, '-')
-      link.download = `${companyName.replace(/\s+/g, '-')}-${tabSlug}.png`
-      link.href = canvas.toDataURL('image/png')
+      link.href = url
+      link.download = `${companyName.replace(/\s+/g, '-')}-${tabSlug}-hiringbrand.pdf`
       link.click()
-      setSaveState('saved')
-      setTimeout(() => setSaveState('idle'), 2000)
+      URL.revokeObjectURL(url)
+      setState('done')
+      setTimeout(() => setState('idle'), 2500)
     } catch {
-      setSaveState('idle')
+      setState('error')
+      setTimeout(() => setState('idle'), 3000)
     }
-  }, [tabContentRef, activeTab, companyName])
+  }, [activeTab, reportToken, companyName, state])
 
   const buttonStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '6px 12px',
-    background: 'none',
-    border: `1px solid ${hbColors.teal}40`,
+    padding: '6px 14px',
+    background: state === 'done' ? `${hbColors.teal}15` : 'none',
+    border: `1px solid ${state === 'error' ? hbColors.coral + '60' : hbColors.teal + '40'}`,
     borderRadius: hbRadii.md,
-    cursor: 'pointer',
+    cursor: state === 'generating' ? 'not-allowed' : 'pointer',
     fontSize: '12px',
     fontFamily: hbFonts.body,
     fontWeight: 500,
-    color: hbColors.tealDeep,
+    color: state === 'error' ? hbColors.coral : hbColors.tealDeep,
     transition: 'all 0.15s ease',
+    opacity: state === 'generating' ? 0.7 : 1,
   }
 
   return (
     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>
       <button
-        onClick={handleCopy}
+        onClick={handleDownloadPdf}
         style={buttonStyle}
-        title="Copy tab summary to clipboard"
+        disabled={state === 'generating'}
+        title={`Download ${tabNames[activeTab]} as PDF`}
       >
-        {copyState === 'copied' ? (
-          <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.teal} strokeWidth="2">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-            Copied
-          </>
-        ) : (
-          <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.tealDeep} strokeWidth="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            Copy Summary
-          </>
-        )}
-      </button>
-      <button
-        onClick={handleSaveImage}
-        style={buttonStyle}
-        disabled={saveState === 'saving'}
-        title="Save tab as image"
-      >
-        {saveState === 'saved' ? (
-          <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.teal} strokeWidth="2">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-            Saved
-          </>
-        ) : saveState === 'saving' ? (
+        {state === 'generating' ? (
           <>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.slateLight} strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
-              <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
-            Saving...
+            Generating PDF...
+          </>
+        ) : state === 'done' ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.teal} strokeWidth="2">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+            Downloaded
+          </>
+        ) : state === 'error' ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.coral} strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            Failed
           </>
         ) : (
           <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.tealDeep} strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={hbColors.tealDeep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <polyline points="9 15 12 18 15 15" />
             </svg>
-            Save as Image
+            Download PDF
           </>
         )}
       </button>

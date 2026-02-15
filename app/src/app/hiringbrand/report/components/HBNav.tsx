@@ -30,8 +30,30 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
   const [reportOpen, setReportOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [pptxState, setPptxState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
+  const [pdfState, setPdfState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
   const reportRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
+
+  const handleExportPdf = useCallback(async () => {
+    if (!currentReportToken || pdfState === 'generating') return
+    setPdfState('generating')
+    try {
+      const res = await fetch(`/api/hiringbrand/report/${currentReportToken}/pdf`)
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${(companyName || 'report').replace(/\s+/g, '-')}-full-report-hiringbrand.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+      setPdfState('done')
+      setTimeout(() => setPdfState('idle'), 3000)
+    } catch {
+      setPdfState('error')
+      setTimeout(() => setPdfState('idle'), 3000)
+    }
+  }, [currentReportToken, companyName, pdfState])
 
   const handleExportPptx = useCallback(async () => {
     if (!currentReportToken || pptxState === 'generating') return
@@ -255,8 +277,68 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
         )}
       </div>
 
-      {/* Right: Export PPTX + Account dropdown */}
+      {/* Right: Export PDF + Export PPTX + Account dropdown */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {currentReportToken && (
+          <button
+            onClick={handleExportPdf}
+            disabled={pdfState === 'generating'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              background: pdfState === 'done' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '10px',
+              cursor: pdfState === 'generating' ? 'not-allowed' : 'pointer',
+              color: 'white',
+              fontSize: '13px',
+              fontWeight: 500,
+              fontFamily: hbFonts.body,
+              transition: 'all 0.15s',
+              opacity: pdfState === 'generating' ? 0.7 : 1,
+            }}
+            onMouseEnter={(e) => { if (pdfState === 'idle') e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+            onMouseLeave={(e) => { if (pdfState === 'idle') e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+            title="Export full report as PDF"
+          >
+            {pdfState === 'generating' ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+                Generating...
+              </>
+            ) : pdfState === 'done' ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                Downloaded
+              </>
+            ) : pdfState === 'error' ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                Failed
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <polyline points="9 15 12 18 15 15" />
+                </svg>
+                Export PDF
+              </>
+            )}
+          </button>
+        )}
         {currentReportToken && (
           <button
             onClick={handleExportPptx}

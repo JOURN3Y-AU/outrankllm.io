@@ -448,8 +448,13 @@ export async function classifyMentions(
       system: `You are classifying web mentions of "${companyName}" as an employer.${locationContext} For each mention:
 - sentiment: Is this positive, negative, neutral, or mixed about ${companyName} as an employer?
 - sentimentScore: 1-10 (1=very negative about employer, 10=very positive about employer)
-- relevanceScore: 1-10 (1=not about employer brand at all OR about a different company/location with the same name, 10=directly about working at ${companyName}${location ? ` in ${location}` : ''})
+- relevanceScore: 1-10 — How relevant is this to someone evaluating ${companyName} as a place to work?
+  HIGH relevance (7-10): Employee reviews, layoffs/restructuring news, workplace culture articles, salary/benefits discussions, "best places to work" lists, employer awards, leadership changes, hiring announcements, job listings, career pages, employee testimonials, union activity
+  MEDIUM relevance (4-6): General company news that indirectly affects employees, product news mentioning team/engineering, industry reports about the workforce, company financial results (affect job security)
+  LOW relevance (1-3): Pure product/service reviews with no employer angle, customer complaints, unrelated company with same name, content about a different location${location ? ` (not ${location})` : ''}
 - keyQuote: Extract the single most important sentence or phrase from the snippet that shows WHY this mention got this sentiment score. Pull the exact words from the source — do not invent or paraphrase. Skip navigation text, page chrome, and metadata. If the snippet is mostly navigation/boilerplate, write a brief factual summary instead (e.g. "Job listing for Senior Engineer role" or "Glassdoor review rating 3.5/5").
+
+IMPORTANT: Sites like thelayoff.com, glassdoor.com, indeed.com, and similar employment sites are ALWAYS high relevance (8+). News about layoffs, restructuring, or workforce changes is ALWAYS high relevance (7+). Err on the side of higher relevance — a job seeker would want to see this content.
 
 Be accurate. Job listings are neutral (5-6 sentiment). Reviews can be positive or negative. News about layoffs is negative. Awards are positive.`,
       prompt: `Classify these ${withSourceTypes.length} web mentions of ${companyName}:\n\n${mentionSummaries}`,
