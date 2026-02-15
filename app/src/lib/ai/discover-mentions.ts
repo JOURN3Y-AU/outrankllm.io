@@ -413,7 +413,7 @@ const mentionClassificationSchema = z.object({
     sentiment: z.enum(['positive', 'negative', 'neutral', 'mixed']),
     sentimentScore: z.number().min(1).max(10),
     relevanceScore: z.number().min(1).max(10).describe('How relevant to employer brand (vs product mentions, unrelated content)'),
-    keyQuote: z.string().describe('The single most relevant sentence or phrase from the snippet that justifies the sentiment score. Extract verbatim from the source text — do not paraphrase. If no clear quote exists, write a brief factual summary of what the mention says about the employer.'),
+    keyQuote: z.string().describe('Extract 1-2 complete sentences (15-30 words) from the snippet that best justify the sentiment score. Pull verbatim from the source — do not paraphrase or truncate mid-sentence. If the snippet is mostly boilerplate/navigation, write a brief factual summary instead (e.g. "Job listing for Senior Engineer role" or "Glassdoor review rating 3.5/5").'),
   })),
 })
 
@@ -434,7 +434,7 @@ export async function classifyMentions(
 
   // Batch classify sentiment + relevance with GPT-4o-mini
   const mentionSummaries = withSourceTypes
-    .map((m, i) => `[${i}] Title: "${m.title || 'N/A'}" | Source: ${m.domainName || 'unknown'} | Snippet: "${(m.snippet || '').slice(0, 400)}"`)
+    .map((m, i) => `[${i}] Title: "${m.title || 'N/A'}" | Source: ${m.domainName || 'unknown'} | Snippet: "${(m.snippet || '').slice(0, 600)}"`)
     .join('\n')
 
   const locationContext = location
