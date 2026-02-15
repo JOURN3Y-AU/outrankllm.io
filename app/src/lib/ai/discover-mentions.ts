@@ -412,6 +412,7 @@ const mentionClassificationSchema = z.object({
     sentiment: z.enum(['positive', 'negative', 'neutral', 'mixed']),
     sentimentScore: z.number().min(1).max(10),
     relevanceScore: z.number().min(1).max(10).describe('How relevant to employer brand (vs product mentions, unrelated content)'),
+    keyQuote: z.string().describe('The single most relevant sentence or phrase from the snippet that justifies the sentiment score. Extract verbatim from the source text — do not paraphrase. If no clear quote exists, write a brief factual summary of what the mention says about the employer.'),
   })),
 })
 
@@ -432,7 +433,7 @@ export async function classifyMentions(
 
   // Batch classify sentiment + relevance with GPT-4o-mini
   const mentionSummaries = withSourceTypes
-    .map((m, i) => `[${i}] Title: "${m.title || 'N/A'}" | Source: ${m.domainName || 'unknown'} | Snippet: "${(m.snippet || '').slice(0, 200)}"`)
+    .map((m, i) => `[${i}] Title: "${m.title || 'N/A'}" | Source: ${m.domainName || 'unknown'} | Snippet: "${(m.snippet || '').slice(0, 400)}"`)
     .join('\n')
 
   const locationContext = location
@@ -447,6 +448,7 @@ export async function classifyMentions(
 - sentiment: Is this positive, negative, neutral, or mixed about ${companyName} as an employer?
 - sentimentScore: 1-10 (1=very negative about employer, 10=very positive about employer)
 - relevanceScore: 1-10 (1=not about employer brand at all OR about a different company/location with the same name, 10=directly about working at ${companyName}${location ? ` in ${location}` : ''})
+- keyQuote: Extract the single most important sentence or phrase from the snippet that shows WHY this mention got this sentiment score. Pull the exact words from the source — do not invent or paraphrase. Skip navigation text, page chrome, and metadata. If the snippet is mostly navigation/boilerplate, write a brief factual summary instead (e.g. "Job listing for Senior Engineer role" or "Glassdoor review rating 3.5/5").
 
 Be accurate. Job listings are neutral (5-6 sentiment). Reviews can be positive or negative. News about layoffs is negative. Awards are positive.`,
       prompt: `Classify these ${withSourceTypes.length} web mentions of ${companyName}:\n\n${mentionSummaries}`,
@@ -471,12 +473,14 @@ Be accurate. Job listings are neutral (5-6 sentiment). Reviews can be positive o
       sentiment: MentionSentiment
       sentimentScore: number
       relevanceScore: number
+      keyQuote: string
     }>()
     for (const c of result.object.classifications) {
       classificationMap.set(c.index, {
         sentiment: c.sentiment,
         sentimentScore: c.sentimentScore,
         relevanceScore: c.relevanceScore,
+        keyQuote: c.keyQuote,
       })
     }
 
@@ -484,6 +488,8 @@ Be accurate. Job listings are neutral (5-6 sentiment). Reviews can be positive o
       const classification = classificationMap.get(i)
       return {
         ...m,
+        // Replace raw Tavily snippet with AI-extracted key quote
+        snippet: classification?.keyQuote || m.snippet,
         sentiment: classification?.sentiment || 'neutral',
         sentimentScore: classification?.sentimentScore || null,
         relevanceScore: classification?.relevanceScore || null,
