@@ -4,6 +4,7 @@
  */
 
 import { Resvg } from '@resvg/resvg-js'
+import { RESVG_FONT_OPTS } from './resvg-fonts'
 
 interface LineChartSeries {
   label: string
@@ -97,6 +98,7 @@ export async function renderLineChartPNG(
 
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width' as const, value: opts.width * 2 },
+    ...RESVG_FONT_OPTS,
   })
 
   const pngData = resvg.render()

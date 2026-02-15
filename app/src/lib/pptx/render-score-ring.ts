@@ -4,6 +4,7 @@
  */
 
 import { Resvg } from '@resvg/resvg-js'
+import { RESVG_FONT_OPTS } from '@/lib/pdf/resvg-fonts'
 
 const hbColors = {
   teal: '#4ABDAC',
@@ -70,6 +71,7 @@ export async function renderScoreRingPNG(
 
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width' as const, value: size * 2 }, // 2x for retina
+    ...RESVG_FONT_OPTS,
   })
 
   const pngData = resvg.render()

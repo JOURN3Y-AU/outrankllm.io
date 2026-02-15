@@ -4,6 +4,7 @@
  */
 
 import { Resvg } from '@resvg/resvg-js'
+import { RESVG_FONT_OPTS } from './resvg-fonts'
 
 const COLORS = ['#4ABDAC', '#FC4A1A', '#F7B733', '#2D8A7C', '#94A3B8']
 
@@ -131,6 +132,7 @@ export async function renderRadarChartPNG(
 
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width' as const, value: size * 2 },
+    ...RESVG_FONT_OPTS,
   })
 
   const pngData = resvg.render()
