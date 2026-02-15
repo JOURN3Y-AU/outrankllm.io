@@ -694,15 +694,28 @@ function ClippingCard({ mention }: { mention: HBWebMention }) {
               {sourceTypeLabels[mention.sourceType]}
             </span>
           </div>
-          {relativeDate && (
-            <span style={{
-              fontFamily: hbFonts.body,
-              fontSize: '11px',
-              color: hbColors.slateLight,
-            }}>
-              {relativeDate}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {mention.sentimentScore != null && (
+              <span style={{
+                fontFamily: hbFonts.mono,
+                fontSize: '10px',
+                fontWeight: 600,
+                color: accentColor,
+                opacity: 0.8,
+              }}>
+                {mention.sentimentScore}/10
+              </span>
+            )}
+            {relativeDate && (
+              <span style={{
+                fontFamily: hbFonts.body,
+                fontSize: '11px',
+                color: hbColors.slateLight,
+              }}>
+                {relativeDate}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Title - the main content */}
@@ -719,6 +732,25 @@ function ClippingCard({ mention }: { mention: HBWebMention }) {
             overflow: 'hidden',
           }}>
             {mention.title}
+          </div>
+        )}
+
+        {/* Snippet - key quote from the source */}
+        {mention.snippet && (
+          <div style={{
+            fontFamily: hbFonts.body,
+            fontSize: '13px',
+            color: hbColors.slateMid,
+            lineHeight: 1.5,
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            borderLeft: `2px solid ${accentColor}30`,
+            paddingLeft: '10px',
+            fontStyle: 'italic',
+          }}>
+            {mention.snippet}
           </div>
         )}
 
