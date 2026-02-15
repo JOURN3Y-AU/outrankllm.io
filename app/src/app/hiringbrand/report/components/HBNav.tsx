@@ -29,10 +29,12 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
   const router = useRouter()
   const [reportOpen, setReportOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [downloadOpen, setDownloadOpen] = useState(false)
   const [pptxState, setPptxState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
   const [pdfState, setPdfState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
   const reportRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
+  const downloadRef = useRef<HTMLDivElement>(null)
 
   const handleExportPdf = useCallback(async () => {
     if (!currentReportToken || pdfState === 'generating') return
@@ -86,6 +88,9 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
       }
       if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
         setAccountOpen(false)
+      }
+      if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) {
+        setDownloadOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClick)
@@ -157,7 +162,7 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
         {sortedBrands.length > 0 && (
           <div ref={reportRef} style={{ position: 'relative' }}>
             <button
-              onClick={() => { setReportOpen(!reportOpen); setAccountOpen(false) }}
+              onClick={() => { setReportOpen(!reportOpen); setAccountOpen(false); setDownloadOpen(false) }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -277,130 +282,150 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
         )}
       </div>
 
-      {/* Right: Export PDF + Export PPTX + Account dropdown */}
+      {/* Right: Download dropdown + Account dropdown */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {currentReportToken && (
-          <button
-            onClick={handleExportPdf}
-            disabled={pdfState === 'generating'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              background: pdfState === 'done' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '10px',
-              cursor: pdfState === 'generating' ? 'not-allowed' : 'pointer',
-              color: 'white',
-              fontSize: '13px',
-              fontWeight: 500,
-              fontFamily: hbFonts.body,
-              transition: 'all 0.15s',
-              opacity: pdfState === 'generating' ? 0.7 : 1,
-            }}
-            onMouseEnter={(e) => { if (pdfState === 'idle') e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
-            onMouseLeave={(e) => { if (pdfState === 'idle') e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-            title="Download full report as PDF"
-          >
-            {pdfState === 'generating' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-                Generating...
-              </>
-            ) : pdfState === 'done' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
-                Downloaded
-              </>
-            ) : pdfState === 'error' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="15" y1="9" x2="9" y2="15" />
-                  <line x1="9" y1="9" x2="15" y2="15" />
-                </svg>
-                Failed
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="12" y1="18" x2="12" y2="12" />
-                  <polyline points="9 15 12 18 15 15" />
-                </svg>
-                Download Report PDF
-              </>
+          <div ref={downloadRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setDownloadOpen(!downloadOpen); setReportOpen(false); setAccountOpen(false) }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                background: (pdfState === 'generating' || pptxState === 'generating')
+                  ? 'rgba(255,255,255,0.25)'
+                  : downloadOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                color: 'white',
+                fontSize: '13px',
+                fontWeight: 500,
+                fontFamily: hbFonts.body,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => { if (!downloadOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+              onMouseLeave={(e) => { if (!downloadOpen) e.currentTarget.style.background = downloadOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }}
+            >
+              {(pdfState === 'generating' || pptxState === 'generating') ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download Report
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ transform: downloadOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s', marginLeft: '2px' }}>
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </>
+              )}
+            </button>
+
+            {/* Download format dropdown */}
+            {downloadOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  minWidth: '200px',
+                  background: hbColors.surface,
+                  borderRadius: '14px',
+                  boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+                  border: `1px solid ${hbColors.slateLight}20`,
+                  overflow: 'hidden',
+                  zIndex: 200,
+                }}
+              >
+                <div style={{ padding: '8px 12px 4px', fontSize: '11px', fontWeight: 600, color: hbColors.slateLight, textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: hbFonts.body }}>
+                  Download Format
+                </div>
+                {/* PDF option */}
+                <button
+                  onClick={() => { setDownloadOpen(false); handleExportPdf() }}
+                  disabled={pdfState === 'generating'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    width: '100%',
+                    padding: '10px 14px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: pdfState === 'generating' ? 'not-allowed' : 'pointer',
+                    textAlign: 'left',
+                    fontFamily: hbFonts.body,
+                    transition: 'background 0.1s',
+                    opacity: pdfState === 'generating' ? 0.6 : 1,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = hbColors.surfaceDim }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={pdfState === 'done' ? hbColors.teal : pdfState === 'error' ? hbColors.coral : hbColors.slateMid} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, color: hbColors.slate }}>
+                      {pdfState === 'generating' ? 'Generating PDF...' : pdfState === 'done' ? 'PDF Downloaded' : pdfState === 'error' ? 'PDF Failed' : 'PDF Document'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: hbColors.slateLight }}>
+                      All tabs in one document
+                    </div>
+                  </div>
+                </button>
+                <div style={{ height: '1px', background: `${hbColors.slateLight}15`, margin: '0 12px' }} />
+                {/* PPTX option */}
+                <button
+                  onClick={() => { setDownloadOpen(false); handleExportPptx() }}
+                  disabled={pptxState === 'generating'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    width: '100%',
+                    padding: '10px 14px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: pptxState === 'generating' ? 'not-allowed' : 'pointer',
+                    textAlign: 'left',
+                    fontFamily: hbFonts.body,
+                    transition: 'background 0.1s',
+                    opacity: pptxState === 'generating' ? 0.6 : 1,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = hbColors.surfaceDim }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={pptxState === 'done' ? hbColors.teal : pptxState === 'error' ? hbColors.coral : hbColors.slateMid} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <path d="M8 21h8" />
+                    <path d="M12 17v4" />
+                  </svg>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, color: hbColors.slate }}>
+                      {pptxState === 'generating' ? 'Generating PPTX...' : pptxState === 'done' ? 'PPTX Downloaded' : pptxState === 'error' ? 'PPTX Failed' : 'PowerPoint Slides'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: hbColors.slateLight }}>
+                      Presentation-ready slides
+                    </div>
+                  </div>
+                </button>
+              </div>
             )}
-          </button>
-        )}
-        {currentReportToken && (
-          <button
-            onClick={handleExportPptx}
-            disabled={pptxState === 'generating'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              background: pptxState === 'done' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '10px',
-              cursor: pptxState === 'generating' ? 'not-allowed' : 'pointer',
-              color: 'white',
-              fontSize: '13px',
-              fontWeight: 500,
-              fontFamily: hbFonts.body,
-              transition: 'all 0.15s',
-              opacity: pptxState === 'generating' ? 0.7 : 1,
-            }}
-            onMouseEnter={(e) => { if (pptxState === 'idle') e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
-            onMouseLeave={(e) => { if (pptxState === 'idle') e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-            title="Download full report as PowerPoint"
-          >
-            {pptxState === 'generating' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-                Generating...
-              </>
-            ) : pptxState === 'done' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
-                Downloaded
-              </>
-            ) : pptxState === 'error' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="15" y1="9" x2="9" y2="15" />
-                  <line x1="9" y1="9" x2="15" y2="15" />
-                </svg>
-                Failed
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Download Report PPTX
-              </>
-            )}
-          </button>
+          </div>
         )}
       <div ref={accountRef} style={{ position: 'relative' }}>
         <button
-          onClick={() => { setAccountOpen(!accountOpen); setReportOpen(false) }}
+          onClick={() => { setAccountOpen(!accountOpen); setReportOpen(false); setDownloadOpen(false) }}
           style={{
             display: 'flex',
             alignItems: 'center',
