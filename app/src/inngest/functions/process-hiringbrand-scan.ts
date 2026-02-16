@@ -1239,111 +1239,132 @@ export const processHiringBrandScan = inngest.createFunction(
 
     // Step 5: Query platforms with employer questions
     // Query each platform in parallel, with batched parallelism within each platform
+    // Perplexity gets individual steps per query (sonar-pro web search is slow/flaky)
     const BATCH_SIZE = 3 // Process 3 questions at a time per platform to avoid rate limits
 
-    const platformResults = await Promise.all(
-      PLATFORMS.map((platform) =>
+    type QuestionResult = {
+      question: string
+      result: PlatformResult
+      responseId?: string
+      researchability?: ResearchabilityAnalysis
+    }
+
+    // Helper: process a single question for a platform (query + analysis + save)
+    const processQuestion = async (
+      platform: typeof PLATFORMS[number],
+      q: typeof questions[number],
+    ): Promise<QuestionResult> => {
+      const supabase = createServiceClient()
+      try {
+        const queryResult = await queryPlatformWithSearch(
+          platform,
+          q.question,
+          domain,
+          scanId,
+          locationContext
+        )
+
+        // Analyze researchability and enhanced insights in parallel
+        // (Sentiment will be done in batch after all responses collected)
+        const [researchability, enhanced] = await Promise.all([
+          analyzeResearchability(queryResult.response, reliableCompanyName, scanId),
+          analyzeResponseEnhanced(queryResult.response, reliableCompanyName, scanId),
+        ])
+
+        // Save response WITHOUT sentiment (will be updated in batch)
+        const { data: inserted } = await supabase.from('llm_responses').insert({
+          run_id: scanId,
+          platform,
+          prompt_id: q.promptId, // Link to the question
+          response_text: queryResult.response,
+          domain_mentioned: queryResult.domainMentioned,
+          mention_position: queryResult.mentionPosition,
+          competitors_mentioned: queryResult.competitorsMentioned,
+          response_time_ms: queryResult.responseTimeMs,
+          error_message: queryResult.error,
+          search_enabled: queryResult.searchEnabled,
+          sources: queryResult.sources,
+          // Sentiment will be updated via batch analysis
+          sentiment_score: null,
+          sentiment_category: null,
+          // Researchability
+          specificity_score: researchability.specificityScore,
+          confidence_score: researchability.confidenceScore,
+          topics_covered: researchability.topicsCovered,
+          // Enhanced analysis - key phrases
+          positive_highlights: enhanced.positiveHighlights,
+          negative_highlights: enhanced.negativeHighlights,
+          red_flags: enhanced.redFlags,
+          green_flags: enhanced.greenFlags,
+          // Enhanced analysis - recommendation
+          recommendation_score: enhanced.recommendationScore,
+          recommendation_summary: enhanced.recommendationSummary,
+          // Enhanced analysis - confidence
+          hedging_level: enhanced.hedgingLevel,
+          source_quality: enhanced.sourceQuality,
+          response_recency: enhanced.responseRecency,
+          // Role family (from question)
+          job_family: (q as { jobFamily?: JobFamily }).jobFamily || null,
+        }).select('id').single()
+
+        return {
+          question: q.question,
+          result: queryResult,
+          responseId: inserted?.id,
+          researchability,
+        }
+      } catch (error) {
+        const errorResult: PlatformResult = {
+          platform,
+          query: q.question,
+          response: '',
+          domainMentioned: false,
+          mentionPosition: null,
+          competitorsMentioned: [],
+          responseTimeMs: 0,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          searchEnabled: true,
+          sources: [],
+        }
+        return { question: q.question, result: errorResult }
+      }
+    }
+
+    // All platforms run in parallel via Inngest DAG
+    // Perplexity: Individual steps per query (sonar-pro web search can be slow/flaky)
+    // Other platforms: Single step per platform (batched parallelism within each step)
+    const otherPlatforms = PLATFORMS.filter(p => p !== 'perplexity')
+
+    const [perplexityResults, ...otherPlatformResults] = await Promise.all([
+      // Perplexity: individual steps per query
+      Promise.all(
+        questions.map((q, i) =>
+          step.run(`query-perplexity-${i}`, () => processQuestion('perplexity', q))
+        )
+      ),
+      // Other platforms: single step per platform
+      ...otherPlatforms.map((platform) =>
         step.run(`query-${platform}`, async () => {
-          const supabase = createServiceClient()
           log.platform(scanId, platform, 'querying')
 
-          const results: Array<{
-            question: string
-            result: PlatformResult
-            responseId?: string // ID for batch sentiment update
-            researchability?: ResearchabilityAnalysis
-          }> = []
+          const results: QuestionResult[] = []
 
           // Process questions in parallel batches
           for (let i = 0; i < questions.length; i += BATCH_SIZE) {
             const batch = questions.slice(i, i + BATCH_SIZE)
-
             const batchResults = await Promise.all(
-              batch.map(async (q) => {
-                try {
-                  const queryResult = await queryPlatformWithSearch(
-                    platform,
-                    q.question,
-                    domain,
-                    scanId,
-                    locationContext
-                  )
-
-                  // Analyze researchability and enhanced insights in parallel
-                  // (Sentiment will be done in batch after all responses collected)
-                  const [researchability, enhanced] = await Promise.all([
-                    analyzeResearchability(queryResult.response, reliableCompanyName, scanId),
-                    analyzeResponseEnhanced(queryResult.response, reliableCompanyName, scanId),
-                  ])
-
-                  // Save response WITHOUT sentiment (will be updated in batch)
-                  const { data: inserted } = await supabase.from('llm_responses').insert({
-                    run_id: scanId,
-                    platform,
-                    prompt_id: q.promptId, // Link to the question
-                    response_text: queryResult.response,
-                    domain_mentioned: queryResult.domainMentioned,
-                    mention_position: queryResult.mentionPosition,
-                    competitors_mentioned: queryResult.competitorsMentioned,
-                    response_time_ms: queryResult.responseTimeMs,
-                    error_message: queryResult.error,
-                    search_enabled: queryResult.searchEnabled,
-                    sources: queryResult.sources,
-                    // Sentiment will be updated via batch analysis
-                    sentiment_score: null,
-                    sentiment_category: null,
-                    // Researchability
-                    specificity_score: researchability.specificityScore,
-                    confidence_score: researchability.confidenceScore,
-                    topics_covered: researchability.topicsCovered,
-                    // Enhanced analysis - key phrases
-                    positive_highlights: enhanced.positiveHighlights,
-                    negative_highlights: enhanced.negativeHighlights,
-                    red_flags: enhanced.redFlags,
-                    green_flags: enhanced.greenFlags,
-                    // Enhanced analysis - recommendation
-                    recommendation_score: enhanced.recommendationScore,
-                    recommendation_summary: enhanced.recommendationSummary,
-                    // Enhanced analysis - confidence
-                    hedging_level: enhanced.hedgingLevel,
-                    source_quality: enhanced.sourceQuality,
-                    response_recency: enhanced.responseRecency,
-                    // Role family (from question)
-                    job_family: (q as { jobFamily?: JobFamily }).jobFamily || null,
-                  }).select('id').single()
-
-                  return {
-                    question: q.question,
-                    result: queryResult,
-                    responseId: inserted?.id,
-                    researchability,
-                  }
-                } catch (error) {
-                  const errorResult: PlatformResult = {
-                    platform,
-                    query: q.question,
-                    response: '',
-                    domainMentioned: false,
-                    mentionPosition: null,
-                    competitorsMentioned: [],
-                    responseTimeMs: 0,
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    searchEnabled: true,
-                    sources: [],
-                  }
-                  return { question: q.question, result: errorResult }
-                }
-              })
+              batch.map((q) => processQuestion(platform, q))
             )
-
             results.push(...batchResults)
           }
 
           log.done(scanId, platform, `${results.length} responses`)
           return results
         })
-      )
-    )
+      ),
+    ])
+
+    const platformResults = [perplexityResults, ...otherPlatformResults]
 
     // Step 5b: Batch sentiment analysis using Claude
     // Collect all responses and analyze them together for consistent scoring

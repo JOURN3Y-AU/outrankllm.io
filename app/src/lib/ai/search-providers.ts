@@ -677,25 +677,50 @@ Provide a helpful answer based on the search results. Mention specific businesse
  * Query Perplexity with native search
  * Perplexity is search-native - it always uses web search
  * Using sonar-pro for best quality search results
+ *
+ * Includes 60s per-request timeout and retry logic for transient failures
+ * (connection resets, timeouts) since Perplexity's search can be slow.
  */
+const PERPLEXITY_TIMEOUT_MS = 60_000 // 60s per query
+const PERPLEXITY_MAX_RETRIES = 2
+
 async function queryPerplexityWithSearch(
   query: string,
   domain: string,
-  runId: string
+  runId: string,
+  retryCount: number = 0
 ): Promise<SearchQueryResult> {
   const startTime = Date.now()
   const platform: SearchPlatform = 'perplexity'
 
   try {
-    const result = await generateText({
-      model: perplexity('sonar-pro'),
-      system: SYSTEM_PROMPT,
-      prompt: query,
-      maxOutputTokens: 1500,
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), PERPLEXITY_TIMEOUT_MS)
+
+    let result
+    try {
+      result = await generateText({
+        model: perplexity('sonar-pro'),
+        system: SYSTEM_PROMPT,
+        prompt: query,
+        maxOutputTokens: 1500,
+        abortSignal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
 
     const responseTimeMs = Date.now() - startTime
     const responseText = result.text
+
+    // Retry on empty response (same pattern as ChatGPT)
+    if (!responseText || responseText.trim() === '') {
+      if (retryCount < PERPLEXITY_MAX_RETRIES) {
+        log.warn(runId, `Perplexity empty response, retrying (${retryCount + 1}/${PERPLEXITY_MAX_RETRIES}): "${query.slice(0, 40)}..."`)
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)))
+        return queryPerplexityWithSearch(query, domain, runId, retryCount + 1)
+      }
+    }
 
     // Track cost
     if (result.usage) {
@@ -748,6 +773,23 @@ async function queryPerplexityWithSearch(
       responseTimeMs: Date.now() - startTime,
     }
   } catch (error) {
+    // Retry on transient errors (connection reset, timeout, abort)
+    const isTransient = error instanceof Error && (
+      error.message.includes('ECONNRESET') ||
+      error.message.includes('socket hang up') ||
+      error.message.includes('aborted') ||
+      error.message.includes('timeout') ||
+      error.message.includes('ETIMEDOUT') ||
+      error.name === 'AbortError'
+    )
+
+    if (isTransient && retryCount < PERPLEXITY_MAX_RETRIES) {
+      const backoffMs = 2000 * (retryCount + 1) // 2s, 4s
+      log.warn(runId, `Perplexity transient error, retrying in ${backoffMs}ms (${retryCount + 1}/${PERPLEXITY_MAX_RETRIES}): ${error instanceof Error ? error.message : 'Unknown'}`)
+      await new Promise(resolve => setTimeout(resolve, backoffMs))
+      return queryPerplexityWithSearch(query, domain, runId, retryCount + 1)
+    }
+
     log.error(runId, `Perplexity query failed: "${query.slice(0, 50)}..."`, error)
     return {
       platform,

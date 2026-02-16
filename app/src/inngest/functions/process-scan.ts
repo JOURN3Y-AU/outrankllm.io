@@ -466,16 +466,23 @@ export const processScan = inngest.createFunction(
       }
     }
 
-    // ChatGPT: Individual steps per query (granular retries for intermittent failures)
+    // ChatGPT & Perplexity: Individual steps per query (granular retries for intermittent failures)
     // Each query gets its own Inngest step with independent retry budget
+    // Perplexity uses sonar-pro with real web search which can be slow/flaky
     const chatgptResults = await Promise.all(
       savedPrompts.map((prompt: { id: string; prompt_text: string; category: string }, i: number) =>
         step.run(`query-chatgpt-${i}`, () => runSingleQuery("chatgpt", prompt))
       )
     )
 
+    const perplexityResults = await Promise.all(
+      savedPrompts.map((prompt: { id: string; prompt_text: string; category: string }, i: number) =>
+        step.run(`query-perplexity-${i}`, () => runSingleQuery("perplexity", prompt))
+      )
+    )
+
     // Other platforms: Single step per platform (run queries sequentially within step)
-    const otherPlatforms = PLATFORMS.filter(p => p !== "chatgpt")
+    const otherPlatforms = PLATFORMS.filter(p => p !== "chatgpt" && p !== "perplexity")
     const otherPlatformResults = await Promise.all(
       otherPlatforms.map((platform) =>
         step.run(`query-platform-${platform}`, async () => {
@@ -522,7 +529,7 @@ export const processScan = inngest.createFunction(
     )
 
     // Combine all results
-    const platformResultsMap = [chatgptResults, ...otherPlatformResults]
+    const platformResultsMap = [chatgptResults, perplexityResults, ...otherPlatformResults]
 
     // Update progress after all platforms complete
     await step.run("update-query-progress", async () => {
