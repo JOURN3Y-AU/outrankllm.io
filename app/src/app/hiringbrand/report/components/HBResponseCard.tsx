@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import { hbColors, hbFonts, hbShadows, hbRadii, hbPlatformConfig, hbCategoryConfig } from './shared/constants'
 import type { HBResponse, HBQuestionCategory, HBSentimentCategory } from './shared/types'
 
@@ -58,6 +59,12 @@ const sentimentConfig: Record<HBSentimentCategory, {
   },
 }
 
+// Convert citation markers [1][2][3] to superscript styled citations
+function formatCitations(text: string): string {
+  // Match citation patterns like [1], [2], [123] etc.
+  return text.replace(/\[(\d+)\]/g, '<sup style="font-size: 10px; color: #64748B; margin: 0 1px;">[$1]</sup>')
+}
+
 export function HBResponseCard({ response }: HBResponseCardProps) {
   const [showDetails, setShowDetails] = useState(false)
 
@@ -65,6 +72,9 @@ export function HBResponseCard({ response }: HBResponseCardProps) {
   const sentiment = response.sentimentCategory
     ? sentimentConfig[response.sentimentCategory]
     : sentimentConfig.mixed
+
+  // Format the response text with styled citations
+  const formattedResponseText = formatCitations(response.responseText)
 
   // Combine all positive evidence
   const positiveEvidence = [
@@ -491,6 +501,7 @@ export function HBResponseCard({ response }: HBResponseCardProps) {
             }}
           >
             <ReactMarkdown
+              rehypePlugins={[rehypeRaw]}
               components={{
                 p: ({ children }) => <p style={{ marginBottom: '12px' }}>{children}</p>,
                 strong: ({ children }) => (
@@ -572,9 +583,49 @@ export function HBResponseCard({ response }: HBResponseCardProps) {
                     marginBottom: '16px',
                   }} />
                 ),
+                table: ({ children }) => (
+                  <div style={{ overflowX: 'auto', marginBottom: '12px' }}>
+                    <table style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '13px',
+                    }}>
+                      {children}
+                    </table>
+                  </div>
+                ),
+                thead: ({ children }) => (
+                  <thead style={{ background: hbColors.surfaceDim }}>
+                    {children}
+                  </thead>
+                ),
+                tbody: ({ children }) => <tbody>{children}</tbody>,
+                tr: ({ children }) => (
+                  <tr style={{ borderBottom: `1px solid ${hbColors.surfaceDim}` }}>
+                    {children}
+                  </tr>
+                ),
+                th: ({ children }) => (
+                  <th style={{
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                    fontWeight: 600,
+                    color: hbColors.slate,
+                  }}>
+                    {children}
+                  </th>
+                ),
+                td: ({ children }) => (
+                  <td style={{
+                    padding: '8px 12px',
+                    color: hbColors.slateMid,
+                  }}>
+                    {children}
+                  </td>
+                ),
               }}
             >
-              {response.responseText}
+              {formattedResponseText}
             </ReactMarkdown>
           </div>
         )}
