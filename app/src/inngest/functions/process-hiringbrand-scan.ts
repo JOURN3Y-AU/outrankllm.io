@@ -901,6 +901,7 @@ export const processHiringBrandScan = inngest.createFunction(
                 prompt_text: q.prompt_text,
                 category: q.category,
                 source: 'frozen',
+                job_family: (q as any).job_family || null,
               })
               .select('id')
               .single()
