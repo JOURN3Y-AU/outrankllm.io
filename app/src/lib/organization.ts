@@ -29,6 +29,7 @@ export interface Organization {
   max_users: number | null
   max_questions: number | null
   max_competitors: number | null
+  max_role_families: number | null
   created_at: string
   updated_at: string
 }
@@ -84,6 +85,7 @@ export interface UpdateOrganizationInput {
   max_users?: number | null
   max_questions?: number | null
   max_competitors?: number | null
+  max_role_families?: number | null
 }
 
 // Tier to domain limit mapping
