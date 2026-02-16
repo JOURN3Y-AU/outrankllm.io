@@ -533,6 +533,45 @@ export function HBResponseCard({ response }: HBResponseCardProps) {
                     {children}
                   </a>
                 ),
+                code: ({ children, className }) => {
+                  // Check if it's a code block (has language class) or inline code
+                  const isCodeBlock = className?.startsWith('language-')
+                  if (isCodeBlock) {
+                    return (
+                      <pre style={{
+                        background: hbColors.surfaceDim,
+                        padding: '12px',
+                        borderRadius: '8px',
+                        overflow: 'auto',
+                        marginBottom: '12px',
+                        fontFamily: hbFonts.mono,
+                        fontSize: '13px',
+                      }}>
+                        <code style={{ color: hbColors.slate }}>{children}</code>
+                      </pre>
+                    )
+                  }
+                  return (
+                    <code style={{
+                      background: hbColors.surfaceDim,
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontFamily: hbFonts.mono,
+                      fontSize: '13px',
+                      color: hbColors.slate,
+                    }}>
+                      {children}
+                    </code>
+                  )
+                },
+                hr: () => (
+                  <hr style={{
+                    border: 'none',
+                    borderTop: `1px solid ${hbColors.surfaceDim}`,
+                    marginTop: '16px',
+                    marginBottom: '16px',
+                  }} />
+                ),
               }}
             >
               {response.responseText}
