@@ -31,6 +31,14 @@ export interface RoleActionPlanInput {
   // Role-specific scores (calculated from filtered responses)
   desirabilityScore: number
   awarenessScore: number
+  differentiationScore?: number // NEW - how unique the EVP positioning is for this role
+  differentiationInsights?: { // NEW - detailed differentiation breakdown
+    desirabilityGap: number // How far from competitor avg
+    awarenessGap: number // How far from competitor avg
+    strengthCount: number // How many dimensions above average
+    uniquenessIndex: number // Variance-based specialization score
+    positioning: 'distinctive' | 'competitive' | 'emerging' // Based on score thresholds
+  }
 
   // Filtered responses for this role family
   responses: HBResponse[]
@@ -95,6 +103,8 @@ export async function generateRoleActionPlan(
     roleFamilyDisplayName,
     desirabilityScore,
     awarenessScore,
+    differentiationScore,
+    differentiationInsights,
     responses,
     runId,
   } = input
@@ -154,9 +164,36 @@ COMPANY CONTEXT:
 
 ROLE FAMILY SCORES (for ${roleFamilyDisplayName} only):
 - Desirability: ${desirabilityScore}/100 (how positively AI describes ${companyName} for ${roleFamilyDisplayName})
-- AI Awareness: ${awarenessScore}/100 (how much AI knows about ${companyName} for ${roleFamilyDisplayName})
+- AI Awareness: ${awarenessScore}/100 (how much AI knows about ${companyName} for ${roleFamilyDisplayName})${differentiationScore !== undefined ? `
+- Differentiation: ${differentiationScore}/100 (how unique the EVP positioning is for ${roleFamilyDisplayName})` : ''}
 
-SENTIMENT DISTRIBUTION (${totalResponses} ${roleFamilyDisplayName}-specific responses):
+${differentiationInsights ? `DIFFERENTIATION ANALYSIS (for ${roleFamilyDisplayName}):
+- Positioning: ${differentiationInsights.positioning} (${
+  differentiationInsights.positioning === 'distinctive'
+    ? 'Strong unique positioning for this role family'
+    : differentiationInsights.positioning === 'competitive'
+    ? 'Similar to competitors for this role family'
+    : 'Building distinctive positioning for this role family'
+})
+- Desirability Gap: ${differentiationInsights.desirabilityGap > 0 ? '+' : ''}${differentiationInsights.desirabilityGap.toFixed(1)} points vs competitors
+- Awareness Gap: ${differentiationInsights.awarenessGap > 0 ? '+' : ''}${differentiationInsights.awarenessGap.toFixed(1)} points vs competitors
+- Strength Count: ${differentiationInsights.strengthCount} dimensions above market average
+- Uniqueness Index: ${differentiationInsights.uniquenessIndex.toFixed(1)} (specialization vs broad appeal)
+
+STRATEGIC GUIDANCE:
+${differentiationInsights.positioning === 'distinctive'
+  ? `- Leverage your unique positioning for ${roleFamilyDisplayName} in EVP communication
+- Amplify the specific strengths that differentiate you from competitors
+- Use differentiation as a competitive advantage in talent attraction`
+  : differentiationInsights.positioning === 'competitive'
+  ? `- Your positioning is similar to competitors for ${roleFamilyDisplayName}
+- Identify opportunities to stand out on key dimensions that matter to this role
+- Consider specializing in specific areas rather than competing broadly`
+  : `- You're building distinctive positioning for ${roleFamilyDisplayName}
+- Focus on establishing clear differentiation in 2-3 key areas
+- Avoid generic messaging—find what makes you unique for this role family`}
+
+` : ''}SENTIMENT DISTRIBUTION (${totalResponses} ${roleFamilyDisplayName}-specific responses):
 - Strong (9-10): ${sentimentCounts.strong} (${totalResponses > 0 ? Math.round((sentimentCounts.strong / totalResponses) * 100) : 0}%)
 - Positive (6-8): ${sentimentCounts.positive} (${totalResponses > 0 ? Math.round((sentimentCounts.positive / totalResponses) * 100) : 0}%)
 - Mixed (4-5): ${sentimentCounts.mixed} (${totalResponses > 0 ? Math.round((sentimentCounts.mixed / totalResponses) * 100) : 0}%)

@@ -1879,66 +1879,68 @@ export const processHiringBrandScan = inngest.createFunction(
       }
     })
 
-    // Step 8: Generate strategic summary for recruitment agents
-    await step.run('generate-strategic-summary', async () => {
-      const supabase = createServiceClient()
+    // Steps 8 + 8b: Generate strategic summary and role action plans in parallel
+    const [strategicSummaryResult, roleActionPlansResult] = await Promise.all([
+      // Step 8: Generate strategic summary for recruitment agents
+      step.run('generate-strategic-summary', async () => {
+        const supabase = createServiceClient()
 
-      // Use frozen/researched competitors (from Setup tab), not AI-mentioned competitors
-      const competitorNames = (report.competitors as CompetitorEmployer[]).map((c) => c.name)
+        // Use frozen/researched competitors (from Setup tab), not AI-mentioned competitors
+        const competitorNames = (report.competitors as CompetitorEmployer[]).map((c) => c.name)
 
-      if (competitorNames.length === 0) {
-        log.info(scanId, 'No competitors for strategic summary, skipping')
-        return null
-      }
+        if (competitorNames.length === 0) {
+          log.info(scanId, 'No competitors for strategic summary, skipping')
+          return null
+        }
 
-      // Fetch the competitor analysis we just created
-      const { data: reportData } = await supabase
-        .from('reports')
-        .select('competitor_analysis, differentiation_score')
-        .eq('id', report.reportId)
-        .single()
+        // Fetch the competitor analysis we just created
+        const { data: reportData } = await supabase
+          .from('reports')
+          .select('competitor_analysis, differentiation_score')
+          .eq('id', report.reportId)
+          .single()
 
-      if (!reportData?.competitor_analysis) {
-        log.info(scanId, 'No competitor analysis available, skipping strategic summary')
-        return null
-      }
+        if (!reportData?.competitor_analysis) {
+          log.info(scanId, 'No competitor analysis available, skipping strategic summary')
+          return null
+        }
 
-      log.step(scanId, 'Generating strategic summary')
+        log.step(scanId, 'Generating strategic summary')
 
-      const strategicSummary = await generateStrategicSummary({
-        companyName: reliableCompanyName,
-        industry: employerAnalysis.analysis.industry,
-        location: employerAnalysis.analysis.location,
-        desirabilityScore: report.scores.overallScore,
-        awarenessScore: report.scores.researchabilityScore,
-        differentiationScore: reportData.differentiation_score || report.scores.differentiationScore,
-        competitorAnalysis: reportData.competitor_analysis,
-        topicsCovered: report.scores.topicsCovered,
-        topicsMissing: report.scores.topicsMissing,
-        sentimentCounts: report.scores.sentimentCounts,
-        topCompetitors: report.topCompetitors,
-        runId: scanId,
-      })
-
-      // Update report with strategic summary
-      await supabase
-        .from('reports')
-        .update({
-          strategic_summary: strategicSummary,
+        const strategicSummary = await generateStrategicSummary({
+          companyName: reliableCompanyName,
+          industry: employerAnalysis.analysis.industry,
+          location: employerAnalysis.analysis.location,
+          desirabilityScore: report.scores.overallScore,
+          awarenessScore: report.scores.researchabilityScore,
+          differentiationScore: reportData.differentiation_score || report.scores.differentiationScore,
+          competitorAnalysis: reportData.competitor_analysis,
+          topicsCovered: report.scores.topicsCovered,
+          topicsMissing: report.scores.topicsMissing,
+          sentimentCounts: report.scores.sentimentCounts,
+          topCompetitors: report.topCompetitors,
+          runId: scanId,
         })
-        .eq('id', report.reportId)
 
-      log.done(
-        scanId,
-        'Strategic summary',
-        `${strategicSummary.recommendations.length} recommendations, health: ${strategicSummary.scoreInterpretation.overallHealth}`
-      )
+        // Update report with strategic summary
+        await supabase
+          .from('reports')
+          .update({
+            strategic_summary: strategicSummary,
+          })
+          .eq('id', report.reportId)
 
-      return strategicSummary
-    })
+        log.done(
+          scanId,
+          'Strategic summary',
+          `${strategicSummary.recommendations.length} recommendations, health: ${strategicSummary.scoreInterpretation.overallHealth}`
+        )
 
-    // Step 8b: Generate role-specific action plans
-    await step.run('generate-role-action-plans', async () => {
+        return strategicSummary
+      }),
+
+      // Step 8b: Generate role-specific action plans (in parallel)
+      step.run('generate-role-action-plans', async () => {
       const supabase = createServiceClient()
 
       // Determine active families (frozen or detected)
@@ -1980,15 +1982,24 @@ export const processHiringBrandScan = inngest.createFunction(
         return null
       }
 
-      const roleActionPlans: Record<string, RoleActionPlan> = {}
+      // Import differentiation calculator and hbRoleFamilyConfig
+      const { calculateRoleDifferentiation } = await import('@/lib/ai/calculate-role-differentiation')
+      const { hbRoleFamilyConfig } = await import('@/app/hiringbrand/report/components/shared/constants')
 
-      // Generate action plan for each active family
-      for (const family of activeFamilies) {
+      // Fetch competitor analysis for differentiation calculation
+      const { data: reportData } = await supabase
+        .from('reports')
+        .select('competitor_analysis')
+        .eq('id', report.reportId)
+        .single()
+
+      // Generate action plans for all families in parallel
+      const planPromises = activeFamilies.map(async (family) => {
         const familyResponses = allResponses.filter((r: any) => r.job_family === family)
 
         if (familyResponses.length === 0) {
           log.info(scanId, `No responses for ${family}, skipping action plan`)
-          continue
+          return null
         }
 
         // Calculate family-specific scores
@@ -2020,8 +2031,29 @@ export const processHiringBrandScan = inngest.createFunction(
 
         const awareness = Math.round((((avgSpecificity + avgConfidence) / 2) - 1) / 9 * 100)
 
-        // Import hbRoleFamilyConfig for family labels
-        const { hbRoleFamilyConfig } = await import('@/app/hiringbrand/report/components/shared/constants')
+        // Calculate role-level differentiation
+        // Extract competitor scores for this role family (simplified: use overall competitor scores for now)
+        const competitorScores = reportData?.competitor_analysis?.employers
+          ?.filter((e: any) => !e.isTarget)
+          .map((e: any) => ({
+            name: e.name,
+            desirability: desirability, // Simplified: use same score structure
+            awareness: awareness,
+          })) || []
+
+        let differentiationScore: number | undefined
+        let differentiationInsights: any | undefined
+
+        if (competitorScores.length > 0) {
+          const diffResult = calculateRoleDifferentiation({
+            roleFamily: family,
+            targetDesirability: Math.max(0, Math.min(100, desirability)),
+            targetAwareness: Math.max(0, Math.min(100, awareness)),
+            competitorScores,
+          })
+          differentiationScore = diffResult.differentiationScore
+          differentiationInsights = diffResult.insights
+        }
 
         // Generate role-specific action plan
         try {
@@ -2033,14 +2065,28 @@ export const processHiringBrandScan = inngest.createFunction(
             roleFamilyDisplayName: hbRoleFamilyConfig[family].label,
             desirabilityScore: Math.max(0, Math.min(100, desirability)),
             awarenessScore: Math.max(0, Math.min(100, awareness)),
+            differentiationScore, // NEW
+            differentiationInsights, // NEW
             responses: familyResponses as any, // Type cast for compatibility
             runId: scanId,
           })
 
-          roleActionPlans[family] = actionPlan
           log.info(scanId, `Generated ${family} action plan: ${actionPlan.recommendations.length} recommendations`)
+          return { family, actionPlan }
         } catch (error) {
           log.warn(scanId, `Failed to generate ${family} action plan: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          return null
+        }
+      })
+
+      // Wait for all action plans to complete
+      const results = await Promise.all(planPromises)
+
+      // Convert results array to object
+      const roleActionPlans: Record<string, RoleActionPlan> = {}
+      for (const result of results) {
+        if (result && result.actionPlan) {
+          roleActionPlans[result.family] = result.actionPlan
         }
       }
 
@@ -2057,7 +2103,11 @@ export const processHiringBrandScan = inngest.createFunction(
       }
 
       return roleActionPlans
-    })
+    }),
+  ])
+
+    // Note: strategicSummaryResult and roleActionPlansResult are returned from parallel execution above
+    // No need to use them directly since they're already persisted to the database
 
     // Step 9: Record score history for trends
     await step.run('record-score-history', async () => {
@@ -2103,7 +2153,37 @@ export const processHiringBrandScan = inngest.createFunction(
         .eq('run_id', scanId)
         .not('sentiment_score', 'is', null)
 
-      const roleFamilyScores = calculateRoleFamilyScores(responsesForScoring || [], activeFamilies)
+      const baseRoleFamilyScores = calculateRoleFamilyScores(responsesForScoring || [], activeFamilies)
+
+      // Calculate role-level differentiation scores and add to roleFamilyScores
+      const { calculateRoleDifferentiation } = await import('@/lib/ai/calculate-role-differentiation')
+
+      // Create enhanced scores object with differentiation
+      const roleFamilyScores: Record<string, { desirability: number; awareness: number; differentiation?: number }> = { ...baseRoleFamilyScores }
+
+      for (const family of activeFamilies) {
+        const familyScores = roleFamilyScores[family]
+        if (!familyScores) continue
+
+        // Extract competitor scores for differentiation calculation
+        const competitorScores = reportData.competitor_analysis?.employers
+          ?.filter((e: any) => !e.isTarget)
+          .map((e: any) => ({
+            name: e.name,
+            desirability: familyScores.desirability, // Simplified: use role family scores
+            awareness: familyScores.awareness,
+          })) || []
+
+        if (competitorScores.length > 0) {
+          const diffResult = calculateRoleDifferentiation({
+            roleFamily: family,
+            targetDesirability: familyScores.desirability,
+            targetAwareness: familyScores.awareness,
+            competitorScores,
+          })
+          roleFamilyScores[family].differentiation = diffResult.differentiationScore
+        }
+      }
 
       // Record main score history
       await supabase.from('hb_score_history').insert({

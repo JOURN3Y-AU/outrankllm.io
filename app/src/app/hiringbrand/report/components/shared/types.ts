@@ -155,6 +155,7 @@ export interface HBRoleFamilyScores {
   [family: string]: {
     desirability: number
     awareness: number
+    differentiation?: number // NEW - optional for backwards compatibility
   }
 }
 

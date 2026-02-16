@@ -249,6 +249,55 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
                       {scores.awareness}
                     </span>
                   </div>
+                  {scores.differentiation !== undefined && (
+                    <div
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      title={`Differentiation (0-100): How unique the EVP positioning is for ${rf.displayName} roles compared to competitors. Based on profile distance, strength count, and specialization.`}
+                    >
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          color: hbColors.slateLight,
+                          fontFamily: hbFonts.mono,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        Differentiation
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          color: config.color,
+                          fontFamily: hbFonts.mono,
+                        }}
+                      >
+                        {scores.differentiation}
+                      </span>
+                    </div>
+                  )}
+                  {scores.differentiation !== undefined && (
+                    <div
+                      style={{
+                        marginTop: '6px',
+                        padding: '6px 8px',
+                        background: `${config.color}10`,
+                        borderRadius: hbRadii.sm,
+                        fontSize: '10px',
+                        color: config.color,
+                        fontFamily: hbFonts.body,
+                        fontWeight: 600,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {scores.differentiation >= 70
+                        ? 'Distinctive positioning'
+                        : scores.differentiation >= 50
+                        ? 'Competitive positioning'
+                        : 'Building unique positioning'}
+                    </div>
+                  )}
                 </div>
               )}
 
