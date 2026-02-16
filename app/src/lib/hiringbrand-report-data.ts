@@ -43,26 +43,45 @@ async function getTrendsData(
     .order('scan_date', { ascending: true })
     .limit(520)
 
+  // Deduplicate score history - keep only most recent entry per day
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const scoreHistory: HBScoreHistoryEntry[] = (scoreHistoryRaw || []).map((h: any) => ({
-    id: h.id,
-    scanDate: h.scan_date,
-    desirabilityScore: h.desirability_score,
-    awarenessScore: h.awareness_score,
-    differentiationScore: h.differentiation_score,
-    platformScores: (h.platform_scores || {}) as Record<HBPlatform, number>,
-    competitorRank: h.competitor_rank,
-    competitorCount: h.competitor_count,
-    dimensionScores: (h.dimension_scores || {}) as Record<HBEmployerDimension, number>,
-  }))
+  const scoreByDay = new Map<string, any>()
+  for (const h of scoreHistoryRaw || []) {
+    const dayKey = h.scan_date.split('T')[0] // Extract YYYY-MM-DD
+    const existing = scoreByDay.get(dayKey)
+    // Keep the most recent scan (later timestamp) for each day
+    if (!existing || h.scan_date > existing.scan_date) {
+      scoreByDay.set(dayKey, h)
+    }
+  }
 
+  const scoreHistory: HBScoreHistoryEntry[] = Array.from(scoreByDay.values())
+    .sort((a, b) => a.scan_date.localeCompare(b.scan_date))
+    .map((h) => ({
+      id: h.id,
+      scanDate: h.scan_date,
+      desirabilityScore: h.desirability_score,
+      awarenessScore: h.awareness_score,
+      differentiationScore: h.differentiation_score,
+      platformScores: (h.platform_scores || {}) as Record<HBPlatform, number>,
+      competitorRank: h.competitor_rank,
+      competitorCount: h.competitor_count,
+      dimensionScores: (h.dimension_scores || {}) as Record<HBEmployerDimension, number>,
+    }))
+
+  // Deduplicate competitor history - keep only most recent entry per day
   const competitorByDate = new Map<string, HBCompetitorHistorySnapshot>()
   for (const h of competitorHistoryRaw || []) {
-    const dateKey = h.scan_date
-    if (!competitorByDate.has(dateKey)) {
-      competitorByDate.set(dateKey, { scanDate: h.scan_date, employers: [] })
+    const dayKey = h.scan_date.split('T')[0] // Extract YYYY-MM-DD
+    if (!competitorByDate.has(dayKey)) {
+      competitorByDate.set(dayKey, { scanDate: h.scan_date, employers: [] })
     }
-    competitorByDate.get(dateKey)!.employers.push({
+    const snapshot = competitorByDate.get(dayKey)!
+    // Update to use the most recent scan_date timestamp for this day
+    if (h.scan_date > snapshot.scanDate) {
+      snapshot.scanDate = h.scan_date
+    }
+    snapshot.employers.push({
       name: h.competitor_name,
       isTarget: h.is_target,
       compositeScore: parseFloat(h.composite_score) || 0,
