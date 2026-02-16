@@ -14,6 +14,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
+import remarkGfm from 'remark-gfm'
 import { hbColors, hbFonts, hbShadows, hbRadii, hbPlatformConfig, hbCategoryConfig } from './shared/constants'
 import type { HBResponse, HBQuestionCategory, HBSentimentCategory } from './shared/types'
 
@@ -501,6 +502,7 @@ export function HBResponseCard({ response }: HBResponseCardProps) {
             }}
           >
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 p: ({ children }) => <p style={{ marginBottom: '12px' }}>{children}</p>,
