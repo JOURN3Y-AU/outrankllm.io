@@ -471,7 +471,8 @@ export async function researchEmployer(
  */
 export function generateFallbackEmployerQuestions(
   analysis: EmployerAnalysis,
-  competitors: CompetitorEmployer[] = []
+  competitors: CompetitorEmployer[] = [],
+  jobFamilies: JobFamily[] = []
 ): EmployerQuestion[] {
   const questions: EmployerQuestion[] = []
   const { companyName, industry, location } = analysis
@@ -555,7 +556,14 @@ export function generateFallbackEmployerQuestions(
     })
   }
 
-  return questions.slice(0, 10)
+  // Add role-specific questions if job families are provided
+  const generalQuestions = questions.slice(0, 10)
+  if (jobFamilies && jobFamilies.length > 0) {
+    const roleQuestions = generateRoleFamilyQuestions(analysis, jobFamilies, competitors)
+    return [...generalQuestions, ...roleQuestions]
+  }
+
+  return generalQuestions
 }
 
 /**

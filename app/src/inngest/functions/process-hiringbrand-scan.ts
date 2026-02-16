@@ -1063,7 +1063,7 @@ export const processHiringBrandScan = inngest.createFunction(
     })
 
     // Use fallback if research failed - create prompts for fallback questions too
-    let questions: Array<{ question: string; category: string; promptId: string }>
+    let questions: Array<{ question: string; category: string; promptId: string; jobFamily?: string | null }>
     if (researchResult.questionsWithPromptIds.length > 0) {
       questions = researchResult.questionsWithPromptIds
     } else {
@@ -1082,9 +1082,13 @@ export const processHiringBrandScan = inngest.createFunction(
           promptId: ep.id,
         }))
       } else {
+        // Get job families for fallback questions
+        const jobFamilies = employerAnalysis.detectedFamilies?.map(f => f.family) || []
+
         const fallbackQuestions = generateFallbackEmployerQuestions(
           { ...employerAnalysis.analysis, companyName: reliableCompanyName },
-          researchResult.competitors
+          researchResult.competitors,
+          jobFamilies
         )
         questions = []
         for (const q of fallbackQuestions) {
@@ -1095,6 +1099,7 @@ export const processHiringBrandScan = inngest.createFunction(
               prompt_text: q.question,
               category: q.category,
               source: 'fallback',
+              job_family: q.jobFamily || null,
             })
             .select('id')
             .single()
@@ -1104,6 +1109,7 @@ export const processHiringBrandScan = inngest.createFunction(
               question: q.question,
               category: q.category,
               promptId: insertedPrompt.id,
+              jobFamily: q.jobFamily || null,
             })
           }
         }
