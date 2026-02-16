@@ -184,7 +184,7 @@ export const hbTabs: HBTab[] = [
   { id: 'overview', label: 'Summary', icon: 'chart' },
   { id: 'responses', label: 'AI Responses', icon: 'message' },
   { id: 'clippings', label: 'Clippings', icon: 'globe' },
-  { id: 'roles', label: 'By Role', icon: 'briefcase' },
+  { id: 'roles', label: 'Role Insights', icon: 'briefcase' },
   { id: 'competitors', label: 'Competitors', icon: 'users' },
   { id: 'trends', label: 'Trends', icon: 'trending' },
   { id: 'actions', label: 'Action Plan', icon: 'lightbulb' },

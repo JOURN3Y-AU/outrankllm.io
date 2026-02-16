@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * HiringBrand By Role Tab
+ * HiringBrand Role Insights Tab
  * Shows role-specific sentiment analysis and responses
  */
 
@@ -28,31 +28,64 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
 
   if (roleFamilies.length === 0) {
     return (
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 32px', textAlign: 'center' }}>
-        <h2
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div>
+          <h2
+            style={{
+              fontSize: '24px',
+              fontWeight: 700,
+              color: hbColors.slate,
+              fontFamily: hbFonts.display,
+              marginBottom: '8px',
+            }}
+          >
+            Role Insights
+          </h2>
+          <p
+            style={{
+              fontSize: '15px',
+              color: hbColors.slateMid,
+              fontFamily: hbFonts.body,
+              lineHeight: 1.6,
+            }}
+          >
+            See how AI platforms describe {companyName} for different job families.
+          </p>
+        </div>
+
+        <div
           style={{
-            fontSize: '20px',
-            fontWeight: 700,
-            color: hbColors.slate,
-            fontFamily: hbFonts.display,
-            marginBottom: '12px',
+            background: hbColors.surface,
+            borderRadius: hbRadii.xl,
+            padding: '48px 32px',
+            textAlign: 'center',
+            boxShadow: hbShadows.sm,
           }}
         >
-          No Role Families Configured
-        </h2>
-        <p
-          style={{
-            fontSize: '15px',
-            color: hbColors.slateMid,
-            fontFamily: hbFonts.body,
-            lineHeight: 1.6,
-            marginBottom: '24px',
-          }}
-        >
-          Role families allow you to see how AI platforms describe your employer brand for specific job types.
-          <br />
-          Configure role families on the Setup tab to see role-specific analysis here.
-        </p>
+          <h3
+            style={{
+              fontSize: '18px',
+              fontWeight: 600,
+              color: hbColors.slate,
+              fontFamily: hbFonts.display,
+              marginBottom: '8px',
+            }}
+          >
+            No Role Families Configured
+          </h3>
+          <p
+            style={{
+              fontSize: '14px',
+              color: hbColors.slateMid,
+              fontFamily: hbFonts.body,
+              lineHeight: 1.6,
+            }}
+          >
+            Role families allow you to see how AI platforms describe your employer brand for specific job types.
+            <br />
+            Configure role families on the Setup tab to see role-specific analysis here.
+          </p>
+        </div>
       </div>
     )
   }
@@ -79,9 +112,9 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
   const familyScores = selectedFamily ? roleFamilyScores[selectedFamily] : null
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto', padding: '40px 32px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
+      <div>
         <h2
           style={{
             fontSize: '24px',
@@ -91,17 +124,17 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
             marginBottom: '8px',
           }}
         >
-          By Role
+          Role Insights
         </h2>
         <p
           style={{
             fontSize: '15px',
             color: hbColors.slateMid,
             fontFamily: hbFonts.body,
-            lineHeight: 1.5,
+            lineHeight: 1.6,
           }}
         >
-          See how AI platforms describe {companyName} for different job families.
+          Employer brand perception varies by role type. Engineering talent may value different factors than sales or operations professionals. Compare how AI describes {companyName} across job families to tailor your recruitment messaging.
         </p>
       </div>
 
@@ -111,7 +144,6 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',
-          marginBottom: '32px',
         }}
       >
         {roleFamilies.map((rf) => {
@@ -147,7 +179,10 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
               </h3>
               {scores && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    title={`Desirability (0-100): How positively AI describes ${rf.displayName} roles. Calculated from average sentiment scores (1-10 scale). Score of ${scores.desirability} ≈ ${((scores.desirability / 100) * 9 + 1).toFixed(1)}/10 avg sentiment.`}
+                  >
                     <span
                       style={{
                         fontSize: '11px',
@@ -170,7 +205,10 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
                       {scores.desirability}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    title={`Awareness (0-100): How much detailed information AI has about ${rf.displayName} roles. Based on response specificity and confidence.`}
+                  >
                     <span
                       style={{
                         fontSize: '11px',
@@ -203,120 +241,80 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
       {/* Selected Family Details */}
       {selectedFamily && selectedFamilyData && selectedFamilyConfig && (
         <div>
-          {/* Family Header */}
-          <div
+          {/* Content Header */}
+          <h3
             style={{
-              background: selectedFamilyConfig.lightColor,
-              borderRadius: hbRadii.xl,
-              padding: '24px 28px',
-              marginBottom: '24px',
-              border: `1px solid ${selectedFamilyConfig.color}30`,
+              fontSize: '18px',
+              fontWeight: 700,
+              color: hbColors.slate,
+              fontFamily: hbFonts.display,
+              marginBottom: '20px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h3
-                  style={{
-                    fontSize: '18px',
-                    fontWeight: 700,
-                    color: selectedFamilyConfig.color,
-                    fontFamily: hbFonts.display,
-                    marginBottom: '4px',
-                  }}
-                >
-                  {selectedFamilyData.displayName}
-                </h3>
-                <p
-                  style={{
-                    fontSize: '14px',
-                    color: hbColors.slateMid,
-                    fontFamily: hbFonts.body,
-                  }}
-                >
-                  {selectedFamilyData.description}
-                </p>
-              </div>
-              {familyScores && (
-                <div style={{ display: 'flex', gap: '16px' }}>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        color: hbColors.slateLight,
-                        fontFamily: hbFonts.mono,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      Desirability
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '24px',
-                        fontWeight: 700,
-                        color: selectedFamilyConfig.color,
-                        fontFamily: hbFonts.mono,
-                      }}
-                    >
-                      {familyScores.desirability}
-                    </div>
-                  </div>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        color: hbColors.slateLight,
-                        fontFamily: hbFonts.mono,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      Awareness
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '24px',
-                        fontWeight: 700,
-                        color: selectedFamilyConfig.color,
-                        fontFamily: hbFonts.mono,
-                      }}
-                    >
-                      {familyScores.awareness}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+            What AI Says About {selectedFamilyData.displayName}
+          </h3>
 
           {/* Sentiment Distribution */}
           {totalResponses > 0 && (
             <div
               style={{
                 background: hbColors.surface,
-                borderRadius: hbRadii.xl,
-                padding: '24px 28px',
+                borderRadius: hbRadii.lg,
+                padding: '20px 24px',
                 boxShadow: hbShadows.sm,
-                border: `1px solid ${hbColors.slateLight}20`,
-                marginBottom: '24px',
               }}
             >
-              <h4
+              <div
                 style={{
+                  fontFamily: hbFonts.body,
                   fontSize: '13px',
                   fontWeight: 600,
-                  color: hbColors.slateLight,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  fontFamily: hbFonts.body,
-                  marginBottom: '16px',
+                  color: hbColors.slateMid,
+                  marginBottom: '12px',
                 }}
               >
-                Sentiment Breakdown
-              </h4>
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                Sentiment Distribution
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  height: '24px',
+                  borderRadius: hbRadii.full,
+                  overflow: 'hidden',
+                  background: hbColors.surfaceDim,
+                }}
+              >
+                {[
+                  { key: 'strong', color: hbColors.teal },
+                  { key: 'positive', color: '#10B981' },
+                  { key: 'mixed', color: hbColors.gold },
+                  { key: 'negative', color: hbColors.coral },
+                ].map(({ key, color }) => {
+                  const count = sentimentCounts[key as keyof typeof sentimentCounts]
+                  const percent = totalResponses > 0 ? (count / totalResponses) * 100 : 0
+                  if (percent === 0) return null
+                  return (
+                    <div
+                      key={key}
+                      title={`${key}: ${count} (${Math.round(percent)}%)`}
+                      style={{
+                        width: `${percent}%`,
+                        background: color,
+                        transition: 'width 0.3s ease',
+                        minWidth: count > 0 ? '4px' : 0,
+                      }}
+                    />
+                  )
+                })}
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '16px',
+                  marginTop: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
                 {[
                   { key: 'strong', label: 'Strong (9-10)', color: hbColors.teal },
                   { key: 'positive', label: 'Positive (6-8)', color: '#10B981' },
@@ -324,55 +322,26 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
                   { key: 'negative', label: 'Negative (1-3)', color: hbColors.coral },
                 ].map(({ key, label, color }) => {
                   const count = sentimentCounts[key as keyof typeof sentimentCounts]
-                  const percentage = totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0
-
+                  if (count === 0) return null
                   return (
-                    <div key={key} style={{ flex: '1 1 150px' }}>
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '6px',
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          background: color,
                         }}
-                      >
-                        <span
-                          style={{
-                            fontSize: '12px',
-                            color: hbColors.slateMid,
-                            fontFamily: hbFonts.body,
-                          }}
-                        >
-                          {label}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '14px',
-                            fontWeight: 700,
-                            color: color,
-                            fontFamily: hbFonts.mono,
-                          }}
-                        >
-                          {count}
-                        </span>
-                      </div>
-                      <div
+                      />
+                      <span
                         style={{
-                          height: '6px',
-                          background: `${hbColors.slateLight}15`,
-                          borderRadius: hbRadii.full,
-                          overflow: 'hidden',
+                          fontFamily: hbFonts.body,
+                          fontSize: '12px',
+                          color: hbColors.slateMid,
                         }}
                       >
-                        <div
-                          style={{
-                            width: `${percentage}%`,
-                            height: '100%',
-                            background: color,
-                            transition: 'width 0.3s ease',
-                          }}
-                        />
-                      </div>
+                        {label} ({count})
+                      </span>
                     </div>
                   )
                 })}

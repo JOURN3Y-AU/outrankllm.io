@@ -585,7 +585,7 @@ export function generateRoleFamilyQuestions(
     const roleLabel = familyLabels[family]
     const competitor = competitors[0]?.name
 
-    // Core role-specific question (reputation/culture combined)
+    // Core role-specific question (reputation/culture/compensation for this role family)
     familyQuestions.push({
       question: `How is ${companyName} for ${roleLabel}? What's the reputation, culture, and compensation like?`,
       category: 'role_insights', // Role-specific insights category
@@ -593,17 +593,6 @@ export function generateRoleFamilyQuestions(
       relevanceScore: 10,
       jobFamily: family,
     })
-
-    // Optional: Add comparison question if we have competitors
-    if (competitor) {
-      familyQuestions.push({
-        question: `Is ${companyName} or ${competitor} better for ${roleLabel}?`,
-        category: 'comparison',
-        suggestedBy: [],
-        relevanceScore: 8,
-        jobFamily: family,
-      })
-    }
   }
 
   return familyQuestions
