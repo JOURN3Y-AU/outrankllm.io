@@ -1484,25 +1484,27 @@ export const processHiringBrandScan = inngest.createFunction(
         runId: scanId,
       })
 
-      // Calculate enhanced differentiation score using comparative data
-      const enhancedDifferentiation = calculateEnhancedDifferentiation(analysis)
+      // Use the target employer's differentiation score from the competitive analysis
+      // (consistent with what's shown on Competitors page, uses 0.5 threshold for strengths)
+      const targetEmployer = analysis.employers.find((e) => e.isTarget)
+      const differentiationScore = targetEmployer?.differentiationScore ?? 50
 
-      // Update report with competitor analysis and enhanced differentiation score
+      // Update report with competitor analysis and differentiation score
       await supabase
         .from('reports')
         .update({
           competitor_analysis: analysis,
-          differentiation_score: enhancedDifferentiation,
+          differentiation_score: differentiationScore,
         })
         .eq('id', report.reportId)
 
       log.done(
         scanId,
         'Competitor analysis',
-        `${analysis.employers.length} employers, ${analysis.insights.strengths.length} strengths, ${analysis.insights.weaknesses.length} weaknesses, differentiation: ${enhancedDifferentiation}`
+        `${analysis.employers.length} employers, ${analysis.insights.strengths.length} strengths, ${analysis.insights.weaknesses.length} weaknesses, differentiation: ${differentiationScore}`
       )
 
-      return { analysis, enhancedDifferentiation }
+      return { analysis, differentiationScore }
     })
 
     // Step 7b: Discover web mentions about employer
@@ -1751,78 +1753,6 @@ async function updateScanStatus(
   progress: number
 ) {
   await supabase.from('scan_runs').update({ status, progress }).eq('id', scanId)
-}
-
-/**
- * Calculate enhanced differentiation score using competitor analysis data
- *
- * This uses concrete comparative data to measure how differentiated the target's
- * employer brand is from competitors across all dimensions.
- *
- * Factors:
- * - Profile Distance (40%): How far is your score profile from the competitor average?
- * - Strength Count (30%): How many dimensions where you're ≥1.5 points above average?
- * - Score Variance (30%): How varied is your profile? (peaks + valleys = distinctive)
- */
-function calculateEnhancedDifferentiation(
-  analysis: Awaited<ReturnType<typeof compareEmployers>>
-): number {
-  const target = analysis.employers.find((e) => e.isTarget)
-  const competitors = analysis.employers.filter((e) => !e.isTarget)
-
-  if (!target || competitors.length === 0) {
-    return 50 // Default if no comparison possible
-  }
-
-  const dimensions = analysis.dimensions
-
-  // Calculate competitor average for each dimension
-  const competitorAvg: Record<string, number> = {}
-  for (const dim of dimensions) {
-    const scores = competitors.map((c) => c.scores[dim as keyof typeof c.scores] || 5)
-    competitorAvg[dim] = scores.reduce((a, b) => a + b, 0) / scores.length
-  }
-
-  // Factor 1: Profile Distance (40%)
-  // Euclidean distance from average competitor profile, normalized to 0-100
-  let sumSquaredDiff = 0
-  for (const dim of dimensions) {
-    const targetScore = target.scores[dim as keyof typeof target.scores] || 5
-    const avgScore = competitorAvg[dim]
-    sumSquaredDiff += Math.pow(targetScore - avgScore, 2)
-  }
-  const euclideanDistance = Math.sqrt(sumSquaredDiff)
-  // Max possible distance is sqrt(7 * 9^2) ≈ 23.8 (if all dims differ by 9)
-  const maxDistance = Math.sqrt(dimensions.length * 81)
-  const distanceFactor = (euclideanDistance / maxDistance) * 100
-
-  // Factor 2: Strength Count (30%)
-  // Number of dimensions where target is ≥1.5 points above competitor average
-  let strengthCount = 0
-  for (const dim of dimensions) {
-    const targetScore = target.scores[dim as keyof typeof target.scores] || 5
-    const avgScore = competitorAvg[dim]
-    if (targetScore >= avgScore + 1.5) {
-      strengthCount++
-    }
-  }
-  // Score: 0 strengths = 0%, 1 = 30%, 2 = 60%, 3+ = 100%
-  const strengthFactor = Math.min(100, (strengthCount / 3) * 100)
-
-  // Factor 3: Score Variance (30%)
-  // How varied is the target's profile? Distinctive brands have peaks and valleys
-  const targetScores = dimensions.map((d) => target.scores[d as keyof typeof target.scores] || 5)
-  const targetMean = targetScores.reduce((a, b) => a + b, 0) / targetScores.length
-  const variance = targetScores.reduce((sum, s) => sum + Math.pow(s - targetMean, 2), 0) / targetScores.length
-  // Typical variance: 0 = flat, 4 = moderate, 9+ = very distinctive
-  const varianceFactor = Math.min(100, (variance / 6) * 100)
-
-  // Weighted combination
-  const differentiationScore = Math.round(
-    distanceFactor * 0.4 + strengthFactor * 0.3 + varianceFactor * 0.3
-  )
-
-  return Math.min(100, Math.max(0, differentiationScore))
 }
 
 // Helper: Extract employer analysis from crawled content
