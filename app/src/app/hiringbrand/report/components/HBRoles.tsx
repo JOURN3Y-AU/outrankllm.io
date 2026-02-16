@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { hbColors, hbFonts, hbRadii, hbShadows, hbRoleFamilyConfig } from './shared/constants'
 import type { HBJobFamily, HBResponse, HBSentimentCategory, HBRoleFamilyScores } from './shared/types'
 import { HBResponseCard } from './HBResponseCard'
+import { HBScoreRing } from './HBScoreRing'
 
 interface HBRolesProps {
   responses: HBResponse[]
@@ -164,6 +165,21 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
                 textAlign: 'left',
                 transition: 'all 0.2s ease',
                 boxShadow: isSelected ? `0 4px 12px ${config.color}20` : hbShadows.sm,
+                position: 'relative',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = `0 6px 16px ${config.color}15`
+                  e.currentTarget.style.borderColor = `${config.color}40`
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = hbShadows.sm
+                  e.currentTarget.style.borderColor = `${hbColors.slateLight}20`
+                }
               }}
             >
               <h3
@@ -233,6 +249,26 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
                   </div>
                 </div>
               )}
+
+              {/* Click indicator */}
+              {!isSelected && (
+                <div
+                  style={{
+                    marginTop: '12px',
+                    paddingTop: '12px',
+                    borderTop: `1px solid ${hbColors.slateLight}20`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    color: hbColors.slateLight,
+                    fontFamily: hbFonts.body,
+                  }}
+                >
+                  <span>Click to view details</span>
+                  <span style={{ fontSize: '10px' }}>→</span>
+                </div>
+              )}
             </button>
           )
         })}
@@ -253,6 +289,37 @@ export function HBRoles({ responses, roleFamilies, roleFamilyScores, companyName
           >
             What AI Says About {selectedFamilyData.displayName}
           </h3>
+
+          {/* Score Rings */}
+          {familyScores && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '80px',
+                marginBottom: '32px',
+                padding: '40px',
+                background: hbColors.surface,
+                borderRadius: hbRadii.xl,
+                boxShadow: hbShadows.sm,
+              }}
+            >
+              <HBScoreRing
+                score={familyScores.desirability}
+                size="md"
+                label="Desirability"
+                showLabel={true}
+                animated={true}
+              />
+              <HBScoreRing
+                score={familyScores.awareness}
+                size="md"
+                label="AI Awareness"
+                showLabel={true}
+                animated={true}
+              />
+            </div>
+          )}
 
           {/* Sentiment Distribution */}
           {totalResponses > 0 && (
