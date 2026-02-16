@@ -120,6 +120,7 @@ export const hbCategoryConfig: Record<HBQuestionCategory, { label: string; color
   industry: { label: 'Industry', color: '#6366F1' },
   balance: { label: 'Work-Life Balance', color: '#14B8A6' },
   leadership: { label: 'Leadership', color: '#F97316' },
+  role_insights: { label: 'Role-Specific Insights', color: '#9333EA' }, // Purple for role-specific questions
 }
 
 // Job family configuration for role-specific analysis

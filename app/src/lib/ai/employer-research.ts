@@ -40,6 +40,7 @@ export type EmployerQuestionCategory =
   | 'industry' // Best employers in industry
   | 'balance' // Work-life balance, flexibility
   | 'leadership' // Management quality
+  | 'role_insights' // Role-specific questions about job families
 
 export type JobFamily = 'engineering' | 'business' | 'operations' | 'creative' | 'corporate' | 'general'
 
@@ -274,9 +275,10 @@ function validateCategory(category: string): EmployerQuestionCategory {
     'industry',
     'balance',
     'leadership',
+    'role_insights',
   ]
 
-  const normalized = category.toLowerCase().replace(/[^a-z]/g, '')
+  const normalized = category.toLowerCase().replace(/[^a-z_]/g, '') // Allow underscores for role_insights
   return validCategories.includes(normalized as EmployerQuestionCategory)
     ? (normalized as EmployerQuestionCategory)
     : 'reputation'
@@ -586,7 +588,7 @@ export function generateRoleFamilyQuestions(
     // Core role-specific question (reputation/culture combined)
     familyQuestions.push({
       question: `How is ${companyName} for ${roleLabel}? What's the reputation, culture, and compensation like?`,
-      category: 'reputation',
+      category: 'role_insights', // Role-specific insights category
       suggestedBy: [],
       relevanceScore: 10,
       jobFamily: family,

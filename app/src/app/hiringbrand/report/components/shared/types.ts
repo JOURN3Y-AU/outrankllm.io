@@ -134,6 +134,7 @@ export type HBQuestionCategory =
   | 'industry'
   | 'balance'
   | 'leadership'
+  | 'role_insights' // Role-specific questions about job families
 
 export type HBTabId = 'start' | 'overview' | 'responses' | 'clippings' | 'roles' | 'competitors' | 'trends' | 'actions' | 'setup'
 
