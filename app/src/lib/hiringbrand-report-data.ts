@@ -22,6 +22,10 @@ import type {
   HBCompetitorHistorySnapshot,
   HBPlatform,
   HBEmployerDimension,
+  HBRoleFamily,
+  HBRoleFamilyScores,
+  HBJobFamily,
+  HBRoleActionPlans,
 } from '@/app/hiringbrand/report/components/shared/types'
 
 // Fetch trends data (score history + competitor history)
@@ -67,6 +71,7 @@ async function getTrendsData(
       competitorRank: h.competitor_rank,
       competitorCount: h.competitor_count,
       dimensionScores: (h.dimension_scores || {}) as Record<HBEmployerDimension, number>,
+      roleFamilyScores: (h.role_family_scores || {}) as HBRoleFamilyScores,
     }))
 
   // Deduplicate competitor history - keep only most recent entry per day
@@ -137,6 +142,7 @@ export async function fetchHBReportData(token: string): Promise<HBReportDataWith
       competitor_analysis,
       strategic_summary,
       mention_stats,
+      role_action_plans,
       summary,
       created_at,
       expires_at,
@@ -213,6 +219,7 @@ export async function fetchHBReportData(token: string): Promise<HBReportDataWith
       hedging_level,
       source_quality,
       response_recency,
+      job_family,
       prompt:scan_prompts(id, prompt_text, category)
     `
     )
@@ -255,6 +262,7 @@ export async function fetchHBReportData(token: string): Promise<HBReportDataWith
       hedgingLevel: r.hedging_level as HBResponse['hedgingLevel'],
       sourceQuality: r.source_quality as HBResponse['sourceQuality'],
       responseRecency: r.response_recency as HBResponse['responseRecency'],
+      jobFamily: (r.job_family as HBJobFamily) || null,
     }
   })
 
@@ -298,6 +306,37 @@ export async function fetchHBReportData(token: string): Promise<HBReportDataWith
     relevanceScore: m.relevance_score,
     domainName: m.domain_name,
   }))
+
+  // Fetch role families if monitored domain exists
+  let roleFamilies: HBRoleFamily[] = []
+  let roleFamilyScores: HBRoleFamilyScores = {}
+
+  if (run.monitored_domain_id) {
+    // Fetch frozen role families
+    const { data: frozenFamilies } = await supabase
+      .from('hb_frozen_role_families')
+      .select('id, family, display_name, description, source, is_active, sort_order')
+      .eq('monitored_domain_id', run.monitored_domain_id)
+      .eq('is_active', true)
+      .order('sort_order')
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    roleFamilies = (frozenFamilies || []).map((rf: any) => ({
+      id: rf.id,
+      family: rf.family as HBJobFamily,
+      displayName: rf.display_name,
+      description: rf.description || '',
+      source: rf.source as 'employer_research' | 'user_custom',
+      isActive: rf.is_active,
+      sortOrder: rf.sort_order,
+    }))
+
+    // Get latest role family scores from most recent score history
+    if (trends.scoreHistory.length > 0) {
+      const latestHistory = trends.scoreHistory[trends.scoreHistory.length - 1]
+      roleFamilyScores = latestHistory.roleFamilyScores || {}
+    }
+  }
 
   // Fetch all brands for this org (for the report switcher nav)
   let navBrands: Array<{ domain: string; companyName: string | null; latestReportToken: string | null; latestScore: number | null; isScanning: boolean }> = []
@@ -367,6 +406,7 @@ export async function fetchHBReportData(token: string): Promise<HBReportDataWith
       strategicSummary: (report as { strategic_summary?: HBStrategicSummary }).strategic_summary ?? null,
       mentionStats: (report as { mention_stats?: HBMentionStats }).mention_stats ?? null,
       monitoredDomainId: run.monitored_domain_id || null,
+      roleActionPlans: (report as { role_action_plans?: HBRoleActionPlans }).role_action_plans || {},
     },
     company: {
       name: companyName,
@@ -383,5 +423,7 @@ export async function fetchHBReportData(token: string): Promise<HBReportDataWith
     mentions,
     sentimentCounts,
     trends,
+    roleFamilies,
+    roleFamilyScores,
   }
 }

@@ -6,8 +6,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { hbColors, hbFonts, hbShadows, hbRadii, hbCategoryConfig } from './shared/constants'
-import type { HBQuestionCategory } from './shared/types'
+import { hbColors, hbFonts, hbShadows, hbRadii, hbCategoryConfig, hbRoleFamilyConfig } from './shared/constants'
+import type { HBQuestionCategory, HBJobFamily } from './shared/types'
 
 // ============================================
 // TYPES
@@ -28,10 +28,19 @@ interface EditableCompetitor {
   source: string
 }
 
+interface EditableRoleFamily {
+  id?: string
+  family: HBJobFamily
+  displayName: string
+  description: string
+  source: string
+}
+
 interface SetupData {
   questions: EditableQuestion[]
   competitors: EditableCompetitor[]
-  limits: { maxQuestions: number; maxCompetitors: number }
+  roleFamilies: EditableRoleFamily[]
+  limits: { maxQuestions: number; maxCompetitors: number; maxRoleFamilies: number }
 }
 
 interface HBSetupProps {
@@ -281,6 +290,134 @@ function CompetitorRow({
 }
 
 // ============================================
+// ROLE FAMILY ROW
+// ============================================
+
+function RoleFamilyRow({
+  roleFamily,
+  index,
+  onChange,
+  onDelete,
+}: {
+  roleFamily: EditableRoleFamily
+  index: number
+  onChange: (index: number, field: keyof EditableRoleFamily, value: string) => void
+  onDelete: (index: number) => void
+}) {
+  const families = Object.entries(hbRoleFamilyConfig).filter(([key]) => key !== 'general') as [HBJobFamily, { label: string; description: string }][]
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '10px',
+        padding: '12px 0',
+        borderBottom: `1px solid ${hbColors.slateLight}15`,
+      }}
+    >
+      <span
+        style={{
+          fontSize: '12px',
+          color: hbColors.slateLight,
+          width: '24px',
+          textAlign: 'center',
+          flexShrink: 0,
+          fontFamily: hbFonts.mono,
+          paddingTop: '6px',
+        }}
+      >
+        {index + 1}
+      </span>
+
+      <select
+        value={roleFamily.family}
+        onChange={(e) => onChange(index, 'family', e.target.value)}
+        style={{
+          fontSize: '12px',
+          fontWeight: 500,
+          fontFamily: hbFonts.body,
+          color: hbColors.slateMid,
+          background: hbColors.surfaceDim,
+          border: `1px solid ${hbColors.slateLight}25`,
+          borderRadius: hbRadii.sm,
+          padding: '6px 8px',
+          cursor: 'pointer',
+          width: '160px',
+          flexShrink: 0,
+        }}
+      >
+        {families.map(([key, cfg]) => (
+          <option key={key} value={key}>
+            {cfg.label}
+          </option>
+        ))}
+      </select>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <input
+          type="text"
+          value={roleFamily.displayName}
+          onChange={(e) => onChange(index, 'displayName', e.target.value)}
+          placeholder="Display name (e.g., Engineering & Tech)"
+          style={{
+            fontSize: '14px',
+            fontFamily: hbFonts.body,
+            color: hbColors.slate,
+            border: `1px solid ${hbColors.slateLight}25`,
+            borderRadius: hbRadii.sm,
+            padding: '8px 12px',
+            outline: 'none',
+            background: 'transparent',
+          }}
+        />
+        <input
+          type="text"
+          value={roleFamily.description}
+          onChange={(e) => onChange(index, 'description', e.target.value)}
+          placeholder="Description (optional)"
+          style={{
+            fontSize: '13px',
+            fontFamily: hbFonts.body,
+            color: hbColors.slateMid,
+            border: `1px solid ${hbColors.slateLight}25`,
+            borderRadius: hbRadii.sm,
+            padding: '6px 12px',
+            outline: 'none',
+            background: 'transparent',
+          }}
+        />
+      </div>
+
+      <SourceBadge source={roleFamily.source} />
+
+      <button
+        onClick={() => onDelete(index)}
+        style={{
+          width: '28px',
+          height: '28px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'none',
+          border: 'none',
+          borderRadius: hbRadii.sm,
+          cursor: 'pointer',
+          color: hbColors.slateLight,
+          flexShrink: 0,
+          marginTop: '4px',
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -288,6 +425,7 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
   const [data, setData] = useState<SetupData | null>(null)
   const [questions, setQuestions] = useState<EditableQuestion[]>([])
   const [competitors, setCompetitors] = useState<EditableCompetitor[]>([])
+  const [roleFamilies, setRoleFamilies] = useState<EditableRoleFamily[]>([])
   const [originalSnapshot, setOriginalSnapshot] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -307,7 +445,8 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
       setData(json)
       setQuestions(json.questions)
       setCompetitors(json.competitors)
-      setOriginalSnapshot(JSON.stringify({ questions: json.questions, competitors: json.competitors }))
+      setRoleFamilies(json.roleFamilies || [])
+      setOriginalSnapshot(JSON.stringify({ questions: json.questions, competitors: json.competitors, roleFamilies: json.roleFamilies || [] }))
     } catch {
       setError('Network error')
     } finally {
@@ -321,7 +460,7 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
 
   const [savingType, setSavingType] = useState<'save' | 'rescan' | null>(null)
 
-  const currentSnapshot = JSON.stringify({ questions, competitors })
+  const currentSnapshot = JSON.stringify({ questions, competitors, roleFamilies })
   const isDirty = currentSnapshot !== originalSnapshot
 
   // Handlers: Questions
@@ -364,6 +503,39 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
     ])
   }
 
+  // Handlers: Role Families
+  const handleRoleFamilyChange = (index: number, field: keyof EditableRoleFamily, value: string) => {
+    setRoleFamilies((prev) => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], [field]: value }
+      return updated
+    })
+  }
+
+  const handleRoleFamilyDelete = (index: number) => {
+    setRoleFamilies((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleAddRoleFamily = () => {
+    // Default to engineering if not already added, otherwise first available family
+    const usedFamilies = new Set(roleFamilies.map((rf) => rf.family))
+    const availableFamilies = (['engineering', 'business', 'operations', 'creative', 'corporate'] as HBJobFamily[]).filter(
+      (f) => !usedFamilies.has(f)
+    )
+    const defaultFamily = availableFamilies[0] || 'engineering'
+    const defaultConfig = hbRoleFamilyConfig[defaultFamily]
+
+    setRoleFamilies((prev) => [
+      ...prev,
+      {
+        family: defaultFamily,
+        displayName: defaultConfig.label,
+        description: defaultConfig.description,
+        source: 'user_custom',
+      },
+    ])
+  }
+
   // Save
   const handleSave = async (rescan = false) => {
     setSaving(true)
@@ -394,6 +566,19 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
       if (!cRes.ok) {
         const json = await cRes.json()
         setError(json.error || 'Failed to save competitors')
+        setSaving(false)
+        return
+      }
+
+      // Save role families
+      const rfRes = await fetch(`/api/hiringbrand/report/${reportToken}/setup/role-families`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roleFamilies }),
+      })
+      if (!rfRes.ok) {
+        const json = await rfRes.json()
+        setError(json.error || 'Failed to save role families')
         setSaving(false)
         return
       }
@@ -460,6 +645,7 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
 
   const maxQ = data?.limits.maxQuestions || 20
   const maxC = data?.limits.maxCompetitors || 10
+  const maxRF = data?.limits.maxRoleFamilies || 5
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '40px 32px 120px' }}>
@@ -663,6 +849,113 @@ export function HBSetup({ reportToken, companyName, onRescanTriggered }: HBSetup
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           Add Competitor
+        </button>
+      </div>
+
+      {/* Role Families Section */}
+      <div
+        style={{
+          background: hbColors.surface,
+          borderRadius: hbRadii.xl,
+          padding: '28px',
+          boxShadow: hbShadows.sm,
+          border: `1px solid ${hbColors.slateLight}20`,
+          marginBottom: '32px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+          }}
+        >
+          <div>
+            <h3
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: hbColors.slateLight,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                fontFamily: hbFonts.body,
+                marginBottom: '4px',
+              }}
+            >
+              Role Families
+            </h3>
+            <p
+              style={{
+                fontSize: '12px',
+                color: hbColors.slateLight,
+                fontFamily: hbFonts.body,
+                lineHeight: 1.4,
+              }}
+            >
+              Target specific job families with tailored questions and analysis
+            </p>
+          </div>
+          <span
+            style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              color: roleFamilies.length >= maxRF ? hbColors.coral : hbColors.slateMid,
+              fontFamily: hbFonts.mono,
+            }}
+          >
+            {roleFamilies.length} / {maxRF}
+          </span>
+        </div>
+
+        {roleFamilies.length === 0 && (
+          <p
+            style={{
+              fontSize: '14px',
+              color: hbColors.slateLight,
+              fontStyle: 'italic',
+              padding: '12px 0',
+              fontFamily: hbFonts.body,
+            }}
+          >
+            No role families configured. AI will auto-detect relevant families on the next scan.
+          </p>
+        )}
+
+        {roleFamilies.map((rf, i) => (
+          <RoleFamilyRow
+            key={rf.id || `new-${i}`}
+            roleFamily={rf}
+            index={i}
+            onChange={handleRoleFamilyChange}
+            onDelete={handleRoleFamilyDelete}
+          />
+        ))}
+
+        <button
+          onClick={handleAddRoleFamily}
+          disabled={roleFamilies.length >= maxRF}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginTop: '12px',
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 600,
+            fontFamily: hbFonts.body,
+            color: roleFamilies.length >= maxRF ? hbColors.slateLight : hbColors.tealDeep,
+            background: roleFamilies.length >= maxRF ? hbColors.surfaceDim : hbColors.tealLight,
+            border: 'none',
+            borderRadius: hbRadii.md,
+            cursor: roleFamilies.length >= maxRF ? 'not-allowed' : 'pointer',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Add Role Family
         </button>
       </div>
 

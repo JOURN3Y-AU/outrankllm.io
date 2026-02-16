@@ -16,6 +16,7 @@ import { HBResponseCard } from '../components/HBResponseCard'
 import { HBCompetitorList } from '../components/HBCompetitorList'
 import { HBTrends } from '../components/HBTrends'
 import { HBMentions } from '../components/HBMentions'
+import { HBRoles } from '../components/HBRoles'
 import { HBTabFooter } from '../components/HBTabFooter'
 import { HBSetup } from '../components/HBSetup'
 import {
@@ -26,6 +27,7 @@ import {
   hbPlatformConfig,
   hbCategoryConfig,
   hbTabs,
+  hbRoleFamilyConfig,
   getScoreColor,
 } from '../components/shared/constants'
 import type { HBReportData, HBTabId, HBPlatform, HBQuestionCategory, HBSentimentCategory, HBEffortLevel, HBImpactLevel, HBTrendsData } from '../components/shared/types'
@@ -55,6 +57,7 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
   const [sentimentFilter, setSentimentFilter] = useState<SentimentFilter>('all')
   const [showMethodology, setShowMethodology] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<HBQuestionCategory | 'all'>('all')
+  const [actionPlanView, setActionPlanView] = useState<'overall' | string>('overall')
   const { report, company, organization, navBrands: initialNavBrands, responses, prompts, sentimentCounts } = data
   const [navBrands, setNavBrands] = useState(initialNavBrands)
 
@@ -1849,6 +1852,16 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
           />
         )}
 
+        {/* Roles Tab */}
+        {activeTab === 'roles' && (
+          <HBRoles
+            responses={responses}
+            roleFamilies={data.roleFamilies || []}
+            roleFamilyScores={data.roleFamilyScores || {}}
+            companyName={company.name}
+          />
+        )}
+
         {/* Competitors Tab */}
         {activeTab === 'competitors' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -1893,6 +1906,7 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
               trends={data.trends}
               companyName={company.name}
               currentCompetitorNames={report.competitorAnalysis?.employers.filter(e => !e.isTarget).map(e => e.name)}
+              roleFamilies={data.roleFamilies}
             />
             <HBTabFooter
               nextTab="actions"
@@ -1915,7 +1929,56 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
                 Based on everything above — your scores, AI responses, competitive gaps, and trends — here's a prioritised action plan. Start with the quick wins this week and work through the 90-day timeline to systematically improve how AI represents {company.name} to candidates.
               </p>
             </div>
-            {report.strategicSummary ? (
+
+            {/* Action Plan View Switcher (Overall vs Role-specific) */}
+            {(data.roleFamilies && data.roleFamilies.length > 0) && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setActionPlanView('overall')}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    fontFamily: hbFonts.display,
+                    background: actionPlanView === 'overall' ? hbColors.teal : hbColors.surface,
+                    color: actionPlanView === 'overall' ? 'white' : hbColors.slateMid,
+                    border: `1px solid ${actionPlanView === 'overall' ? hbColors.teal : `${hbColors.slateLight}30`}`,
+                    borderRadius: hbRadii.lg,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Overall
+                </button>
+                {(data.roleFamilies || []).map((rf) => {
+                  const config = hbRoleFamilyConfig[rf.family]
+                  const isSelected = actionPlanView === rf.family
+                  return (
+                    <button
+                      key={rf.family}
+                      onClick={() => setActionPlanView(rf.family)}
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        fontFamily: hbFonts.display,
+                        background: isSelected ? config.color : hbColors.surface,
+                        color: isSelected ? 'white' : hbColors.slateMid,
+                        border: `1px solid ${isSelected ? config.color : `${hbColors.slateLight}30`}`,
+                        borderRadius: hbRadii.lg,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {rf.displayName}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Overall Action Plan */}
+            {actionPlanView === 'overall' && report.strategicSummary ? (
               <>
                 {/* Brand Health Summary */}
                 <div
@@ -2452,7 +2515,7 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
                   </div>
                 </div>
               </>
-            ) : (
+            ) : actionPlanView === 'overall' ? (
               /* Fallback when no strategic summary is available */
               <div
                 style={{
@@ -2502,7 +2565,226 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
                   The AI-generated strategic summary is being prepared. Please refresh this page in a few moments.
                 </p>
               </div>
-            )}
+            ) : null}
+
+            {/* Role-Specific Action Plans */}
+            {actionPlanView !== 'overall' && report.roleActionPlans && report.roleActionPlans[actionPlanView] && (() => {
+              const roleActionPlan = report.roleActionPlans[actionPlanView]
+              const roleFamilyData = (data.roleFamilies || []).find(rf => rf.family === actionPlanView)
+              const roleFamilyConfig = roleFamilyData ? hbRoleFamilyConfig[roleFamilyData.family] : null
+
+              if (!roleFamilyConfig) return null
+
+              return (
+                <>
+                  {/* Role-specific Brand Health Summary */}
+                  <div
+                    style={{
+                      background: hbColors.surface,
+                      borderRadius: hbRadii.xl,
+                      padding: '28px',
+                      boxShadow: hbShadows.sm,
+                      borderTop: `4px solid ${roleFamilyConfig.color}`,
+                    }}
+                  >
+                    <h2
+                      style={{
+                        fontFamily: hbFonts.display,
+                        fontSize: '22px',
+                        fontWeight: 700,
+                        color: hbColors.slate,
+                        margin: '0 0 12px 0',
+                      }}
+                    >
+                      {roleFamilyData.displayName} Brand Health
+                    </h2>
+                    <p
+                      style={{
+                        fontFamily: hbFonts.body,
+                        fontSize: '16px',
+                        lineHeight: 1.7,
+                        color: hbColors.slateMid,
+                        margin: '0 0 16px 0',
+                      }}
+                    >
+                      {roleActionPlan.executiveSummary}
+                    </p>
+                    <div
+                      style={{
+                        padding: '12px 16px',
+                        background: roleFamilyConfig.lightColor,
+                        borderRadius: hbRadii.md,
+                        display: 'inline-block',
+                      }}
+                    >
+                      <span style={{ fontSize: '12px', color: hbColors.slateLight, display: 'block', marginBottom: '2px' }}>
+                        Role-Specific Context
+                      </span>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: hbColors.slate }}>
+                        {roleActionPlan.roleSpecificContext}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Role-specific Strengths & Gaps */}
+                  {(roleActionPlan.strengths.length > 0 || roleActionPlan.gaps.length > 0) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                      {/* Strengths */}
+                      {roleActionPlan.strengths.length > 0 && (
+                        <div
+                          style={{
+                            background: hbColors.surface,
+                            borderRadius: hbRadii.xl,
+                            padding: '24px',
+                            boxShadow: hbShadows.sm,
+                          }}
+                        >
+                          <h3
+                            style={{
+                              fontFamily: hbFonts.display,
+                              fontSize: '18px',
+                              fontWeight: 600,
+                              color: hbColors.slate,
+                              marginBottom: '16px',
+                            }}
+                          >
+                            💪 Strengths
+                          </h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {roleActionPlan.strengths.map((strength, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: '12px',
+                                  background: roleFamilyConfig.lightColor,
+                                  borderRadius: hbRadii.lg,
+                                  borderLeft: `4px solid ${roleFamilyConfig.color}`,
+                                }}
+                              >
+                                <h4 style={{ fontSize: '14px', fontWeight: 600, color: hbColors.slate, margin: '0 0 6px 0' }}>
+                                  {strength.headline}
+                                </h4>
+                                <p style={{ fontSize: '13px', color: hbColors.slateMid, margin: 0, lineHeight: 1.5 }}>
+                                  {strength.leverageStrategy}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Gaps */}
+                      {roleActionPlan.gaps.length > 0 && (
+                        <div
+                          style={{
+                            background: hbColors.surface,
+                            borderRadius: hbRadii.xl,
+                            padding: '24px',
+                            boxShadow: hbShadows.sm,
+                          }}
+                        >
+                          <h3
+                            style={{
+                              fontFamily: hbFonts.display,
+                              fontSize: '18px',
+                              fontWeight: 600,
+                              color: hbColors.slate,
+                              marginBottom: '16px',
+                            }}
+                          >
+                            🎯 Opportunities
+                          </h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {roleActionPlan.gaps.map((gap, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: '12px',
+                                  background: hbColors.goldLight,
+                                  borderRadius: hbRadii.lg,
+                                  borderLeft: `4px solid ${hbColors.gold}`,
+                                }}
+                              >
+                                <h4 style={{ fontSize: '14px', fontWeight: 600, color: hbColors.slate, margin: '0 0 6px 0' }}>
+                                  {gap.headline}
+                                </h4>
+                                <p style={{ fontSize: '13px', color: hbColors.slateMid, margin: '0 0 6px 0', lineHeight: 1.5 }}>
+                                  {gap.businessImpact}
+                                </p>
+                                <p style={{ fontSize: '12px', color: hbColors.slateLight, margin: 0 }}>
+                                  Learn from: {gap.topCompetitor}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Role-specific Recommendations */}
+                  {roleActionPlan.recommendations && roleActionPlan.recommendations.length > 0 && (
+                    <div
+                      style={{
+                        background: hbColors.surface,
+                        borderRadius: hbRadii.xl,
+                        padding: '28px',
+                        boxShadow: hbShadows.sm,
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontFamily: hbFonts.display,
+                          fontSize: '18px',
+                          fontWeight: 600,
+                          color: hbColors.slate,
+                          marginBottom: '20px',
+                        }}
+                      >
+                        💡 Recommended Actions for {roleFamilyData.displayName}
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {roleActionPlan.recommendations.map((rec, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: '16px',
+                              background: hbColors.surfaceDim,
+                              borderRadius: hbRadii.lg,
+                              borderLeft: `4px solid ${roleFamilyConfig.color}`,
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <h4 style={{ fontFamily: hbFonts.display, fontSize: '15px', fontWeight: 600, color: hbColors.slate, margin: 0, flex: 1 }}>
+                                {rec.title}
+                              </h4>
+                              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, marginLeft: '12px' }}>
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    padding: '3px 8px',
+                                    borderRadius: hbRadii.sm,
+                                    background: rec.impact === 'high' ? hbColors.tealLight : rec.impact === 'medium' ? hbColors.goldLight : hbColors.surfaceDim,
+                                    color: rec.impact === 'high' ? hbColors.tealDeep : rec.impact === 'medium' ? '#92400E' : hbColors.slateLight,
+                                  }}
+                                >
+                                  {rec.impact} impact
+                                </span>
+                              </div>
+                            </div>
+                            <p style={{ fontSize: '13px', color: hbColors.slateMid, margin: 0, lineHeight: 1.5 }}>
+                              {rec.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         )}
 

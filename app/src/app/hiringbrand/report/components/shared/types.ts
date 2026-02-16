@@ -52,6 +52,7 @@ export interface HBReportData {
     strategicSummary: HBStrategicSummary | null // AI-generated executive summary
     mentionStats: HBMentionStats | null // Web mention aggregate stats
     monitoredDomainId: string | null
+    roleActionPlans?: HBRoleActionPlans // Role-specific action plans
   }
   sentimentCounts: HBSentimentCounts
   company: {
@@ -71,6 +72,8 @@ export interface HBReportData {
   responses: HBResponse[]
   prompts: HBPrompt[]
   mentions: HBWebMention[]
+  roleFamilies?: HBRoleFamily[] // Active role families for this organization
+  roleFamilyScores?: HBRoleFamilyScores // Latest role family scores
 }
 
 // Enhanced analysis types
@@ -110,6 +113,8 @@ export interface HBResponse {
   hedgingLevel: HBHedgingLevel | null
   sourceQuality: HBSourceQuality | null
   responseRecency: HBResponseRecency | null
+  // Role family (for role-specific filtering)
+  jobFamily: HBJobFamily | null
 }
 
 export interface HBPrompt {
@@ -130,7 +135,48 @@ export type HBQuestionCategory =
   | 'balance'
   | 'leadership'
 
-export type HBTabId = 'start' | 'overview' | 'responses' | 'clippings' | 'competitors' | 'trends' | 'actions' | 'setup'
+export type HBTabId = 'start' | 'overview' | 'responses' | 'clippings' | 'roles' | 'competitors' | 'trends' | 'actions' | 'setup'
+
+// Job families for role-specific analysis
+export type HBJobFamily = 'engineering' | 'business' | 'operations' | 'creative' | 'corporate' | 'general'
+
+export interface HBRoleFamily {
+  id?: string
+  family: HBJobFamily
+  displayName: string
+  description: string
+  source: 'employer_research' | 'user_custom'
+  isActive: boolean
+  sortOrder: number
+}
+
+export interface HBRoleFamilyScores {
+  [family: string]: {
+    desirability: number
+    awareness: number
+  }
+}
+
+export interface HBRoleActionPlan {
+  executiveSummary: string
+  strengths: Array<{
+    dimension: HBEmployerDimension
+    headline: string
+    leverageStrategy: string
+  }>
+  gaps: Array<{
+    dimension: HBEmployerDimension
+    headline: string
+    businessImpact: string
+    topCompetitor: string
+  }>
+  recommendations: HBStrategicRecommendation[]
+  roleSpecificContext: string
+}
+
+export interface HBRoleActionPlans {
+  [family: string]: HBRoleActionPlan
+}
 
 export interface HBTab {
   id: HBTabId
@@ -262,6 +308,7 @@ export interface HBScoreHistoryEntry {
   competitorRank: number | null
   competitorCount: number | null
   dimensionScores: Record<HBEmployerDimension, number>
+  roleFamilyScores?: HBRoleFamilyScores // Role-specific scores over time
 }
 
 // Competitor History - for tracking competitors over time

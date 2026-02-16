@@ -14,10 +14,14 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { crawlSite, combineCrawledContent } from '@/lib/ai/crawl'
 import {
   researchEmployer,
+  researchEmployerWithRoles,
   generateFallbackEmployerQuestions,
   type EmployerAnalysis,
   type CompetitorEmployer,
+  type JobFamily,
 } from '@/lib/ai/employer-research'
+import { classifyJobFamilies, type DetectedJobFamily } from '@/lib/ai/classify-job-families'
+import { generateRoleActionPlan, type RoleActionPlan } from '@/lib/ai/generate-role-action-plan'
 import {
   queryPlatformWithSearch,
   type LocationContext,
@@ -543,6 +547,64 @@ const PLATFORMS = ['chatgpt', 'claude', 'gemini', 'perplexity'] as const
 // HiringBrand report expiry (days)
 const HB_REPORT_EXPIRY_DAYS = 30
 
+/**
+ * Calculate role family scores from tagged responses
+ * Returns desirability and awareness scores per family
+ */
+function calculateRoleFamilyScores(
+  responses: Array<{ job_family: string | null; sentiment_score: number | null; specificity_score: number | null; confidence_score: number | null }>,
+  activeFamilies: JobFamily[]
+): Record<string, { desirability: number; awareness: number }> {
+  const scores: Record<string, { desirability: number; awareness: number }> = {}
+
+  for (const family of activeFamilies) {
+    // Filter responses for this family
+    const familyResponses = responses.filter(r => r.job_family === family)
+
+    if (familyResponses.length === 0) {
+      scores[family] = { desirability: 0, awareness: 0 }
+      continue
+    }
+
+    // Calculate desirability (avg sentiment score, scaled 0-100)
+    const sentimentScores = familyResponses
+      .map(r => r.sentiment_score)
+      .filter((s): s is number => s !== null)
+
+    const avgSentiment = sentimentScores.length > 0
+      ? sentimentScores.reduce((sum, s) => sum + s, 0) / sentimentScores.length
+      : 5
+
+    const desirability = Math.round(((avgSentiment - 1) / 9) * 100) // Scale 1-10 to 0-100
+
+    // Calculate awareness (avg of specificity + confidence, scaled 0-100)
+    const specificityScores = familyResponses
+      .map(r => r.specificity_score)
+      .filter((s): s is number => s !== null)
+
+    const confidenceScores = familyResponses
+      .map(r => r.confidence_score)
+      .filter((s): s is number => s !== null)
+
+    const avgSpecificity = specificityScores.length > 0
+      ? specificityScores.reduce((sum, s) => sum + s, 0) / specificityScores.length
+      : 5
+
+    const avgConfidence = confidenceScores.length > 0
+      ? confidenceScores.reduce((sum, s) => sum + s, 0) / confidenceScores.length
+      : 5
+
+    const awareness = Math.round((((avgSpecificity + avgConfidence) / 2) - 1) / 9 * 100) // Scale to 0-100
+
+    scores[family] = {
+      desirability: Math.max(0, Math.min(100, desirability)),
+      awareness: Math.max(0, Math.min(100, awareness)),
+    }
+  }
+
+  return scores
+}
+
 export const processHiringBrandScan = inngest.createFunction(
   {
     id: 'process-hiringbrand-scan',
@@ -606,7 +668,24 @@ export const processHiringBrandScan = inngest.createFunction(
       // Detect geography
       const geoResult = detectGeography(domain, combinedContent, analysis.location)
 
-      // Save analysis
+      // Classify job families from commonRoles
+      log.step(scanId, 'Classifying job families')
+      const { data: orgData } = await supabase
+        .from('hb_organizations')
+        .select('max_role_families')
+        .eq('id', organizationId)
+        .single()
+
+      const maxFamilies = orgData?.max_role_families || 5
+      const detectedFamilies = await classifyJobFamilies(
+        analysis.commonRoles || [],
+        analysis.industry,
+        maxFamilies
+      )
+
+      log.info(scanId, `Detected ${detectedFamilies.length} job families: ${detectedFamilies.map(f => f.family).join(', ')}`)
+
+      // Save analysis (including detected families)
       await supabase.from('site_analyses').upsert(
         {
           run_id: scanId,
@@ -620,6 +699,7 @@ export const processHiringBrandScan = inngest.createFunction(
           // HiringBrand-specific fields (stored in existing columns)
           services: analysis.commonRoles || [], // Repurpose for roles
           key_phrases: analysis.cultureKeywords || [],
+          detected_job_families: detectedFamilies, // NEW: Store detected families
         },
         { onConflict: 'run_id' }
       )
@@ -632,6 +712,7 @@ export const processHiringBrandScan = inngest.createFunction(
           location: geoResult.location || analysis.location,
         },
         geoResult,
+        detectedFamilies,
       }
     })
 
@@ -646,7 +727,7 @@ export const processHiringBrandScan = inngest.createFunction(
       return md?.company_name || employerAnalysis.analysis.companyName
     })
 
-    // Step 4a: Check for frozen questions and competitors (for consistent refreshes)
+    // Step 4a: Check for frozen questions, competitors, and role families (for consistent refreshes)
     const frozenResult = await step.run('check-frozen-data', async () => {
       const supabase = createServiceClient()
 
@@ -668,11 +749,21 @@ export const processHiringBrandScan = inngest.createFunction(
         .eq('is_active', true)
         .order('sort_order')
 
+      // Check for frozen role families
+      const { data: frozenRoleFamilies } = await supabase
+        .from('hb_frozen_role_families')
+        .select('id, family, display_name, description, source')
+        .eq('organization_id', organizationId)
+        .eq('monitored_domain_id', monitoredDomainId)
+        .eq('is_active', true)
+        .order('sort_order')
+
       const hasFrozenData = (frozenQuestions && frozenQuestions.length > 0) ||
-                            (frozenCompetitors && frozenCompetitors.length > 0)
+                            (frozenCompetitors && frozenCompetitors.length > 0) ||
+                            (frozenRoleFamilies && frozenRoleFamilies.length > 0)
 
       if (hasFrozenData) {
-        log.info(scanId, `Using frozen data: ${frozenQuestions?.length || 0} questions, ${frozenCompetitors?.length || 0} competitors`)
+        log.info(scanId, `Using frozen data: ${frozenQuestions?.length || 0} questions, ${frozenCompetitors?.length || 0} competitors, ${frozenRoleFamilies?.length || 0} role families`)
       }
 
       return {
@@ -683,6 +774,7 @@ export const processHiringBrandScan = inngest.createFunction(
           domain: c.domain,
           reason: c.reason || '',
         })),
+        roleFamilies: (frozenRoleFamilies || []).map((rf: { family: string }) => rf.family as JobFamily),
       }
     })
 
@@ -761,9 +853,22 @@ export const processHiringBrandScan = inngest.createFunction(
       // No frozen data - do fresh research
       log.step(scanId, 'Researching employer', reliableCompanyName)
 
-      const result = await researchEmployer({ ...employerAnalysis.analysis, companyName: reliableCompanyName }, scanId, (platform, status) => {
-        log.platform(scanId, platform, status)
-      })
+      // Determine active job families (frozen or detected)
+      const activeFamilies: JobFamily[] = frozenResult.roleFamilies && frozenResult.roleFamilies.length > 0
+        ? frozenResult.roleFamilies
+        : employerAnalysis.detectedFamilies.map(f => f.family)
+
+      log.info(scanId, `Active job families: ${activeFamilies.join(', ')}`)
+
+      // Research with role-specific questions
+      const result = await researchEmployerWithRoles(
+        { ...employerAnalysis.analysis, companyName: reliableCompanyName },
+        activeFamilies,
+        scanId,
+        (platform, status) => {
+          log.platform(scanId, platform, status)
+        }
+      )
 
       // Save competitors to monitored_domains as non-primary (competitors)
       if (result.competitors.length > 0 && organizationId) {
@@ -1016,6 +1121,8 @@ export const processHiringBrandScan = inngest.createFunction(
                     hedging_level: enhanced.hedgingLevel,
                     source_quality: enhanced.sourceQuality,
                     response_recency: enhanced.responseRecency,
+                    // Role family (from question)
+                    job_family: (q as { jobFamily?: JobFamily }).jobFamily || null,
                   }).select('id').single()
 
                   return {
@@ -1622,6 +1729,113 @@ export const processHiringBrandScan = inngest.createFunction(
       return strategicSummary
     })
 
+    // Step 8b: Generate role-specific action plans
+    await step.run('generate-role-action-plans', async () => {
+      const supabase = createServiceClient()
+
+      // Determine active families (frozen or detected)
+      const activeFamilies: JobFamily[] = frozenResult.roleFamilies && frozenResult.roleFamilies.length > 0
+        ? frozenResult.roleFamilies
+        : employerAnalysis.detectedFamilies.map(f => f.family)
+
+      if (activeFamilies.length === 0) {
+        log.info(scanId, 'No active job families, skipping role action plans')
+        return null
+      }
+
+      log.step(scanId, `Generating action plans for ${activeFamilies.length} role families`)
+
+      // Fetch all responses with sentiment
+      const { data: allResponses } = await supabase
+        .from('llm_responses')
+        .select('id, job_family, sentiment_score, sentiment_category, specificity_score, confidence_score, positive_highlights, negative_highlights, red_flags, green_flags, competitors_mentioned, response_text')
+        .eq('run_id', scanId)
+        .not('sentiment_score', 'is', null)
+
+      if (!allResponses || allResponses.length === 0) {
+        log.warn(scanId, 'No responses found for role action plans')
+        return null
+      }
+
+      const roleActionPlans: Record<string, RoleActionPlan> = {}
+
+      // Generate action plan for each active family
+      for (const family of activeFamilies) {
+        const familyResponses = allResponses.filter((r: any) => r.job_family === family)
+
+        if (familyResponses.length === 0) {
+          log.info(scanId, `No responses for ${family}, skipping action plan`)
+          continue
+        }
+
+        // Calculate family-specific scores
+        const sentimentScores = familyResponses
+          .map((r: any) => r.sentiment_score)
+          .filter((s: any): s is number => s !== null)
+
+        const avgSentiment = sentimentScores.length > 0
+          ? sentimentScores.reduce((sum: number, s: number) => sum + s, 0) / sentimentScores.length
+          : 5
+
+        const desirability = Math.round(((avgSentiment - 1) / 9) * 100)
+
+        const specificityScores = familyResponses
+          .map((r: any) => r.specificity_score)
+          .filter((s: any): s is number => s !== null)
+
+        const confidenceScores = familyResponses
+          .map((r: any) => r.confidence_score)
+          .filter((s: any): s is number => s !== null)
+
+        const avgSpecificity = specificityScores.length > 0
+          ? specificityScores.reduce((sum: number, s: number) => sum + s, 0) / specificityScores.length
+          : 5
+
+        const avgConfidence = confidenceScores.length > 0
+          ? confidenceScores.reduce((sum: number, s: number) => sum + s, 0) / confidenceScores.length
+          : 5
+
+        const awareness = Math.round((((avgSpecificity + avgConfidence) / 2) - 1) / 9 * 100)
+
+        // Import hbRoleFamilyConfig for family labels
+        const { hbRoleFamilyConfig } = await import('@/app/hiringbrand/report/components/shared/constants')
+
+        // Generate role-specific action plan
+        try {
+          const actionPlan = await generateRoleActionPlan({
+            companyName: reliableCompanyName,
+            industry: employerAnalysis.analysis.industry,
+            location: employerAnalysis.analysis.location,
+            roleFamily: family,
+            roleFamilyDisplayName: hbRoleFamilyConfig[family].label,
+            desirabilityScore: Math.max(0, Math.min(100, desirability)),
+            awarenessScore: Math.max(0, Math.min(100, awareness)),
+            responses: familyResponses as any, // Type cast for compatibility
+            runId: scanId,
+          })
+
+          roleActionPlans[family] = actionPlan
+          log.info(scanId, `Generated ${family} action plan: ${actionPlan.recommendations.length} recommendations`)
+        } catch (error) {
+          log.warn(scanId, `Failed to generate ${family} action plan: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      // Update report with role action plans
+      if (Object.keys(roleActionPlans).length > 0) {
+        await supabase
+          .from('reports')
+          .update({
+            role_action_plans: roleActionPlans,
+          })
+          .eq('id', report.reportId)
+
+        log.done(scanId, 'Role action plans', `${Object.keys(roleActionPlans).length} families`)
+      }
+
+      return roleActionPlans
+    })
+
     // Step 9: Record score history for trends
     await step.run('record-score-history', async () => {
       const supabase = createServiceClient()
@@ -1640,6 +1854,19 @@ export const processHiringBrandScan = inngest.createFunction(
 
       const scanDate = new Date().toISOString()
 
+      // Calculate role family scores for trends
+      const activeFamilies: JobFamily[] = frozenResult.roleFamilies && frozenResult.roleFamilies.length > 0
+        ? frozenResult.roleFamilies
+        : employerAnalysis.detectedFamilies.map(f => f.family)
+
+      const { data: responsesForScoring } = await supabase
+        .from('llm_responses')
+        .select('job_family, sentiment_score, specificity_score, confidence_score')
+        .eq('run_id', scanId)
+        .not('sentiment_score', 'is', null)
+
+      const roleFamilyScores = calculateRoleFamilyScores(responsesForScoring || [], activeFamilies)
+
       // Record main score history
       await supabase.from('hb_score_history').insert({
         monitored_domain_id: monitoredDomainId,
@@ -1649,6 +1876,7 @@ export const processHiringBrandScan = inngest.createFunction(
         awareness_score: report.scores.researchabilityScore,
         differentiation_score: reportData.differentiation_score || report.scores.differentiationScore,
         platform_scores: report.scores.platformScores,
+        role_family_scores: roleFamilyScores,
         // Calculate rank among all employers if competitor analysis exists
         competitor_rank: null, // Will be set if competitor analysis exists
         competitor_count: null,

@@ -52,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fetch org limits
     const orgData = await getOrganizationById(ctx.organizationId)
 
-    const [{ data: questions }, { data: competitors }] = await Promise.all([
+    const [{ data: questions }, { data: competitors }, { data: roleFamilies }] = await Promise.all([
       supabase
         .from('hb_frozen_questions')
         .select('id, prompt_text, category, source, is_active, sort_order')
@@ -63,6 +63,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       supabase
         .from('hb_frozen_competitors')
         .select('id, name, domain, reason, source, is_active, sort_order')
+        .eq('organization_id', ctx.organizationId)
+        .eq('monitored_domain_id', ctx.monitoredDomainId)
+        .eq('is_active', true)
+        .order('sort_order'),
+      supabase
+        .from('hb_frozen_role_families')
+        .select('id, family, display_name, description, source, is_active, sort_order')
         .eq('organization_id', ctx.organizationId)
         .eq('monitored_domain_id', ctx.monitoredDomainId)
         .eq('is_active', true)
@@ -85,9 +92,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         source: c.source || 'employer_research',
         sortOrder: c.sort_order,
       })),
+      roleFamilies: (roleFamilies || []).map((rf: Record<string, unknown>) => ({
+        id: rf.id,
+        family: rf.family,
+        displayName: rf.display_name,
+        description: rf.description,
+        source: rf.source || 'employer_research',
+        sortOrder: rf.sort_order,
+      })),
       limits: {
         maxQuestions: orgData?.max_questions ?? 20,
         maxCompetitors: orgData?.max_competitors ?? 10,
+        maxRoleFamilies: orgData?.max_role_families ?? 5,
       },
     })
   } catch (error) {

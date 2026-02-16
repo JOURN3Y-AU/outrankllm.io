@@ -11,13 +11,14 @@
  */
 
 import { useState, useMemo } from 'react'
-import { hbColors, hbFonts, hbShadows, hbRadii } from './shared/constants'
-import type { HBTrendsData, HBScoreHistoryEntry, HBCompetitorHistorySnapshot } from './shared/types'
+import { hbColors, hbFonts, hbShadows, hbRadii, hbRoleFamilyConfig } from './shared/constants'
+import type { HBTrendsData, HBScoreHistoryEntry, HBCompetitorHistorySnapshot, HBRoleFamily, HBJobFamily } from './shared/types'
 
 interface HBTrendsProps {
   trends: HBTrendsData
   companyName: string
   currentCompetitorNames?: string[] // Names from current competitor analysis (frozen + researched)
+  roleFamilies?: HBRoleFamily[]
 }
 
 // Format date for display
@@ -220,6 +221,206 @@ function CoreScoresChart({ history }: { history: HBScoreHistoryEntry[] }) {
               if (hoveredPoint.metric === 'Awareness') return hoveredPoint.data.awarenessScore ?? '--'
               if (hoveredPoint.metric === 'Differentiation') return hoveredPoint.data.differentiationScore ?? '--'
               return '--'
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Role Family Scores Chart
+ * Shows desirability scores for each active role family over time
+ */
+function RoleFamilyScoresChart({ history, roleFamilies }: { history: HBScoreHistoryEntry[]; roleFamilies: HBRoleFamily[] }) {
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; data: HBScoreHistoryEntry; family: string; familyLabel: string } | null>(null)
+
+  if (history.length < 2) {
+    return (
+      <div style={{
+        padding: '48px 24px',
+        textAlign: 'center',
+        background: hbColors.surfaceRaised,
+        borderRadius: hbRadii.lg,
+      }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>📊</div>
+        <div style={{ fontFamily: hbFonts.display, fontSize: '16px', color: hbColors.slate, marginBottom: '8px' }}>
+          Not Enough Data Yet
+        </div>
+        <div style={{ fontSize: '14px', color: hbColors.slateLight }}>
+          Role-specific score trends will appear after your second scan.
+        </div>
+      </div>
+    )
+  }
+
+  if (roleFamilies.length === 0) {
+    return (
+      <div style={{
+        padding: '48px 24px',
+        textAlign: 'center',
+        background: hbColors.surfaceRaised,
+        borderRadius: hbRadii.lg,
+      }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>👔</div>
+        <div style={{ fontFamily: hbFonts.display, fontSize: '16px', color: hbColors.slate, marginBottom: '8px' }}>
+          No Role Families Configured
+        </div>
+        <div style={{ fontSize: '14px', color: hbColors.slateLight }}>
+          Configure role families on the Setup tab to see role-specific trends.
+        </div>
+      </div>
+    )
+  }
+
+  const width = 1200
+  const height = 300
+  const padding = { top: 30, right: 30, bottom: 50, left: 50 }
+  const chartWidth = width - padding.left - padding.right
+  const chartHeight = height - padding.top - padding.bottom
+
+  // Calculate scales
+  const xScale = (index: number) => padding.left + (index / (history.length - 1)) * chartWidth
+  const yScale = (value: number) => height - padding.bottom - (value / 100) * chartHeight
+
+  // Generate path for a role family
+  const generateFamilyPath = (family: HBJobFamily) => {
+    return history
+      .map((h, i) => {
+        const familyScores = h.roleFamilyScores || {}
+        const value = familyScores[family]?.desirability ?? 50
+        const x = xScale(i)
+        const y = yScale(value)
+        return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`
+      })
+      .join(' ')
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', width: '100%', height: 'auto' }}>
+        {/* Y-axis grid lines */}
+        {[0, 25, 50, 75, 100].map((tick) => (
+          <g key={tick}>
+            <line
+              x1={padding.left}
+              y1={yScale(tick)}
+              x2={width - padding.right}
+              y2={yScale(tick)}
+              stroke={hbColors.surfaceDim}
+              strokeWidth="1"
+            />
+            <text
+              x={padding.left - 10}
+              y={yScale(tick)}
+              textAnchor="end"
+              dominantBaseline="middle"
+              fontSize="11"
+              fill={hbColors.slateLight}
+            >
+              {tick}
+            </text>
+          </g>
+        ))}
+
+        {/* X-axis labels */}
+        {history.map((h, i) => {
+          const showLabel = history.length <= 8 || i % Math.ceil(history.length / 8) === 0 || i === history.length - 1
+          if (!showLabel) return null
+          return (
+            <text
+              key={i}
+              x={xScale(i)}
+              y={height - padding.bottom + 20}
+              textAnchor="middle"
+              fontSize="10"
+              fill={hbColors.slateLight}
+            >
+              {formatDate(h.scanDate)}
+            </text>
+          )
+        })}
+
+        {/* Lines for each role family */}
+        {roleFamilies.map((rf) => {
+          const config = hbRoleFamilyConfig[rf.family]
+          return (
+            <path
+              key={rf.family}
+              d={generateFamilyPath(rf.family)}
+              fill="none"
+              stroke={config.color}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )
+        })}
+
+        {/* Data points for each role family */}
+        {roleFamilies.map((rf) => {
+          const config = hbRoleFamilyConfig[rf.family]
+          return history.map((h, i) => {
+            const familyScores = h.roleFamilyScores || {}
+            const value = familyScores[rf.family]?.desirability ?? 50
+            return (
+              <circle
+                key={`${rf.family}-${i}`}
+                cx={xScale(i)}
+                cy={yScale(value)}
+                r="5"
+                fill={config.color}
+                stroke="white"
+                strokeWidth="2"
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  setHoveredPoint({ x: rect.left, y: rect.top, data: h, family: rf.family, familyLabel: rf.displayName })
+                }}
+                onMouseLeave={() => setHoveredPoint(null)}
+              />
+            )
+          })
+        })}
+      </svg>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginTop: '16px', flexWrap: 'wrap' }}>
+        {roleFamilies.map((rf) => {
+          const config = hbRoleFamilyConfig[rf.family]
+          return (
+            <div key={rf.family} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: config.color }} />
+              <span style={{ fontSize: '13px', color: hbColors.slateMid }}>{rf.displayName}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Tooltip */}
+      {hoveredPoint && (
+        <div
+          style={{
+            position: 'fixed',
+            left: hoveredPoint.x + 10,
+            top: hoveredPoint.y - 60,
+            padding: '10px 14px',
+            background: hbColors.slate,
+            color: 'white',
+            borderRadius: hbRadii.md,
+            boxShadow: hbShadows.lg,
+            zIndex: 1000,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontFamily: hbFonts.display, fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>
+            {formatDateLong(hoveredPoint.data.scanDate)}
+          </div>
+          <div style={{ fontFamily: hbFonts.display, fontSize: '14px', fontWeight: 600 }}>
+            {hoveredPoint.familyLabel}: {(() => {
+              const familyScores = hoveredPoint.data.roleFamilyScores || {}
+              return familyScores[hoveredPoint.family]?.desirability ?? '--'
             })()}
           </div>
         </div>
@@ -548,7 +749,12 @@ function CompetitiveRankingChart({
 /**
  * Main Trends Component
  */
-export function HBTrends({ trends, companyName, currentCompetitorNames }: HBTrendsProps) {
+export function HBTrends({ trends, companyName, currentCompetitorNames, roleFamilies = [] }: HBTrendsProps) {
+  const [viewMode, setViewMode] = useState<'overall' | 'role-families'>('overall')
+
+  // Only show role family toggle if we have role families
+  const showRoleFamilyToggle = roleFamilies.length > 0 && trends.hasTrends
+
   if (!trends.hasTrends) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -605,21 +811,70 @@ export function HBTrends({ trends, companyName, currentCompetitorNames }: HBTren
           boxShadow: hbShadows.sm,
         }}
       >
-        <h3
-          style={{
-            fontFamily: hbFonts.display,
-            fontSize: '18px',
-            fontWeight: 600,
-            color: hbColors.slate,
-            marginBottom: '4px',
-          }}
-        >
-          Your Scores Over Time <span style={{ fontSize: '13px', fontWeight: 400, color: hbColors.slateLight }}>(0-100)</span>
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+          <h3
+            style={{
+              fontFamily: hbFonts.display,
+              fontSize: '18px',
+              fontWeight: 600,
+              color: hbColors.slate,
+            }}
+          >
+            Your Scores Over Time <span style={{ fontSize: '13px', fontWeight: 400, color: hbColors.slateLight }}>(0-100)</span>
+          </h3>
+
+          {/* View Toggle */}
+          {showRoleFamilyToggle && (
+            <div style={{ display: 'flex', gap: '8px', background: hbColors.surfaceDim, borderRadius: hbRadii.md, padding: '4px' }}>
+              <button
+                onClick={() => setViewMode('overall')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontFamily: hbFonts.display,
+                  background: viewMode === 'overall' ? hbColors.teal : 'transparent',
+                  color: viewMode === 'overall' ? 'white' : hbColors.slateMid,
+                  border: 'none',
+                  borderRadius: hbRadii.md,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Overall
+              </button>
+              <button
+                onClick={() => setViewMode('role-families')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontFamily: hbFonts.display,
+                  background: viewMode === 'role-families' ? hbColors.teal : 'transparent',
+                  color: viewMode === 'role-families' ? 'white' : hbColors.slateMid,
+                  border: 'none',
+                  borderRadius: hbRadii.md,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                By Role Family
+              </button>
+            </div>
+          )}
+        </div>
+
         <p style={{ fontSize: '13px', color: hbColors.slateLight, marginBottom: '24px' }}>
-          Track your Desirability, Awareness, and Differentiation scores over time
+          {viewMode === 'overall'
+            ? 'Track your Desirability, Awareness, and Differentiation scores over time'
+            : 'Compare desirability scores across different role families over time'}
         </p>
-        <CoreScoresChart history={trends.scoreHistory} />
+
+        {viewMode === 'overall' ? (
+          <CoreScoresChart history={trends.scoreHistory} />
+        ) : (
+          <RoleFamilyScoresChart history={trends.scoreHistory} roleFamilies={roleFamilies} />
+        )}
       </div>
 
       {/* Competitive Ranking Over Time */}

@@ -3,7 +3,7 @@
  * Extracted from docs/hiringbrand-design-system.css
  */
 
-import type { HBTab, HBPlatform, HBQuestionCategory } from './types'
+import type { HBTab, HBPlatform, HBQuestionCategory, HBJobFamily } from './types'
 
 // Design Tokens
 export const hbColors = {
@@ -122,12 +122,68 @@ export const hbCategoryConfig: Record<HBQuestionCategory, { label: string; color
   leadership: { label: 'Leadership', color: '#F97316' },
 }
 
+// Job family configuration for role-specific analysis
+export const hbRoleFamilyConfig: Record<
+  HBJobFamily,
+  {
+    label: string
+    description: string
+    color: string
+    lightColor: string
+    keywords: string[]
+  }
+> = {
+  engineering: {
+    label: 'Engineering & Tech',
+    description: 'Software engineers, data scientists, DevOps, IT',
+    color: hbColors.teal, // Teal (primary)
+    lightColor: hbColors.tealLight,
+    keywords: ['engineer', 'developer', 'data scientist', 'devops', 'sre', 'architect', 'programmer', 'software', 'tech'],
+  },
+  business: {
+    label: 'Sales & Business',
+    description: 'Sales, marketing, product management, customer success',
+    color: hbColors.coral, // Coral (accent)
+    lightColor: hbColors.coralLight,
+    keywords: ['sales', 'marketing', 'product', 'account', 'customer success', 'business development', 'growth'],
+  },
+  operations: {
+    label: 'Operations & Supply Chain',
+    description: 'Operations, logistics, supply chain, procurement',
+    color: hbColors.gold, // Gold (highlight)
+    lightColor: hbColors.goldLight,
+    keywords: ['operations', 'logistics', 'supply', 'procurement', 'warehouse', 'fulfillment', 'inventory'],
+  },
+  creative: {
+    label: 'Creative & Design',
+    description: 'Designers, content creators, UX/UI, brand',
+    color: '#9333EA', // Purple
+    lightColor: '#F3E8FF',
+    keywords: ['design', 'creative', 'ux', 'ui', 'content', 'brand', 'graphic', 'visual', 'writer'],
+  },
+  corporate: {
+    label: 'Corporate Functions',
+    description: 'Finance, HR, legal, administration',
+    color: '#3B82F6', // Blue
+    lightColor: '#EFF6FF',
+    keywords: ['finance', 'hr', 'legal', 'admin', 'accounting', 'compliance', 'people', 'talent'],
+  },
+  general: {
+    label: 'General',
+    description: 'Roles that apply across all functions',
+    color: hbColors.slateLight, // Slate Light
+    lightColor: hbColors.surfaceDim,
+    keywords: [],
+  },
+}
+
 // Tab configuration
 export const hbTabs: HBTab[] = [
   { id: 'start', label: 'Start Here', icon: 'compass' },
   { id: 'overview', label: 'Summary', icon: 'chart' },
   { id: 'responses', label: 'AI Responses', icon: 'message' },
   { id: 'clippings', label: 'Clippings', icon: 'globe' },
+  { id: 'roles', label: 'By Role', icon: 'briefcase' },
   { id: 'competitors', label: 'Competitors', icon: 'users' },
   { id: 'trends', label: 'Trends', icon: 'trending' },
   { id: 'actions', label: 'Action Plan', icon: 'lightbulb' },

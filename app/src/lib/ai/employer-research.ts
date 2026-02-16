@@ -41,6 +41,8 @@ export type EmployerQuestionCategory =
   | 'balance' // Work-life balance, flexibility
   | 'leadership' // Management quality
 
+export type JobFamily = 'engineering' | 'business' | 'operations' | 'creative' | 'corporate' | 'general'
+
 export interface CompetitorEmployer {
   name: string
   domain?: string
@@ -52,6 +54,7 @@ export interface EmployerQuestion {
   category: EmployerQuestionCategory
   suggestedBy: Platform[]
   relevanceScore: number
+  jobFamily?: JobFamily // Role family this question is about (null for general questions)
 }
 
 export interface EmployerAnalysis {
@@ -551,4 +554,83 @@ export function generateFallbackEmployerQuestions(
   }
 
   return questions.slice(0, 10)
+}
+
+/**
+ * Generate role-specific questions for each active job family
+ * These supplement the general employer questions
+ */
+export function generateRoleFamilyQuestions(
+  analysis: EmployerAnalysis,
+  jobFamilies: JobFamily[],
+  competitors: CompetitorEmployer[] = []
+): EmployerQuestion[] {
+  const { companyName } = analysis
+  const familyQuestions: EmployerQuestion[] = []
+
+  const familyLabels: Record<JobFamily, string> = {
+    engineering: 'engineering roles like software engineers and data scientists',
+    business: 'business roles like sales and product management',
+    operations: 'operations and supply chain roles',
+    creative: 'creative roles like designers and content creators',
+    corporate: 'corporate roles like finance and HR',
+    general: 'general roles',
+  }
+
+  for (const family of jobFamilies) {
+    if (family === 'general') continue // Skip general, that's covered by existing questions
+
+    const roleLabel = familyLabels[family]
+    const competitor = competitors[0]?.name
+
+    // Core role-specific question (reputation/culture combined)
+    familyQuestions.push({
+      question: `How is ${companyName} for ${roleLabel}? What's the reputation, culture, and compensation like?`,
+      category: 'reputation',
+      suggestedBy: [],
+      relevanceScore: 10,
+      jobFamily: family,
+    })
+
+    // Optional: Add comparison question if we have competitors
+    if (competitor) {
+      familyQuestions.push({
+        question: `Is ${companyName} or ${competitor} better for ${roleLabel}?`,
+        category: 'comparison',
+        suggestedBy: [],
+        relevanceScore: 8,
+        jobFamily: family,
+      })
+    }
+  }
+
+  return familyQuestions
+}
+
+/**
+ * Full employer research WITH role-specific questions
+ * Returns general questions + role family questions
+ */
+export async function researchEmployerWithRoles(
+  analysis: EmployerAnalysis,
+  jobFamilies: JobFamily[],
+  runId: string,
+  onProgress?: (platform: Platform, step: 'researching' | 'complete') => void
+): Promise<EmployerResearchResult> {
+  // First, get general questions and competitors
+  const baseResult = await researchEmployer(analysis, runId, onProgress)
+
+  // If no job families, return base result
+  if (!jobFamilies || jobFamilies.length === 0) {
+    return baseResult
+  }
+
+  // Generate role-specific questions
+  const roleFamilyQuestions = generateRoleFamilyQuestions(analysis, jobFamilies, baseResult.competitors)
+
+  // Combine: 10 general + N family-specific
+  return {
+    competitors: baseResult.competitors,
+    questions: [...baseResult.questions, ...roleFamilyQuestions],
+  }
 }
