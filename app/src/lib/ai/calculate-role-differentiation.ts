@@ -185,3 +185,34 @@ export function calculateRoleDifferentiation(
     },
   }
 }
+
+/**
+ * Normalize role differentiation scores to align with the overall differentiation score.
+ *
+ * Formula: normalizedRole = overall + (rawRole - avgRaw) × (overall / 100)
+ *
+ * This anchors the mean to the overall score while preserving relative differences.
+ * When overall is low (e.g. 15), scores cluster tightly around 15.
+ * When overall is high (e.g. 75), scores spread meaningfully (±15 points).
+ */
+export function normalizeRoleDifferentiationScores(
+  rawScores: Record<string, number>,
+  overallDifferentiation: number
+): Record<string, number> {
+  const families = Object.keys(rawScores)
+  if (families.length === 0) return {}
+
+  const scores = families.map(f => rawScores[f])
+  const avgRaw = scores.reduce((a, b) => a + b, 0) / scores.length
+
+  // Scale factor: how much each point of raw deviation matters
+  // When overall is 100, deviation is preserved 1:1. When overall is 15, dampened to 15%.
+  const spreadFactor = overallDifferentiation / 100
+
+  return Object.fromEntries(
+    families.map((family, i) => {
+      const normalized = overallDifferentiation + (scores[i] - avgRaw) * spreadFactor
+      return [family, Math.min(100, Math.max(0, Math.round(normalized)))]
+    })
+  )
+}

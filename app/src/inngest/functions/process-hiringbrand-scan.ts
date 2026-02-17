@@ -1983,87 +1983,83 @@ export const processHiringBrandScan = inngest.createFunction(
       }
 
       // Import differentiation calculator and hbRoleFamilyConfig
-      const { calculateRoleDifferentiation } = await import('@/lib/ai/calculate-role-differentiation')
+      const { calculateRoleDifferentiation, normalizeRoleDifferentiationScores } = await import('@/lib/ai/calculate-role-differentiation')
       const { hbRoleFamilyConfig } = await import('@/app/hiringbrand/report/components/shared/constants')
 
-      // Fetch competitor analysis for differentiation calculation
+      // Fetch competitor analysis and overall differentiation for normalization
       const { data: reportData } = await supabase
         .from('reports')
-        .select('competitor_analysis')
+        .select('competitor_analysis, differentiation_score')
         .eq('id', report.reportId)
         .single()
 
-      // Generate action plans for all families in parallel
-      const planPromises = activeFamilies.map(async (family) => {
+      // Phase 1: Pre-calculate all family scores and raw differentiation (sync, before parallel plans)
+      // This allows normalization across all role families before generating action plans.
+      const competitorScoresForDiff = reportData?.competitor_analysis?.employers
+        ?.filter((e: any) => !e.isTarget)
+        .map((e: any) => {
+          const dimensionScores = Object.values(e.scores || {}) as number[]
+          const avgDimensionScore = dimensionScores.length > 0
+            ? dimensionScores.reduce((sum: number, score: number) => sum + score, 0) / dimensionScores.length
+            : 5
+          const normalizedScore = (avgDimensionScore / 10) * 100
+          return { name: e.name, desirability: normalizedScore, awareness: normalizedScore }
+        }) || []
+
+      const familyPreCalc: Record<string, { desirability: number; awareness: number; rawDiff?: number; diffInsights?: any }> = {}
+      for (const family of activeFamilies) {
         const familyResponses = allResponses.filter((r: any) => r.job_family === family)
+        if (familyResponses.length === 0) continue
 
-        if (familyResponses.length === 0) {
-          log.info(scanId, `No responses for ${family}, skipping action plan`)
-          return null
-        }
-
-        // Calculate family-specific scores
-        const sentimentScores = familyResponses
-          .map((r: any) => r.sentiment_score)
-          .filter((s: any): s is number => s !== null)
-
-        const avgSentiment = sentimentScores.length > 0
-          ? sentimentScores.reduce((sum: number, s: number) => sum + s, 0) / sentimentScores.length
-          : 5
-
+        const sentimentScores = familyResponses.map((r: any) => r.sentiment_score).filter((s: any): s is number => s !== null)
+        const avgSentiment = sentimentScores.length > 0 ? sentimentScores.reduce((sum: number, s: number) => sum + s, 0) / sentimentScores.length : 5
         const desirability = Math.round(((avgSentiment - 1) / 9) * 100)
 
-        const specificityScores = familyResponses
-          .map((r: any) => r.specificity_score)
-          .filter((s: any): s is number => s !== null)
-
-        const confidenceScores = familyResponses
-          .map((r: any) => r.confidence_score)
-          .filter((s: any): s is number => s !== null)
-
-        const avgSpecificity = specificityScores.length > 0
-          ? specificityScores.reduce((sum: number, s: number) => sum + s, 0) / specificityScores.length
-          : 5
-
-        const avgConfidence = confidenceScores.length > 0
-          ? confidenceScores.reduce((sum: number, s: number) => sum + s, 0) / confidenceScores.length
-          : 5
-
+        const specificityScores = familyResponses.map((r: any) => r.specificity_score).filter((s: any): s is number => s !== null)
+        const confidenceScores = familyResponses.map((r: any) => r.confidence_score).filter((s: any): s is number => s !== null)
+        const avgSpecificity = specificityScores.length > 0 ? specificityScores.reduce((sum: number, s: number) => sum + s, 0) / specificityScores.length : 5
+        const avgConfidence = confidenceScores.length > 0 ? confidenceScores.reduce((sum: number, s: number) => sum + s, 0) / confidenceScores.length : 5
         const awareness = Math.round((((avgSpecificity + avgConfidence) / 2) - 1) / 9 * 100)
 
-        // Calculate role-level differentiation
-        // Derive competitor role-level scores from their dimension scores
-        const competitorScores = reportData?.competitor_analysis?.employers
-          ?.filter((e: any) => !e.isTarget)
-          .map((e: any) => {
-            // Average competitor dimension scores (0-10 scale) as proxy for desirability/awareness
-            // Normalize to 0-100 scale to match target scores
-            const dimensionScores = Object.values(e.scores || {}) as number[]
-            const avgDimensionScore = dimensionScores.length > 0
-              ? dimensionScores.reduce((sum: number, score: number) => sum + score, 0) / dimensionScores.length
-              : 5
-            const normalizedScore = (avgDimensionScore / 10) * 100
-
-            return {
-              name: e.name,
-              desirability: normalizedScore,
-              awareness: normalizedScore, // Use same proxy for awareness (no separate data available)
-            }
-          }) || []
-
-        let differentiationScore: number | undefined
-        let differentiationInsights: any | undefined
-
-        if (competitorScores.length > 0) {
+        let rawDiff: number | undefined
+        let diffInsights: any | undefined
+        if (competitorScoresForDiff.length > 0) {
           const diffResult = calculateRoleDifferentiation({
             roleFamily: family,
             targetDesirability: Math.max(0, Math.min(100, desirability)),
             targetAwareness: Math.max(0, Math.min(100, awareness)),
-            competitorScores,
+            competitorScores: competitorScoresForDiff,
           })
-          differentiationScore = diffResult.differentiationScore
-          differentiationInsights = diffResult.insights
+          rawDiff = diffResult.differentiationScore
+          diffInsights = diffResult.insights
         }
+
+        familyPreCalc[family] = { desirability, awareness, rawDiff, diffInsights }
+      }
+
+      // Phase 2: Normalize raw differentiation scores to align with overall
+      const rawDiffMap: Record<string, number> = {}
+      for (const [family, data] of Object.entries(familyPreCalc)) {
+        if (data.rawDiff !== undefined) rawDiffMap[family] = data.rawDiff
+      }
+      const overallDiff8b = reportData?.differentiation_score ?? null
+      const normalizedDiffMap = overallDiff8b !== null && Object.keys(rawDiffMap).length > 0
+        ? normalizeRoleDifferentiationScores(rawDiffMap, overallDiff8b)
+        : rawDiffMap
+
+      // Phase 3: Generate action plans for all families in parallel using normalized scores
+      const planPromises = activeFamilies.map(async (family) => {
+        const familyResponses = allResponses.filter((r: any) => r.job_family === family)
+        const preCalc = familyPreCalc[family]
+
+        if (familyResponses.length === 0 || !preCalc) {
+          log.info(scanId, `No responses for ${family}, skipping action plan`)
+          return null
+        }
+
+        const { desirability, awareness, diffInsights } = preCalc
+        const differentiationScore = normalizedDiffMap[family]
+        const differentiationInsights = diffInsights
 
         // Generate role-specific action plan
         try {
@@ -2166,10 +2162,13 @@ export const processHiringBrandScan = inngest.createFunction(
       const baseRoleFamilyScores = calculateRoleFamilyScores(responsesForScoring || [], activeFamilies)
 
       // Calculate role-level differentiation scores and add to roleFamilyScores
-      const { calculateRoleDifferentiation } = await import('@/lib/ai/calculate-role-differentiation')
+      const { calculateRoleDifferentiation, normalizeRoleDifferentiationScores } = await import('@/lib/ai/calculate-role-differentiation')
 
       // Create enhanced scores object with differentiation
       const roleFamilyScores: Record<string, { desirability: number; awareness: number; differentiation?: number }> = { ...baseRoleFamilyScores }
+
+      // Collect raw differentiation scores for normalization
+      const rawDifferentiationScores: Record<string, number> = {}
 
       for (const family of activeFamilies) {
         const familyScores = roleFamilyScores[family]
@@ -2200,7 +2199,26 @@ export const processHiringBrandScan = inngest.createFunction(
             targetAwareness: familyScores.awareness,
             competitorScores,
           })
-          roleFamilyScores[family].differentiation = diffResult.differentiationScore
+          rawDifferentiationScores[family] = diffResult.differentiationScore
+        }
+      }
+
+      // Normalize raw role differentiation scores to align with the overall differentiation score.
+      // This prevents a mismatch where role scores are 50+ while overall is 15.
+      const overallDifferentiation = reportData.differentiation_score ?? null
+      if (overallDifferentiation !== null && Object.keys(rawDifferentiationScores).length > 0) {
+        const normalizedScores = normalizeRoleDifferentiationScores(rawDifferentiationScores, overallDifferentiation)
+        for (const family of Object.keys(normalizedScores)) {
+          if (roleFamilyScores[family]) {
+            roleFamilyScores[family].differentiation = normalizedScores[family]
+          }
+        }
+      } else {
+        // Fallback: store raw scores if no overall differentiation to normalize against
+        for (const family of Object.keys(rawDifferentiationScores)) {
+          if (roleFamilyScores[family]) {
+            roleFamilyScores[family].differentiation = rawDifferentiationScores[family]
+          }
         }
       }
 
