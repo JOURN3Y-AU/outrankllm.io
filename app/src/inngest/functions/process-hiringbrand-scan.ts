@@ -2032,14 +2032,24 @@ export const processHiringBrandScan = inngest.createFunction(
         const awareness = Math.round((((avgSpecificity + avgConfidence) / 2) - 1) / 9 * 100)
 
         // Calculate role-level differentiation
-        // Extract competitor scores for this role family (simplified: use overall competitor scores for now)
+        // Derive competitor role-level scores from their dimension scores
         const competitorScores = reportData?.competitor_analysis?.employers
           ?.filter((e: any) => !e.isTarget)
-          .map((e: any) => ({
-            name: e.name,
-            desirability: desirability, // Simplified: use same score structure
-            awareness: awareness,
-          })) || []
+          .map((e: any) => {
+            // Average competitor dimension scores (0-10 scale) as proxy for desirability/awareness
+            // Normalize to 0-100 scale to match target scores
+            const dimensionScores = Object.values(e.scores || {}) as number[]
+            const avgDimensionScore = dimensionScores.length > 0
+              ? dimensionScores.reduce((sum: number, score: number) => sum + score, 0) / dimensionScores.length
+              : 5
+            const normalizedScore = (avgDimensionScore / 10) * 100
+
+            return {
+              name: e.name,
+              desirability: normalizedScore,
+              awareness: normalizedScore, // Use same proxy for awareness (no separate data available)
+            }
+          }) || []
 
         let differentiationScore: number | undefined
         let differentiationInsights: any | undefined
@@ -2166,13 +2176,22 @@ export const processHiringBrandScan = inngest.createFunction(
         if (!familyScores) continue
 
         // Extract competitor scores for differentiation calculation
+        // Derive from dimension scores (same as Step 8b)
         const competitorScores = reportData.competitor_analysis?.employers
           ?.filter((e: any) => !e.isTarget)
-          .map((e: any) => ({
-            name: e.name,
-            desirability: familyScores.desirability, // Simplified: use role family scores
-            awareness: familyScores.awareness,
-          })) || []
+          .map((e: any) => {
+            const dimensionScores = Object.values(e.scores || {}) as number[]
+            const avgDimensionScore = dimensionScores.length > 0
+              ? dimensionScores.reduce((sum: number, score: number) => sum + score, 0) / dimensionScores.length
+              : 5
+            const normalizedScore = (avgDimensionScore / 10) * 100
+
+            return {
+              name: e.name,
+              desirability: normalizedScore,
+              awareness: normalizedScore,
+            }
+          }) || []
 
         if (competitorScores.length > 0) {
           const diffResult = calculateRoleDifferentiation({
