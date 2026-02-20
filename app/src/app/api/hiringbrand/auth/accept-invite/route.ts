@@ -94,11 +94,13 @@ export async function POST(request: NextRequest) {
     } else {
       // Create new lead
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS)
+      const domain = email.split('@')[1] || ''
       const { data: newLead, error: leadError } = await supabase
         .from('leads')
         .insert({
           email,
           name,
+          domain,
           tier: 'free',
           password_hash: passwordHash,
           password_set_at: new Date().toISOString(),
