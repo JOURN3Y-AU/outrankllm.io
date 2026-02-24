@@ -92,7 +92,8 @@ Return ONLY the JSON array, nothing else.`
 async function extractCompetitorsFromResponse(
   response: string,
   domain: string,
-  runId: string
+  runId: string,
+  businessName?: string | null
 ): Promise<{ name: string; context: string }[]> {
   // Skip extraction if response is too short or empty
   if (!response || response.length < 50) {
@@ -133,10 +134,21 @@ async function extractCompetitorsFromResponse(
 
     const names = JSON.parse(jsonMatch[0]) as string[]
 
-    // Filter out the target domain and return with context
+    // Filter out the target domain and business name to avoid counting user's own brand as a competitor
     const domainBase = domain.toLowerCase().split('.')[0]
+    const businessNameLower = businessName?.toLowerCase().trim() || null
+    const businessNameNoSpaces = businessNameLower?.replace(/\s+/g, '') || null
     return names
-      .filter(name => !name.toLowerCase().includes(domainBase))
+      .filter(name => {
+        const nameLower = name.toLowerCase().trim()
+        // Exclude if name matches domain base (e.g., "futuresuper" in name)
+        if (nameLower.includes(domainBase)) return false
+        // Exclude if name matches business name (e.g., "Future Super" === "future super")
+        if (businessNameLower && (nameLower.includes(businessNameLower) || businessNameLower.includes(nameLower))) return false
+        // Exclude if name without spaces matches domain base (e.g., "Future Super" -> "futuresuper")
+        if (businessNameNoSpaces && nameLower.replace(/\s+/g, '') === businessNameNoSpaces) return false
+        return true
+      })
       .slice(0, 5)
       .map(name => {
         const index = response.toLowerCase().indexOf(name.toLowerCase())
@@ -164,7 +176,8 @@ async function queryOpenAIWithSearch(
   domain: string,
   runId: string,
   locationContext?: LocationContext,
-  retryCount = 0
+  retryCount = 0,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   const startTime = Date.now()
   const platform: SearchPlatform = 'chatgpt'
@@ -240,7 +253,7 @@ async function queryOpenAIWithSearch(
       if (retryCount < MAX_RETRIES) {
         log.warn(runId, `ChatGPT empty response, retrying (${retryCount + 1}/${MAX_RETRIES}): "${query.slice(0, 40)}..."`)
         await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1s before retry
-        return queryOpenAIWithSearch(query, domain, runId, locationContext, retryCount + 1)
+        return queryOpenAIWithSearch(query, domain, runId, locationContext, retryCount + 1, businessName)
       }
       log.error(runId, `ChatGPT returned empty after ${MAX_RETRIES} retries: "${query.slice(0, 50)}..."`)
       return {
@@ -293,11 +306,11 @@ async function queryOpenAIWithSearch(
       }
     }
 
-    // Check if domain is mentioned
-    const { mentioned, position } = checkDomainMention(responseText, domain)
+    // Check if domain is mentioned (also checks business name from site analysis)
+    const { mentioned, position } = checkDomainMention(responseText, domain, businessName)
 
-    // Extract competitors
-    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId)
+    // Extract competitors (excludes user's own brand)
+    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId, businessName)
 
     log.platform(runId, 'ChatGPT', `✓ ${mentioned ? 'mentioned' : 'no mention'} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`)
 
@@ -337,11 +350,12 @@ async function queryOpenAIWithSearch(
 async function queryClaudeWithSearch(
   query: string,
   domain: string,
-  runId: string
+  runId: string,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   const startTime = Date.now()
   // Use Tavily for Claude's search capability until native support is added
-  return queryClaudeWithTavily(query, domain, runId, startTime)
+  return queryClaudeWithTavily(query, domain, runId, startTime, businessName)
 }
 
 /**
@@ -351,7 +365,8 @@ async function queryClaudeWithTavily(
   query: string,
   domain: string,
   runId: string,
-  startTime: number
+  startTime: number,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   const platform: SearchPlatform = 'claude'
 
@@ -400,10 +415,10 @@ Provide a helpful answer based on the search results. Mention specific businesse
       })
     }
 
-    const { mentioned, position } = checkDomainMention(responseText, domain)
+    const { mentioned, position } = checkDomainMention(responseText, domain, businessName)
 
     // Extract competitors
-    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId)
+    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId, businessName)
 
     log.platform(runId, 'Claude', `✓ ${mentioned ? 'mentioned' : 'no mention'} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`)
 
@@ -496,7 +511,8 @@ async function searchWithTavily(
 async function queryGeminiWithSearch(
   query: string,
   domain: string,
-  runId: string
+  runId: string,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   const startTime = Date.now()
   const platform: SearchPlatform = 'gemini'
@@ -557,10 +573,10 @@ async function queryGeminiWithSearch(
       }
     }
 
-    const { mentioned, position } = checkDomainMention(responseText, domain)
+    const { mentioned, position } = checkDomainMention(responseText, domain, businessName)
 
     // Extract competitors
-    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId)
+    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId, businessName)
 
     log.platform(runId, 'Gemini', `✓ ${mentioned ? 'mentioned' : 'no mention'} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`)
 
@@ -579,7 +595,7 @@ async function queryGeminiWithSearch(
     log.warn(runId, `Gemini Google Search failed, trying Tavily: "${query.slice(0, 40)}..."`)
 
     // Fallback to Tavily-based search for Gemini
-    return queryGeminiWithTavily(query, domain, runId, startTime)
+    return queryGeminiWithTavily(query, domain, runId, startTime, businessName)
   }
 }
 
@@ -591,7 +607,8 @@ async function queryGeminiWithTavily(
   query: string,
   domain: string,
   runId: string,
-  startTime: number
+  startTime: number,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   const platform: SearchPlatform = 'gemini'
 
@@ -640,10 +657,10 @@ Provide a helpful answer based on the search results. Mention specific businesse
       })
     }
 
-    const { mentioned, position } = checkDomainMention(responseText, domain)
+    const { mentioned, position } = checkDomainMention(responseText, domain, businessName)
 
     // Extract competitors
-    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId)
+    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId, businessName)
 
     return {
       platform,
@@ -688,7 +705,8 @@ async function queryPerplexityWithSearch(
   query: string,
   domain: string,
   runId: string,
-  retryCount: number = 0
+  retryCount: number = 0,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   const startTime = Date.now()
   const platform: SearchPlatform = 'perplexity'
@@ -718,7 +736,7 @@ async function queryPerplexityWithSearch(
       if (retryCount < PERPLEXITY_MAX_RETRIES) {
         log.warn(runId, `Perplexity empty response, retrying (${retryCount + 1}/${PERPLEXITY_MAX_RETRIES}): "${query.slice(0, 40)}..."`)
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)))
-        return queryPerplexityWithSearch(query, domain, runId, retryCount + 1)
+        return queryPerplexityWithSearch(query, domain, runId, retryCount + 1, businessName)
       }
     }
 
@@ -754,10 +772,10 @@ async function queryPerplexityWithSearch(
       }
     }
 
-    const { mentioned, position } = checkDomainMention(responseText, domain)
+    const { mentioned, position } = checkDomainMention(responseText, domain, businessName)
 
     // Extract competitors
-    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId)
+    const competitors = await extractCompetitorsFromResponse(responseText, domain, runId, businessName)
 
     log.platform(runId, 'Perplexity', `✓ ${mentioned ? 'mentioned' : 'no mention'} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`)
 
@@ -787,7 +805,7 @@ async function queryPerplexityWithSearch(
       const backoffMs = 2000 * (retryCount + 1) // 2s, 4s
       log.warn(runId, `Perplexity transient error, retrying in ${backoffMs}ms (${retryCount + 1}/${PERPLEXITY_MAX_RETRIES}): ${error instanceof Error ? error.message : 'Unknown'}`)
       await new Promise(resolve => setTimeout(resolve, backoffMs))
-      return queryPerplexityWithSearch(query, domain, runId, retryCount + 1)
+      return queryPerplexityWithSearch(query, domain, runId, retryCount + 1, businessName)
     }
 
     log.error(runId, `Perplexity query failed: "${query.slice(0, 50)}..."`, error)
@@ -875,7 +893,8 @@ function generateSpacedVersions(domainWithoutTld: string): string[] {
  */
 function checkDomainMention(
   response: string,
-  domain: string
+  domain: string,
+  businessName?: string | null
 ): { mentioned: boolean; position: number | null } {
   const lowerResponse = response.toLowerCase()
   const lowerDomain = domain.toLowerCase()
@@ -895,11 +914,20 @@ function checkDomainMention(
   // e.g., "loungelovers" -> check for "lounge lovers"
   const possibleSpacedVersions = generateSpacedVersions(domainWithoutTld)
 
+  // Check for business name from site analysis (e.g., "Future Super" for futuresuper.com.au)
+  // Skip if too short or same as domain-based checks already performed
+  const businessNameLower = businessName?.toLowerCase().trim() || null
+  const useBusinessName = businessNameLower &&
+    businessNameLower.length >= 3 &&
+    businessNameLower !== domainWithoutTld &&
+    businessNameLower !== brandWithSpaces
+
   const mentioned =
     lowerResponse.includes(lowerDomain) ||
     lowerResponse.includes(domainWithoutTld) ||
     (brandWithSpaces !== domainWithoutTld && lowerResponse.includes(brandWithSpaces)) ||
-    possibleSpacedVersions.some(v => lowerResponse.includes(v))
+    possibleSpacedVersions.some(v => lowerResponse.includes(v)) ||
+    (useBusinessName && lowerResponse.includes(businessNameLower))
 
   if (!mentioned) {
     return { mentioned: false, position: null }
@@ -921,6 +949,9 @@ function checkDomainMention(
         break
       }
     }
+  }
+  if (firstIndex === -1 && useBusinessName) {
+    firstIndex = lowerResponse.indexOf(businessNameLower)
   }
 
   // Calculate which third of the response
@@ -947,17 +978,18 @@ export async function queryWithSearch(
   query: string,
   domain: string,
   runId: string,
-  locationContext?: LocationContext
+  locationContext?: LocationContext,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
   switch (platform) {
     case 'chatgpt':
-      return queryOpenAIWithSearch(query, domain, runId, locationContext)
+      return queryOpenAIWithSearch(query, domain, runId, locationContext, 0, businessName)
     case 'claude':
-      return queryClaudeWithSearch(query, domain, runId)
+      return queryClaudeWithSearch(query, domain, runId, businessName)
     case 'gemini':
-      return queryGeminiWithSearch(query, domain, runId)
+      return queryGeminiWithSearch(query, domain, runId, businessName)
     case 'perplexity':
-      return queryPerplexityWithSearch(query, domain, runId)
+      return queryPerplexityWithSearch(query, domain, runId, 0, businessName)
     default:
       throw new Error(`Unknown platform: ${platform}`)
   }
@@ -978,7 +1010,8 @@ export async function queryAllPlatformsWithSearch(
   domain: string,
   runId: string,
   onProgress?: (completed: number, total: number) => void,
-  locationContext?: LocationContext
+  locationContext?: LocationContext,
+  businessName?: string | null
 ): Promise<Array<{ promptId: string; results: SearchQueryResult[] }>> {
   const platforms: SearchPlatform[] = ['chatgpt', 'claude', 'gemini', 'perplexity']
   const total = queries.length * platforms.length
@@ -1021,7 +1054,7 @@ export async function queryAllPlatformsWithSearch(
     // Run all queries for this platform in parallel (API handles rate limits)
     const platformResults = await Promise.all(
       tasks.map(async (task) => {
-        const result = await queryWithSearch(task.platform, task.queryText, domain, runId, locationContext)
+        const result = await queryWithSearch(task.platform, task.queryText, domain, runId, locationContext, businessName)
         completed++
         onProgress?.(completed, total)
         return {
@@ -1106,9 +1139,10 @@ export async function queryPlatformWithSearch(
   query: string,
   domain: string,
   runId: string,
-  locationContext?: LocationContext
+  locationContext?: LocationContext,
+  businessName?: string | null
 ): Promise<SearchQueryResult> {
-  return queryWithSearch(platform, query, domain, runId, locationContext)
+  return queryWithSearch(platform, query, domain, runId, locationContext, businessName)
 }
 
 export function calculateSearchVisibilityScore(
