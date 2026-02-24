@@ -329,7 +329,8 @@ export async function POST(request: NextRequest) {
         await updateScanStatus(supabase, scanId, 'querying', progress)
         log.progress(scanId, completed, total, 'LLM queries')
       },
-      locationContext
+      locationContext,
+      analysis.businessName
     )
 
     // Save LLM responses with search metadata

@@ -444,7 +444,8 @@ export const processScan = inngest.createFunction(
           prompt.prompt_text,
           domain,
           scanId,
-          locationContext
+          locationContext,
+          analysis.businessName
         )
         await saveResponseToDb(db, scanId, prompt.id, queryResult)
         return { promptId: prompt.id, result: queryResult }
@@ -500,7 +501,8 @@ export const processScan = inngest.createFunction(
                 prompt.prompt_text,
                 domain,
                 scanId,
-                locationContext
+                locationContext,
+                analysis.businessName
               )
               await saveResponseToDb(db, scanId, prompt.id, queryResult)
               results.push({ promptId: prompt.id, result: queryResult })
