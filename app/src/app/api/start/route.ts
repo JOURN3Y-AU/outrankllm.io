@@ -16,6 +16,7 @@ const StartRequestSchema = z.object({
   agreedToTerms: z.boolean().refine(val => val === true, {
     message: 'You must agree to the Terms & Conditions',
   }),
+  voucherCode: z.string().optional(),
 })
 
 /**
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { email, domain, tier, region, agreedToTerms } = result.data
+    const { email, domain, tier, region, agreedToTerms, voucherCode } = result.data
 
     // Normalize email and domain
     const normalizedEmail = email.toLowerCase().trim()
@@ -171,18 +172,51 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 5: Create Stripe Checkout session
+    // Step 5: Validate voucher code if provided
+    let stripePromotionCodeId: string | null = null
+
+    if (voucherCode) {
+      const trimmedCode = voucherCode.trim().toUpperCase()
+      const promoCodes = await stripe.promotionCodes.list({
+        code: trimmedCode,
+        active: true,
+        limit: 1,
+      })
+
+      if (promoCodes.data.length === 0) {
+        // Invalid or expired voucher — clean up the incomplete subscription
+        await supabase
+          .from('domain_subscriptions')
+          .delete()
+          .eq('id', domainSubscription.id)
+
+        return NextResponse.json(
+          { error: 'Invalid or expired voucher code. Please check and try again.' },
+          { status: 400 }
+        )
+      }
+
+      stripePromotionCodeId = promoCodes.data[0].id
+    }
+
+    // Step 6: Create Stripe Checkout session
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const successUrl = `${baseUrl}/subscribe/success?session_id={CHECKOUT_SESSION_ID}&domain_subscription_id=${domainSubscription.id}`
     const cancelUrl = `${baseUrl}/start?checkout_cancelled=true&tier=${tier}`
 
     const priceId = getPriceId(tier as SubscriptionTier, effectiveRegion)
 
+    // Stripe doesn't allow both allow_promotion_codes and discounts.
+    // If voucher provided → auto-apply via discounts. Otherwise → allow manual entry.
+    const discountParams: Record<string, unknown> = stripePromotionCodeId
+      ? { discounts: [{ promotion_code: stripePromotionCodeId }] }
+      : { allow_promotion_codes: true }
+
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
-      allow_promotion_codes: true,
+      ...discountParams,
       line_items: [
         {
           price: priceId,

@@ -34,6 +34,8 @@ function StartContent() {
   const [selectedTier, setSelectedTier] = useState<TierKey>('starter')
   const [domain, setDomain] = useState('')
   const [email, setEmail] = useState('')
+  const [voucherCode, setVoucherCode] = useState('')
+  const [showVoucher, setShowVoucher] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +52,12 @@ function StartContent() {
 
     const emailParam = searchParams.get('email')
     if (emailParam) setEmail(emailParam)
+
+    const promoParam = searchParams.get('promo')
+    if (promoParam) {
+      setVoucherCode(promoParam)
+      setShowVoucher(true)
+    }
   }, [searchParams])
 
   // Pre-fill email from session
@@ -59,7 +67,6 @@ function StartContent() {
     }
   }, [session, email])
 
-  const hasPromo = !!searchParams.get('promo')
   const checkoutCancelled = searchParams.get('checkout_cancelled') === 'true'
 
   const prices = TIER_PRICES[region]
@@ -86,6 +93,7 @@ function StartContent() {
           tier: selectedTier,
           region,
           agreedToTerms,
+          ...(voucherCode.trim() ? { voucherCode: voucherCode.trim() } : {}),
         }),
       })
 
@@ -104,7 +112,7 @@ function StartContent() {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setStatus('idle')
     }
-  }, [domain, email, selectedTier, region, agreedToTerms])
+  }, [domain, email, selectedTier, region, agreedToTerms, voucherCode])
 
   const isLoggedIn = !!session
   const isFormValid = domain.trim().length >= 3 && email.trim().includes('@') && agreedToTerms
@@ -240,6 +248,35 @@ function StartContent() {
             )}
           </div>
 
+          {/* Voucher code */}
+          <div style={{ marginBottom: '16px' }}>
+            {!showVoucher ? (
+              <button
+                type="button"
+                onClick={() => setShowVoucher(true)}
+                className="text-[var(--text-dim)] text-xs font-mono hover:text-[var(--text)] transition-colors"
+                style={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
+              >
+                Have a voucher code?
+              </button>
+            ) : (
+              <>
+                <label className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider block" style={{ marginBottom: '6px' }}>
+                  Voucher code
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. FREETRIAL"
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                  disabled={status === 'loading'}
+                  style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                />
+              </>
+            )}
+          </div>
+
           {/* Terms checkbox */}
           <label className="flex items-start gap-3 cursor-pointer" style={{ padding: '4px 0', marginBottom: '20px' }}>
             <input
@@ -295,18 +332,11 @@ function StartContent() {
         </form>
 
         {/* Reassurance text */}
-        <div className="text-center" style={{ marginTop: '16px', marginBottom: '8px' }}>
+        <div className="text-center" style={{ marginTop: '16px', marginBottom: '32px' }}>
           <p className="text-[var(--text-dim)] font-mono text-xs">
-            7 days free, then {!regionLoading && <>{symbol}{selectedPrice}/mo</>}. Cancel anytime.
-          </p>
-        </div>
-
-        {/* Voucher note */}
-        <div className="text-center" style={{ marginBottom: '32px' }}>
-          <p className="text-[var(--text-dim)] font-mono text-xs" style={{ opacity: 0.7 }}>
-            {hasPromo
-              ? 'Your voucher code can be entered at checkout.'
-              : 'Have a voucher? You can enter it at checkout.'}
+            {voucherCode.trim()
+              ? 'Your voucher will be applied at checkout.'
+              : <>7 days free, then {!regionLoading && <>{symbol}{selectedPrice}/mo</>}. Cancel anytime.</>}
           </p>
         </div>
       </div>
