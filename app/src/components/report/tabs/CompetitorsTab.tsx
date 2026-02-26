@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Users, Lock, Sparkles, CheckCircle2, XCircle, AlertCircle, Plus, Minus, Loader2, X, ChevronDown, Download } from 'lucide-react'
 import type { Competitor, Analysis, Response, BrandAwarenessResult, CompetitiveSummary } from '../shared'
 import { platformColors, platformNames, formatResponseText, FilterButton } from '../shared'
+import { RescanSection } from '../RescanSection'
 
 type PlatformFilter = 'all' | 'chatgpt' | 'claude' | 'gemini' | 'perplexity'
 
@@ -1485,6 +1486,12 @@ export function CompetitorsTab({
           authority signals you need to compete for AI visibility.
         </p>
       </div>
+
+      {/* Rescan Now */}
+      <RescanSection
+        domainSubscriptionId={domainSubscriptionId || ''}
+        isSubscriber={isSubscriber}
+      />
     </div>
   )
 }

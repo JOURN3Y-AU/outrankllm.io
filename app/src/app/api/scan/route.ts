@@ -242,6 +242,7 @@ export async function POST(request: NextRequest) {
         domain_subscription_id: domainSubscriptionId,
         status: 'pending',
         progress: 0,
+        trigger_type: 'initial',
       })
       .select('id')
       .single()

@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
     let stripePromotionCodeId: string | null = null
 
     if (voucherCode) {
-      const trimmedCode = voucherCode.trim().toUpperCase()
+      const trimmedCode = voucherCode.trim()
       const promoCodes = await stripe.promotionCodes.list({
         code: trimmedCode,
         active: true,

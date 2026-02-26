@@ -5,6 +5,7 @@ import { Settings, Globe, Lock, Sparkles, Lightbulb, Pencil, Plus, X, Check, Tra
 import type { Analysis, Prompt, PlatformData } from '../shared'
 import { Monitor, Code, BarChart3, MessageSquare, FileText, AlertTriangle, Cpu, Info } from 'lucide-react'
 import { handlePricingClick, categoryLabels, categoryColors, selectableCategories } from '../shared'
+import { RescanSection } from '../RescanSection'
 
 // Simple tooltip component
 function InfoTooltip({ text }: { text: string }) {
@@ -1577,6 +1578,12 @@ export function SetupTab({
           </div>
         </div>
       )}
+
+      {/* Rescan Now */}
+      <RescanSection
+        domainSubscriptionId={domainSubscriptionId || ''}
+        isSubscriber={isSubscriber}
+      />
 
       {/* Question Library Modal */}
       {showLibrary && (
