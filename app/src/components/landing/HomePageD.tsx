@@ -289,7 +289,7 @@ export function HomePageD() {
                 Start Your Free Trial
               </button>
               <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px', textAlign: 'center' }}>
-                Free &middot; No credit card needed
+                7-day free trial &middot; Limited features
               </span>
             </div>
             {/* Subscribe column */}
