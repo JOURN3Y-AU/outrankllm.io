@@ -21,7 +21,7 @@ export const hiringBrandWeeklyDispatcher = inngest.createFunction(
       // Find primary monitored_domains in active orgs
       const { data: domains, error } = await supabase
         .from('monitored_domains')
-        .select('id, domain, organization_id, organizations!inner(id, status)')
+        .select('id, domain, organization_id, schedule_paused, organizations!inner(id, status)')
         .eq('is_primary', true)
 
       if (error || !domains) {
@@ -29,10 +29,10 @@ export const hiringBrandWeeklyDispatcher = inngest.createFunction(
         return []
       }
 
-      // Filter to active orgs only
+      // Filter to active orgs only, exclude paused brands
       const activeDomains = domains.filter((d: Record<string, unknown>) => {
         const org = d.organizations as { id: string; status: string } | null
-        return org?.status === 'active'
+        return org?.status === 'active' && !d.schedule_paused
       })
 
       // For each domain, check if last completed scan was 7+ days ago

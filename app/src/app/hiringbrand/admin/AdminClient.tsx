@@ -46,6 +46,7 @@ interface OrgBrand {
   latestScore: number | null
   frozenQuestionCount: number
   frozenCompetitorCount: number
+  schedulePaused: boolean
 }
 
 interface AdminOrg {
@@ -430,6 +431,7 @@ function BrandCard({
   onToggleExpand,
   refreshingBrandId,
   onForceRefresh,
+  onToggleSchedule,
 }: {
   brand: OrgBrand
   orgId: string
@@ -437,6 +439,7 @@ function BrandCard({
   onToggleExpand: () => void
   refreshingBrandId: string | null
   onForceRefresh: (brand: OrgBrand, orgId: string) => void
+  onToggleSchedule: (brand: OrgBrand) => void
 }) {
   const isRefreshing = refreshingBrandId === brand.id
   const isScanning = brand.scanStatus && !['complete', 'failed'].includes(brand.scanStatus)
@@ -551,6 +554,36 @@ function BrandCard({
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleSchedule(brand)
+              }}
+              title={brand.schedulePaused ? 'Weekly scans paused — click to resume' : 'Weekly scans active — click to pause'}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                fontFamily: fonts.display,
+                background: brand.schedulePaused ? `${hb.slateLight}30` : `${hb.teal}18`,
+                color: brand.schedulePaused ? hb.slateLight : hb.tealDeep,
+                border: `1.5px solid ${brand.schedulePaused ? hb.slateLight : hb.teal}`,
+                borderRadius: '20px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.2s',
+              }}
+            >
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: brand.schedulePaused ? hb.slateLight : hb.teal,
+              }} />
+              {brand.schedulePaused ? 'Paused' : 'Active'}
+            </button>
             {brand.latestReportToken && (
               <a
                 href={`/hiringbrand/report/${brand.latestReportToken}`}
@@ -1136,6 +1169,47 @@ export function AdminClient() {
     fetchOrgs()
   }
 
+  const handleToggleSchedule = async (brand: OrgBrand) => {
+    const newPaused = !brand.schedulePaused
+    // Optimistic update
+    setOrgs((prev) =>
+      prev.map((org) => ({
+        ...org,
+        domains: org.domains.map((d) =>
+          d.id === brand.id ? { ...d, schedulePaused: newPaused } : d
+        ),
+      }))
+    )
+    try {
+      const res = await fetch(`/api/hiringbrand/admin/brands/${brand.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule_paused: newPaused }),
+      })
+      if (!res.ok) {
+        // Revert on failure
+        setOrgs((prev) =>
+          prev.map((org) => ({
+            ...org,
+            domains: org.domains.map((d) =>
+              d.id === brand.id ? { ...d, schedulePaused: !newPaused } : d
+            ),
+          }))
+        )
+      }
+    } catch {
+      // Revert on error
+      setOrgs((prev) =>
+        prev.map((org) => ({
+          ...org,
+          domains: org.domains.map((d) =>
+            d.id === brand.id ? { ...d, schedulePaused: !newPaused } : d
+          ),
+        }))
+      )
+    }
+  }
+
   const handleForceRefresh = async (brand: OrgBrand, orgId: string) => {
     if (refreshingBrandId) return
     setRefreshingBrandId(brand.id)
@@ -1523,6 +1597,7 @@ export function AdminClient() {
                                     }
                                     refreshingBrandId={refreshingBrandId}
                                     onForceRefresh={handleForceRefresh}
+                                    onToggleSchedule={handleToggleSchedule}
                                   />
                                 ))}
                               </div>

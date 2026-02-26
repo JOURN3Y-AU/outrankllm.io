@@ -47,7 +47,7 @@ export async function GET() {
             .is('accepted_at', null),
           supabase
             .from('monitored_domains')
-            .select('id, domain, company_name, created_at')
+            .select('id, domain, company_name, created_at, schedule_paused')
             .eq('organization_id', org.id)
             .eq('is_primary', true)
             .order('created_at', { ascending: true }),
@@ -63,7 +63,7 @@ export async function GET() {
 
         // Enrich each domain with scan data
         const enrichedDomains = await Promise.all(
-          (domains || []).map(async (d: { id: string; domain: string; company_name: string | null; created_at: string }) => {
+          (domains || []).map(async (d: { id: string; domain: string; company_name: string | null; created_at: string; schedule_paused: boolean | null }) => {
             const [
               { data: latestRun },
               { count: scanCount },
@@ -119,6 +119,7 @@ export async function GET() {
               latestScore: latestReport?.visibility_score || null,
               frozenQuestionCount: frozenQCount || 0,
               frozenCompetitorCount: frozenCCount || 0,
+              schedulePaused: d.schedule_paused || false,
             }
           })
         )
