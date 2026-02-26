@@ -312,7 +312,6 @@ function HorizontalBarChart({
   const maxCount = Math.max(...data.map(d => d.count), 1)
   const chartRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
-  const [animatedWidths, setAnimatedWidths] = useState<number[]>(data.map(() => 0))
 
   // Observe when chart becomes visible
   useEffect(() => {
@@ -333,51 +332,10 @@ function HorizontalBarChart({
     return () => observer.disconnect()
   }, [])
 
-  // Animate bars with staggered timing when visible
-  useEffect(() => {
-    if (!isVisible) return
-
-    const duration = 1200 // Total animation duration per bar
-    const staggerDelay = 120 // Delay between each bar starting
-    const steps = 60
-
-    // Animate each bar with a stagger
-    data.forEach((entry, index) => {
-      const targetWidth = (entry.count / maxCount) * 100
-      const startDelay = index * staggerDelay
-
-      setTimeout(() => {
-        let step = 0
-        const interval = duration / steps
-
-        const timer = setInterval(() => {
-          step++
-          if (step >= steps) {
-            setAnimatedWidths(prev => {
-              const next = [...prev]
-              next[index] = targetWidth
-              return next
-            })
-            clearInterval(timer)
-          } else {
-            const progress = step / steps
-            // Ease-out cubic for natural deceleration
-            const eased = 1 - Math.pow(1 - progress, 3)
-            setAnimatedWidths(prev => {
-              const next = [...prev]
-              next[index] = targetWidth * eased
-              return next
-            })
-          }
-        }, interval)
-      }, startDelay)
-    })
-  }, [isVisible, data, maxCount])
-
   return (
     <div ref={chartRef} style={{ display: 'grid', gap: '14px' }}>
       {data.map((entry, index) => {
-        const currentWidth = isVisible ? animatedWidths[index] : 0
+        const targetWidth = (entry.count / maxCount) * 100
         const shouldBlur = isBlurred && index > 0
 
         return (
@@ -404,17 +362,18 @@ function HorizontalBarChart({
               </div>
             </div>
 
-            {/* Right side: Bar */}
+            {/* Right side: Bar — CSS transition instead of JS animation */}
             <div
               className="flex-1 bg-[var(--surface)]"
               style={{ height: '36px', borderRadius: '2px' }}
             >
               <div
                 style={{
-                  width: `${currentWidth}%`,
+                  width: isVisible ? `${targetWidth}%` : '0%',
                   height: '100%',
                   backgroundColor: entry.isUser ? 'var(--green)' : 'var(--text-mid)',
                   borderRadius: '2px',
+                  transition: `width 800ms cubic-bezier(0.25, 0.46, 0.45, 0.94) ${index * 80}ms`,
                 }}
               />
             </div>
