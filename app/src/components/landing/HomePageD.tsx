@@ -276,14 +276,14 @@ export function HomePageD() {
             </div>
           </div>
 
-          {/* Dual CTA Buttons */}
-          <div id="cta-section" className="w-full" style={{ display: 'flex', gap: '12px', marginBottom: '40px' }}>
+          {/* Dual CTA Buttons — stack on mobile, side-by-side on sm+ */}
+          <div id="cta-section" className="w-full flex flex-col sm:flex-row" style={{ gap: '12px', marginBottom: '40px' }}>
             {/* Free Trial column */}
-            <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="sm:flex-1 sm:min-w-0" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <button
                 ref={ctaButtonRef}
                 onClick={() => openModal('hero_cta')}
-                className="form-button w-full flex items-center justify-center gap-2"
+                className="form-button w-full flex items-center justify-center"
                 style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600, boxSizing: 'border-box' }}
               >
                 Start Your Free Trial
@@ -293,10 +293,10 @@ export function HomePageD() {
               </span>
             </div>
             {/* Subscribe column */}
-            <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="sm:flex-1 sm:min-w-0" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Link
                 href="/start"
-                className="form-button w-full flex items-center justify-center gap-2"
+                className="form-button w-full flex items-center justify-center"
                 style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600, boxSizing: 'border-box', textDecoration: 'none' }}
               >
                 Subscribe Now
