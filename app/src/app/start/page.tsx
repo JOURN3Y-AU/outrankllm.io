@@ -35,7 +35,6 @@ function StartContent() {
   const [domain, setDomain] = useState('')
   const [email, setEmail] = useState('')
   const [voucherCode, setVoucherCode] = useState('')
-  const [showVoucher, setShowVoucher] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +55,6 @@ function StartContent() {
     const promoParam = searchParams.get('promo')
     if (promoParam) {
       setVoucherCode(promoParam)
-      setShowVoucher(true)
     }
   }, [searchParams])
 
@@ -250,31 +248,18 @@ function StartContent() {
 
           {/* Voucher code */}
           <div style={{ marginBottom: '16px' }}>
-            {!showVoucher ? (
-              <button
-                type="button"
-                onClick={() => setShowVoucher(true)}
-                className="text-[var(--text-dim)] text-xs font-mono hover:text-[var(--text)] transition-colors"
-                style={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
-              >
-                Have a voucher code?
-              </button>
-            ) : (
-              <>
-                <label className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider block" style={{ marginBottom: '6px' }}>
-                  Voucher code
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. FREETRIAL"
-                  value={voucherCode}
-                  onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                  disabled={status === 'loading'}
-                  style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
-                />
-              </>
-            )}
+            <label className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider block" style={{ marginBottom: '6px' }}>
+              Voucher code <span className="normal-case tracking-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="e.g. FREETRIAL"
+              value={voucherCode}
+              onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+              disabled={status === 'loading'}
+              style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
+            />
           </div>
 
           {/* Terms checkbox */}
@@ -336,7 +321,7 @@ function StartContent() {
           <p className="text-[var(--text-dim)] font-mono text-xs">
             {voucherCode.trim()
               ? 'Your voucher will be applied at checkout.'
-              : <>7 days free, then {!regionLoading && <>{symbol}{selectedPrice}/mo</>}. Cancel anytime.</>}
+              : <>{!regionLoading && <>{symbol}{selectedPrice}/mo</>}. Cancel anytime.</>}
           </p>
         </div>
       </div>
