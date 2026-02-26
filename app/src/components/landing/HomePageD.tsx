@@ -283,8 +283,8 @@ export function HomePageD() {
               <button
                 ref={ctaButtonRef}
                 onClick={() => openModal('hero_cta')}
-                className="form-button cta-enhanced w-full flex items-center justify-center gap-2"
-                style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
+                className="form-button w-full flex items-center justify-center gap-2"
+                style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600, boxSizing: 'border-box' }}
               >
                 Start Your Free Trial
                 <ArrowRight className="w-5 h-5" />
@@ -298,7 +298,7 @@ export function HomePageD() {
               <Link
                 href="/start"
                 className="form-button w-full flex items-center justify-center gap-2"
-                style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
+                style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600, boxSizing: 'border-box', textDecoration: 'none' }}
               >
                 Subscribe Now
                 <ArrowRight className="w-5 h-5" />
