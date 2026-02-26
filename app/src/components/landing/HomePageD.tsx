@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Ghost } from '@/components/ghost/Ghost'
 import { FloatingPixels } from '@/components/landing/FloatingPixels'
 import { Journ3yAttribution } from '@/components/landing/Platforms'
@@ -10,76 +10,18 @@ import { Nav } from '@/components/nav/Nav'
 import { ExperimentTracker } from '@/components/experiments/ExperimentTracker'
 import { ScanFormModal } from '@/components/landing/ScanFormModal'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Search, Users, CheckCircle, ArrowRight, X } from 'lucide-react'
 import { trackEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
-import {
-  detectPricingRegion,
-  parseRegionCookie,
-  parseRegionParam,
-  REGION_COOKIE_NAME,
-  type PricingRegion,
-} from '@/lib/geo/pricing-region'
+import { usePricingRegion } from '@/hooks/usePricingRegion'
 import { TIER_PRICES, CURRENCY_SYMBOL } from '@/lib/stripe-config'
-
-/**
- * Hook to detect pricing region on client-side
- */
-function usePricingRegion(): {
-  region: PricingRegion
-  price: number
-  symbol: string
-  loading: boolean
-} {
-  const [region, setRegion] = useState<PricingRegion>('INTL')
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    // Check for query param override first
-    const urlParams = new URLSearchParams(window.location.search)
-    const queryRegion = parseRegionParam(urlParams.get('region'))
-
-    if (queryRegion) {
-      setRegion(queryRegion)
-      setLoading(false)
-      return
-    }
-
-    // Check cookie preference
-    const cookieValue = document.cookie
-      .split('; ')
-      .find((row) => row.startsWith(`${REGION_COOKIE_NAME}=`))
-      ?.split('=')[1]
-    const cookieRegion = parseRegionCookie(cookieValue)
-
-    if (cookieRegion) {
-      setRegion(cookieRegion)
-      setLoading(false)
-      return
-    }
-
-    // Default detection - for homepage we don't have lead data,
-    // so we rely on middleware having set the cookie from IP
-    // If no cookie, default to INTL
-    const result = detectPricingRegion({
-      cookieRegion: null,
-      queryParamRegion: null,
-    })
-    setRegion(result.region)
-    setLoading(false)
-  }, [])
-
-  return {
-    region,
-    price: TIER_PRICES[region].starter,
-    symbol: CURRENCY_SYMBOL[region],
-    loading,
-  }
-}
 
 export function HomePageD() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const ctaButtonRef = useRef<HTMLButtonElement>(null)
-  const { price, symbol, region, loading } = usePricingRegion()
+  const { region, loading } = usePricingRegion()
+  const price = TIER_PRICES[region].starter
+  const symbol = CURRENCY_SYMBOL[region]
 
   // Display price - show USD while loading
   const displayPrice = loading ? '$24.99' : `${symbol}${price}`
@@ -350,9 +292,20 @@ export function HomePageD() {
           {/* Micro-reassurance */}
           <p
             className="text-[var(--text-dim)] text-xs text-center font-mono"
-            style={{ marginBottom: '40px' }}
+            style={{ marginBottom: '8px' }}
           >
             Free &middot; No credit card &middot; Results in minutes
+          </p>
+
+          {/* Voucher link */}
+          <p className="text-center" style={{ marginBottom: '40px' }}>
+            <Link
+              href="/start"
+              className="text-[var(--text-dim)] text-xs font-mono hover:text-[var(--text)] transition-colors"
+              style={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
+            >
+              Have a voucher? Subscribe now
+            </Link>
           </p>
 
           {/* Trial Value Preview Section */}

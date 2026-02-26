@@ -82,16 +82,16 @@ export async function POST(request: NextRequest) {
     // Check if user already has a subscription for this domain
     const existingSubscription = await getSubscriptionByDomain(leadId, normalizedDomain)
     if (existingSubscription) {
-      // If there's an incomplete subscription (from a cancelled checkout), delete it and allow retry
-      if (existingSubscription.status === 'incomplete') {
+      if (existingSubscription.status === 'incomplete' || existingSubscription.status === 'canceled') {
+        // Incomplete (abandoned checkout) or canceled — delete and allow fresh checkout
         await supabase
           .from('domain_subscriptions')
           .delete()
           .eq('id', existingSubscription.id)
       } else {
-        // Active, past_due, trialing, or canceled subscription exists
+        // Active, past_due, or trialing subscription exists
         return NextResponse.json(
-          { error: 'You already have a subscription for this domain' },
+          { error: 'You already have an active subscription for this domain' },
           { status: 400 }
         )
       }

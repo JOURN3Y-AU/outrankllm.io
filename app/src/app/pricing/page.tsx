@@ -32,6 +32,7 @@ interface Plan {
   highlight: boolean
   features: string[]
   cta: string
+  secondaryCta?: string
   contactOnly?: boolean
 }
 
@@ -39,7 +40,7 @@ const plans: Plan[] = [
   {
     name: 'Starter',
     tier: 'starter',
-    description: 'For Business Owners',
+    description: '',
     highlight: false,
     features: [
       '1 domain + 3 competitors',
@@ -49,12 +50,13 @@ const plans: Plan[] = [
       'Email alerts on changes',
       'Basic recommendations',
     ],
-    cta: 'Subscribe',
+    cta: 'Start Free Trial',
+    secondaryCta: 'Subscribe now',
   },
   {
     name: 'Pro',
     tier: 'pro',
-    description: 'For Developers & Business Owners',
+    description: '',
     highlight: true,
     features: [
       'Everything in Starter, plus:',
@@ -64,17 +66,18 @@ const plans: Plan[] = [
       'Priority prompt testing',
       'API access (coming soon)',
     ],
-    cta: 'Subscribe',
+    cta: 'Start Free Trial',
+    secondaryCta: 'Subscribe now',
   },
   {
-    name: 'Agency',
+    name: 'Teams',
     tier: 'agency',
-    description: 'For Agencies',
+    description: '',
     highlight: false,
     features: [
       'Everything in Pro, plus:',
       'Monitor multiple domains',
-      'White-label reports',
+      'Access for multiple team members',
       'Per-client dashboards',
       'Bulk competitor tracking',
       'Dedicated support',
@@ -280,8 +283,8 @@ function PricingCards() {
 
     // Check if we have a lead ID (user came from report)
     if (!checkoutContext.leadId) {
-      // No lead ID - redirect to home to start a scan first
-      router.push('/?subscribe=' + tier)
+      // No lead ID - redirect to /start to collect domain + email
+      router.push('/start?tier=' + tier)
       return
     }
 
@@ -425,9 +428,11 @@ function PricingCards() {
 
               {/* Plan Header */}
               <div className="border-b border-[var(--border)]" style={{ padding: '28px 28px 24px' }}>
-                <div className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '10px' }}>
-                  {plan.description}
-                </div>
+                {plan.description && (
+                  <div className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider" style={{ marginBottom: '10px' }}>
+                    {plan.description}
+                  </div>
+                )}
                 <h2 className="text-2xl font-medium" style={{ marginBottom: '16px' }}>
                   {plan.name}
                 </h2>
@@ -461,12 +466,12 @@ function PricingCards() {
               <div style={{ padding: '0 28px 28px' }}>
                 {plan.contactOnly ? (
                   <a
-                    href="mailto:help@outrankllm.io?subject=Agency Plan Inquiry"
+                    href="mailto:help@outrankllm.io?subject=Teams Plan Inquiry"
                     className="block w-full py-4 font-mono text-sm text-center transition-all border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]"
                   >
                     {plan.cta}
                   </a>
-                ) : (
+                ) : checkoutContext.leadId ? (
                   <button
                     onClick={() => handleSubscribe(plan.tier)}
                     disabled={loadingTier !== null}
@@ -482,9 +487,31 @@ function PricingCards() {
                         Loading...
                       </span>
                     ) : (
-                      plan.cta
+                      'Subscribe'
                     )}
                   </button>
+                ) : (
+                  <>
+                    <Link
+                      href="/"
+                      className={`block w-full py-4 font-mono text-sm text-center transition-all ${
+                        plan.highlight
+                          ? 'bg-[var(--green)] text-[var(--bg)] hover:opacity-90'
+                          : 'border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {plan.cta}
+                    </Link>
+                    {plan.secondaryCta && (
+                      <Link
+                        href={`/start?tier=${plan.tier}`}
+                        className="block w-full text-center font-mono text-xs text-[var(--text-dim)] hover:text-[var(--green)] transition-colors"
+                        style={{ marginTop: '10px', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                      >
+                        {plan.secondaryCta}
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -548,7 +575,7 @@ export default function PricingPage() {
               Simple, transparent pricing
             </h1>
             <p className="text-[var(--text-mid)] text-lg" style={{ maxWidth: '512px', marginLeft: 'auto', marginRight: 'auto' }}>
-              Start with a free AI visibility report. Upgrade when you&apos;re ready.
+              Start with a free AI visibility report, or subscribe now for full access.
             </p>
           </div>
         </div>

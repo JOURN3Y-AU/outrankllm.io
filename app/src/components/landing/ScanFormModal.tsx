@@ -474,10 +474,10 @@ export function ScanFormModal({ isOpen, onClose, triggerButtonRef }: ScanFormMod
                 </p>
                 <div className="flex flex-col gap-3">
                   <Link
-                    href="/pricing"
+                    href={`/start?domain=${encodeURIComponent(freeReportUsed.existingDomain)}`}
                     className="form-button inline-flex items-center justify-center gap-2"
                   >
-                    {freeReportUsed.isExpired ? 'Unlock Your Report' : 'See Subscription Plans'}
+                    {freeReportUsed.isExpired ? 'Unlock Your Report' : 'Start Free Trial'}
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link

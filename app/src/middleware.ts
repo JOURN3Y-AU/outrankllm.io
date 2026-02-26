@@ -32,6 +32,7 @@ const PUBLIC_PATHS = [
   '/reset-password', // Allow reset password page
   '/subscribe', // Allow subscription pages
   '/pricing', // Allow pricing page
+  '/start', // Allow start/subscribe page
   '/hiringbrand', // Allow all HiringBrand routes (account protected via PROTECTED_PATHS)
 ]
 
