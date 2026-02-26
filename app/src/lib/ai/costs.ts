@@ -19,6 +19,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
   'o4-mini': { input: 0.0011, output: 0.0044 },  // Reasoning model
   'o4-mini-search': { input: 0.0011, output: 0.0044 },  // o4-mini with web search
+  'gpt-4o-search': { input: 0.0025, output: 0.01 },  // gpt-4o with web search (outrankllm brand scans)
   // Anthropic
   'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },
   'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
@@ -40,6 +41,7 @@ const MODEL_MAP: Record<string, string> = {
   'openai/gpt-4-turbo': 'gpt-4-turbo',
   'openai/o4-mini': 'o4-mini',
   'openai/o4-mini-search': 'o4-mini-search',
+  'openai/gpt-4o-search': 'gpt-4o-search',
   'anthropic/claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
   'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
   'anthropic/claude-3-haiku-20240307': 'claude-3-haiku-20240307',

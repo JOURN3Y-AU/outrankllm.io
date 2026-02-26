@@ -220,12 +220,12 @@ async function queryOpenAIWithSearch(
 
     // Use OpenAI Responses API with o4-mini reasoning model and web_search tool
     // o4-mini provides agentic multi-step search for more comprehensive results
-    // Using 'high' context size for more search coverage
+    // Using 'medium' context size to balance cost vs coverage
     const result = await generateText({
       model: openai.responses('o4-mini'),
       tools: {
         web_search: openai.tools.webSearch({
-          searchContextSize: 'high',
+          searchContextSize: 'medium',
           userLocation: {
             type: 'approximate',
             // Set country/city/region based on detected location in query or business context
