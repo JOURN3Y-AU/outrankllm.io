@@ -277,33 +277,37 @@ export function HomePageD() {
           </div>
 
           {/* Dual CTA Buttons */}
-          <div id="cta-section" className="w-full" style={{ display: 'flex', gap: '12px', marginBottom: '10px' }}>
-            <button
-              ref={ctaButtonRef}
-              onClick={() => openModal('hero_cta')}
-              className="form-button cta-enhanced flex-1 flex items-center justify-center gap-2"
-              style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
-            >
-              Start Your Free Trial
-              <ArrowRight className="w-5 h-5" />
-            </button>
-            <Link
-              href="/start"
-              className="flex-1 flex items-center justify-center gap-2 border border-[var(--green)] text-[var(--green)] font-mono transition-all hover:bg-[var(--green)] hover:text-[var(--bg)]"
-              style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
-            >
-              Subscribe Now
-              <ArrowRight className="w-5 h-5" />
-            </Link>
+          <div id="cta-section" className="w-full" style={{ display: 'flex', gap: '12px', marginBottom: '40px' }}>
+            {/* Free Trial column */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <button
+                ref={ctaButtonRef}
+                onClick={() => openModal('hero_cta')}
+                className="form-button cta-enhanced w-full flex items-center justify-center gap-2"
+                style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
+              >
+                Start Your Free Trial
+                <ArrowRight className="w-5 h-5" />
+              </button>
+              <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px' }}>
+                Free &middot; No credit card needed
+              </span>
+            </div>
+            {/* Subscribe column */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Link
+                href="/start"
+                className="form-button w-full flex items-center justify-center gap-2"
+                style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
+              >
+                Subscribe Now
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+              <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px' }}>
+                Already trialled? Have a voucher?
+              </span>
+            </div>
           </div>
-
-          {/* Micro-reassurance */}
-          <p
-            className="text-[var(--text-dim)] text-xs text-center font-mono"
-            style={{ marginBottom: '40px' }}
-          >
-            Free trial &middot; No credit card &middot; Results in minutes
-          </p>
 
           {/* Trial Value Preview Section */}
           <div className="w-full" style={{ marginBottom: '40px' }}>
