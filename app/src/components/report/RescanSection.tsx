@@ -41,8 +41,8 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
       } else if (data.canRescan) {
         setStatus('ready')
       } else {
-        setStatus('error')
-        setErrorMessage(data.reason || 'Cannot rescan at this time')
+        // Non-actionable state (e.g. subscription not active) — hide the bar
+        setStatus('loading')
       }
     } catch {
       setStatus('error')
@@ -137,7 +137,7 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
             <>
               <RotateCcw size={16} className="text-[var(--green)] flex-shrink-0" />
               <span className="text-sm text-[var(--text-mid)] truncate">
-                Changes saved. Rescan to see their impact on your AI visibility.
+                Rescan to see your changes in a new report.
               </span>
             </>
           )}
