@@ -276,36 +276,33 @@ export function HomePageD() {
             </div>
           </div>
 
-          {/* Primary CTA Button - Opens Modal */}
-          <div id="cta-section" className="w-full" style={{ marginBottom: '10px' }}>
+          {/* Dual CTA Buttons */}
+          <div id="cta-section" className="w-full" style={{ display: 'flex', gap: '12px', marginBottom: '10px' }}>
             <button
               ref={ctaButtonRef}
               onClick={() => openModal('hero_cta')}
-              className="form-button cta-enhanced w-full flex items-center justify-center gap-2"
-              style={{ fontSize: '1.125rem', padding: '18px 28px', fontWeight: 600 }}
+              className="form-button cta-enhanced flex-1 flex items-center justify-center gap-2"
+              style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
             >
-              Start Your Free 7-Day Trial
+              Start Your Free Trial
               <ArrowRight className="w-5 h-5" />
             </button>
+            <Link
+              href="/start"
+              className="flex-1 flex items-center justify-center gap-2 border border-[var(--green)] text-[var(--green)] font-mono transition-all hover:bg-[var(--green)] hover:text-[var(--bg)]"
+              style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600 }}
+            >
+              Subscribe Now
+              <ArrowRight className="w-5 h-5" />
+            </Link>
           </div>
 
           {/* Micro-reassurance */}
           <p
             className="text-[var(--text-dim)] text-xs text-center font-mono"
-            style={{ marginBottom: '8px' }}
+            style={{ marginBottom: '40px' }}
           >
-            Free &middot; No credit card &middot; Results in minutes
-          </p>
-
-          {/* Voucher link */}
-          <p className="text-center" style={{ marginBottom: '40px' }}>
-            <Link
-              href="/start"
-              className="text-[var(--text-dim)] text-xs font-mono hover:text-[var(--text)] transition-colors"
-              style={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
-            >
-              Have a voucher? Subscribe now
-            </Link>
+            Free trial &middot; No credit card &middot; Results in minutes
           </p>
 
           {/* Trial Value Preview Section */}
@@ -314,7 +311,7 @@ export function HomePageD() {
               className="font-mono text-[0.7rem] text-[var(--text-dim)] uppercase tracking-widest text-center"
               style={{ marginBottom: '16px' }}
             >
-              During your free trial, you&apos;ll discover
+              What you&apos;ll discover
             </h2>
 
             <div className="flex flex-col gap-4">
