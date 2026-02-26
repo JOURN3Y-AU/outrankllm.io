@@ -287,7 +287,6 @@ export function HomePageD() {
                 style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600, boxSizing: 'border-box' }}
               >
                 Start Your Free Trial
-                <ArrowRight className="w-5 h-5" />
               </button>
               <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px', textAlign: 'center' }}>
                 Free &middot; No credit card needed
@@ -301,7 +300,6 @@ export function HomePageD() {
                 style={{ fontSize: '1rem', padding: '16px 20px', fontWeight: 600, boxSizing: 'border-box', textDecoration: 'none' }}
               >
                 Subscribe Now
-                <ArrowRight className="w-5 h-5" />
               </Link>
               <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px', textAlign: 'center' }}>
                 Already trialled? Have a voucher?
