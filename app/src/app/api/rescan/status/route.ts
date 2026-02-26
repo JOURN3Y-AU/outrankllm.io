@@ -56,10 +56,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         canRescan: false,
         scanInProgress: true,
+        hasChanges: false,
         scanId: activeScan.id,
         scanStatus: activeScan.status,
         scanProgress: activeScan.progress,
       })
+    }
+
+    // Get last completed scan time to detect changes
+    const { data: lastCompletedScan } = await supabase
+      .from('scan_runs')
+      .select('created_at')
+      .eq('domain_subscription_id', domainSubscriptionId)
+      .eq('status', 'complete')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    // Check if questions or competitors were modified since last scan
+    let hasChanges = false
+    if (lastCompletedScan) {
+      const lastScanAt = lastCompletedScan.created_at
+
+      const [{ data: recentQuestion }, { data: recentCompetitor }] = await Promise.all([
+        supabase
+          .from('subscriber_questions')
+          .select('updated_at')
+          .eq('domain_subscription_id', domainSubscriptionId)
+          .gt('updated_at', lastScanAt)
+          .limit(1)
+          .single(),
+        supabase
+          .from('subscriber_competitors')
+          .select('updated_at')
+          .eq('domain_subscription_id', domainSubscriptionId)
+          .gt('updated_at', lastScanAt)
+          .limit(1)
+          .single(),
+      ])
+
+      hasChanges = !!(recentQuestion || recentCompetitor)
     }
 
     // Check cooldown
@@ -82,6 +118,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           canRescan: false,
           scanInProgress: false,
+          hasChanges,
           cooldownEndsAt: new Date(lastScanTime + cooldownMs).toISOString(),
           lastManualScanAt: lastManualScan.created_at,
         })
@@ -91,6 +128,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       canRescan: true,
       scanInProgress: false,
+      hasChanges,
     })
   } catch (error) {
     console.error('Error in /api/rescan/status:', error)

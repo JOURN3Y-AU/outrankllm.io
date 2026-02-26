@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Lock, Lightbulb, FileCode } from 'lucide-react'
 
 import { tabs } from './shared/constants'
@@ -91,6 +91,8 @@ export function ReportTabs({
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [brandPlatformFilter, setBrandPlatformFilter] = useState<string>('all')
   const tabsRef = useRef<HTMLDivElement>(null)
+  const [hasLocalChanges, setHasLocalChanges] = useState(false)
+  const handleDataChanged = useCallback(() => setHasLocalChanges(true), [])
 
   // Restore active tab from sessionStorage after hydration (for back button restoration)
   useEffect(() => {
@@ -236,6 +238,7 @@ export function ReportTabs({
             isSubscriber={isSubscriber}
             customQuestionLimit={customQuestionLimit}
             platformData={platformData}
+            onDataChanged={handleDataChanged}
           />
         )}
         {activeTab === 'responses' && (
@@ -278,6 +281,7 @@ export function ReportTabs({
             onUpgradeClick={onUpgradeClick}
             isSubscriber={isSubscriber}
             blurCompetitors={shouldBlurCompetitors}
+            onDataChanged={handleDataChanged}
           />
         )}
         {activeTab === 'brandAwareness' && (
@@ -343,6 +347,8 @@ export function ReportTabs({
         <RescanSection
           domainSubscriptionId={domainSubscriptionId || ''}
           isSubscriber={isSubscriber}
+          hasLocalChanges={hasLocalChanges}
+          onRescanTriggered={() => setHasLocalChanges(false)}
         />
       )}
     </div>

@@ -430,12 +430,14 @@ function CompetitorManager({
   trackedCompetitorNames,
   domainSubscriptionId,
   isSubscriber,
+  onDataChanged,
 }: {
   detectedCompetitors: Competitor[]
   /** Names of competitors that already have positioning data (from brand awareness results) */
   trackedCompetitorNames: string[]
   domainSubscriptionId?: string | null
   isSubscriber: boolean
+  onDataChanged?: () => void
 }) {
   const [trackedCompetitors, setTrackedCompetitors] = useState<SubscriberCompetitor[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -495,6 +497,7 @@ function CompetitorManager({
         setTrackedCompetitors(prev =>
           prev.map(c => c.id === id ? data.competitor : c)
         )
+        onDataChanged?.()
       } else {
         const data = await res.json()
         setError(data.error || 'Failed to update competitor')
@@ -533,6 +536,7 @@ function CompetitorManager({
           )
           setNewCompetitorName('')
           setShowAddForm(false)
+          onDataChanged?.()
         } else {
           const data = await res.json()
           setError(data.error || 'Failed to add competitor')
@@ -550,6 +554,7 @@ function CompetitorManager({
           setTrackedCompetitors(prev => [...prev, data.competitor])
           setNewCompetitorName('')
           setShowAddForm(false)
+          onDataChanged?.()
         } else {
           const data = await res.json()
           setError(data.error || 'Failed to add competitor')
@@ -578,6 +583,7 @@ function CompetitorManager({
 
         if (res.ok) {
           setTrackedCompetitors(prev => prev.filter(c => c.id !== id))
+          onDataChanged?.()
         } else {
           const data = await res.json()
           setError(data.error || 'Failed to remove competitor')
@@ -596,6 +602,7 @@ function CompetitorManager({
           setTrackedCompetitors(prev =>
             prev.map(c => c.id === id ? data.competitor : c)
           )
+          onDataChanged?.()
         } else {
           const data = await res.json()
           setError(data.error || 'Failed to remove competitor')
@@ -878,6 +885,7 @@ export function CompetitorsTab({
   onUpgradeClick,
   isSubscriber = false,
   blurCompetitors,
+  onDataChanged,
 }: {
   competitors: Competitor[]
   responses?: Response[] | null
@@ -890,6 +898,7 @@ export function CompetitorsTab({
   isSubscriber?: boolean
   /** Whether to blur competitor data - defaults to !isSubscriber if not provided */
   blurCompetitors?: boolean
+  onDataChanged?: () => void
 }) {
   // Resolve blur state - use explicit prop or fall back to subscriber check
   const shouldBlur = blurCompetitors ?? !isSubscriber
@@ -1133,6 +1142,7 @@ export function CompetitorsTab({
         trackedCompetitorNames={competitorNames}
         domainSubscriptionId={domainSubscriptionId}
         isSubscriber={isSubscriber}
+        onDataChanged={onDataChanged}
       />
 
       {/* Positioning Matrix - Visual overview (Subscribers/Trial) */}

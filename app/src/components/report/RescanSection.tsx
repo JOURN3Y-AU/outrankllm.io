@@ -6,6 +6,8 @@ import { RotateCcw, CheckCircle, Loader2, X } from 'lucide-react'
 interface RescanSectionProps {
   domainSubscriptionId: string
   isSubscriber: boolean
+  hasLocalChanges?: boolean
+  onRescanTriggered?: () => void
 }
 
 function formatCountdown(ms: number): string {
@@ -16,8 +18,9 @@ function formatCountdown(ms: number): string {
   return `${minutes}m`
 }
 
-export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSectionProps) {
+export function RescanSection({ domainSubscriptionId, isSubscriber, hasLocalChanges = false, onRescanTriggered }: RescanSectionProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'triggering' | 'triggered' | 'cooldown' | 'in_progress' | 'error'>('loading')
+  const [hasServerChanges, setHasServerChanges] = useState(false)
   const [cooldownEndsAt, setCooldownEndsAt] = useState<Date | null>(null)
   const [countdownDisplay, setCountdownDisplay] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -44,6 +47,9 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
         // Non-actionable state (e.g. subscription not active) — hide the bar
         setStatus('loading')
       }
+
+      // Track whether server detected changes since last scan
+      setHasServerChanges(!!data.hasChanges)
     } catch {
       setStatus('error')
       setErrorMessage('Could not check rescan availability')
@@ -54,6 +60,13 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
     if (!isSubscriber || !domainSubscriptionId) return
     checkStatus()
   }, [isSubscriber, domainSubscriptionId, checkStatus])
+
+  // Re-check status when local changes are made (to get fresh hasChanges from server)
+  useEffect(() => {
+    if (hasLocalChanges && isSubscriber && domainSubscriptionId) {
+      checkStatus()
+    }
+  }, [hasLocalChanges, isSubscriber, domainSubscriptionId, checkStatus])
 
   // Cooldown countdown timer
   useEffect(() => {
@@ -88,6 +101,7 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
 
       if (res.ok) {
         setStatus('triggered')
+        onRescanTriggered?.()
       } else if (res.status === 429) {
         const data = await res.json()
         setStatus('cooldown')
@@ -105,9 +119,15 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
     }
   }
 
+  // Determine if the bar should be visible
+  const hasChanges = hasLocalChanges || hasServerChanges
+  const isActiveState = status === 'triggering' || status === 'triggered' || status === 'in_progress'
+
   if (!isSubscriber || !domainSubscriptionId) return null
   if (status === 'loading') return null
   if (dismissed) return null
+  // Only show when there are changes to rescan, or scan is already in flight/cooldown
+  if (!hasChanges && !isActiveState && status !== 'cooldown' && status !== 'error') return null
 
   return (
     <div
