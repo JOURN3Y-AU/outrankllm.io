@@ -1,55 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
-import { stripe, getPriceId, type SubscriptionTier, type PricingRegion } from '@/lib/stripe'
 import { createServiceClient } from '@/lib/supabase/server'
+import { stripe, getPriceId, type SubscriptionTier, type PricingRegion } from '@/lib/stripe'
 import {
-  getSubscriptionsWithReports,
   createDomainSubscription,
   getSubscriptionByDomain,
 } from '@/lib/subscriptions'
 
-/**
- * GET /api/subscriptions
- * List all domain subscriptions for the current user
- */
-export async function GET() {
-  try {
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const subscriptions = await getSubscriptionsWithReports(session.lead_id)
-
-    return NextResponse.json({ subscriptions })
-  } catch (error) {
-    console.error('Error fetching subscriptions:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-// Validation schema for creating a subscription
-const CreateSubscriptionSchema = z.object({
-  domain: z.string().min(1).max(255),
+const StartRequestSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  domain: z.string().min(3, 'Domain must be at least 3 characters'),
   tier: z.enum(['starter', 'pro']),
   region: z.enum(['AU', 'INTL']).optional().default('INTL'),
-  leadId: z.string().uuid().optional(), // For first-time subscribers (no account yet)
+  agreedToTerms: z.boolean().refine(val => val === true, {
+    message: 'You must agree to the Terms & Conditions',
+  }),
 })
 
 /**
- * POST /api/subscriptions
- * Create a new domain subscription (initiates Stripe checkout)
+ * POST /api/start
  *
- * Supports two flows:
- * 1. Authenticated user: Uses session.lead_id
- * 2. First-time subscriber: Uses leadId from body (no account yet, will set password after checkout)
+ * Combined endpoint for the /start page:
+ * 1. Creates/upserts lead
+ * 2. Creates domain subscription (incomplete)
+ * 3. Creates Stripe checkout session
+ *
+ * Scan is NOT started here — the Stripe webhook (checkout.session.completed)
+ * triggers the scan after payment succeeds.
  */
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession()
     const body = await request.json()
-    const result = CreateSubscriptionSchema.safeParse(body)
+    const result = StartRequestSchema.safeParse(body)
 
     if (!result.success) {
       return NextResponse.json(
@@ -58,20 +42,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { domain, tier, region, leadId: bodyLeadId } = result.data
+    const { email, domain, tier, region, agreedToTerms } = result.data
 
-    // Determine lead_id: prefer session (authenticated), fallback to body (first-time subscriber)
-    const leadId = session?.lead_id || bodyLeadId
-    if (!leadId) {
-      return NextResponse.json(
-        { error: 'Unauthorized - please log in or provide a valid lead ID' },
-        { status: 401 }
-      )
-    }
-
-    // Normalize domain (remove protocol, trailing slashes, etc.)
-    const normalizedDomain = domain
+    // Normalize email and domain
+    const normalizedEmail = email.toLowerCase().trim()
+    const cleanDomain = domain
       .toLowerCase()
+      .trim()
       .replace(/^https?:\/\//, '')
       .replace(/^www\./, '')
       .replace(/\/+$/, '')
@@ -79,44 +56,85 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient()
 
-    // Check if user already has a subscription for this domain
-    const existingSubscription = await getSubscriptionByDomain(leadId, normalizedDomain)
+    // Capture geo headers from Vercel
+    const ipCountry = request.headers.get('x-vercel-ip-country')
+    const ipCity = request.headers.get('x-vercel-ip-city')
+    const ipRegion = request.headers.get('x-vercel-ip-country-region')
+    const ipTimezone = request.headers.get('x-vercel-ip-timezone')
+    const referralUrl = request.cookies.get('referral_url')?.value || null
+
+    // Step 1: Get or create lead
+    let leadId: string
+
+    if (session?.lead_id) {
+      // Logged-in user — use existing lead
+      leadId = session.lead_id
+    } else {
+      // New or returning user — upsert lead by email+domain
+      const upsertData: Record<string, unknown> = {
+        email: normalizedEmail,
+        domain: cleanDomain,
+        terms_accepted_at: agreedToTerms ? new Date().toISOString() : null,
+      }
+      if (ipCountry) upsertData.ip_country = ipCountry
+      if (ipCity) upsertData.ip_city = ipCity
+      if (ipRegion) upsertData.ip_region = ipRegion
+      if (ipTimezone) upsertData.ip_timezone = ipTimezone
+      if (referralUrl) upsertData.referral_url = referralUrl
+
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .upsert(upsertData, { onConflict: 'email,domain', ignoreDuplicates: false })
+        .select('id')
+        .single()
+
+      if (leadError || !lead) {
+        console.error('Error creating lead:', leadError)
+        return NextResponse.json(
+          { error: 'Failed to create account. Please try again.' },
+          { status: 500 }
+        )
+      }
+
+      leadId = lead.id
+    }
+
+    // Step 2: Handle existing domain subscriptions
+    const existingSubscription = await getSubscriptionByDomain(leadId, cleanDomain)
     if (existingSubscription) {
       if (existingSubscription.status === 'incomplete' || existingSubscription.status === 'canceled') {
-        // Incomplete (abandoned checkout) or canceled — delete and allow fresh checkout
+        // Delete stale records and allow fresh checkout
         await supabase
           .from('domain_subscriptions')
           .delete()
           .eq('id', existingSubscription.id)
       } else {
-        // Active, past_due, or trialing subscription exists
+        // Active, past_due, or trialing — already subscribed
         return NextResponse.json(
-          { error: 'You already have an active subscription for this domain' },
+          { error: 'You already have an active subscription for this domain.' },
           { status: 400 }
         )
       }
     }
 
-    // Get or create Stripe customer
-    const { data: lead } = await supabase
+    // Step 3: Get or create Stripe customer
+    const { data: leadData } = await supabase
       .from('leads')
       .select('stripe_customer_id, email')
       .eq('id', leadId)
       .single()
 
-    if (!lead) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    if (!leadData) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    let customerId = lead.stripe_customer_id
+    let customerId = leadData.stripe_customer_id
     let effectiveRegion = region as PricingRegion
 
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: lead.email,
-        metadata: {
-          lead_id: leadId,
-        },
+        email: leadData.email,
+        metadata: { lead_id: leadId },
       })
       customerId = customer.id
 
@@ -125,8 +143,7 @@ export async function POST(request: NextRequest) {
         .update({ stripe_customer_id: customerId })
         .eq('id', leadId)
     } else {
-      // Customer exists - check if they have existing subscriptions
-      // Stripe requires all subscriptions for a customer to be in the same currency
+      // Existing customer — enforce currency consistency
       const existingSubscriptions = await stripe.subscriptions.list({
         customer: customerId,
         status: 'all',
@@ -135,15 +152,14 @@ export async function POST(request: NextRequest) {
 
       if (existingSubscriptions.data.length > 0) {
         const existingCurrency = existingSubscriptions.data[0].currency
-        // Map currency to region (aud = AU, usd = INTL)
         effectiveRegion = existingCurrency === 'aud' ? 'AU' : 'INTL'
       }
     }
 
-    // Pre-create domain subscription with 'incomplete' status
+    // Step 4: Create domain subscription with 'incomplete' status
     const domainSubscription = await createDomainSubscription({
       lead_id: leadId,
-      domain: normalizedDomain,
+      domain: cleanDomain,
       tier: tier as SubscriptionTier,
       status: 'incomplete',
     })
@@ -155,16 +171,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build success/cancel URLs
+    // Step 5: Create Stripe Checkout session
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const successUrl = `${baseUrl}/subscribe/success?session_id={CHECKOUT_SESSION_ID}&domain_subscription_id=${domainSubscription.id}`
-    const cancelUrl = `${baseUrl}/dashboard?checkout_cancelled=true`
+    const cancelUrl = `${baseUrl}/start?checkout_cancelled=true&tier=${tier}`
 
-    // Get the correct price ID for this tier and region
-    // Use effectiveRegion to ensure currency consistency with existing subscriptions
     const priceId = getPriceId(tier as SubscriptionTier, effectiveRegion)
 
-    // Create Stripe Checkout session
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
@@ -181,7 +194,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         lead_id: leadId,
         domain_subscription_id: domainSubscription.id,
-        domain: normalizedDomain,
+        domain: cleanDomain,
         tier: tier,
         region: effectiveRegion,
       },
@@ -189,7 +202,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           lead_id: leadId,
           domain_subscription_id: domainSubscription.id,
-          domain: normalizedDomain,
+          domain: cleanDomain,
           tier: tier,
           region: effectiveRegion,
         },
@@ -201,7 +214,7 @@ export async function POST(request: NextRequest) {
       domain_subscription_id: domainSubscription.id,
     })
   } catch (error) {
-    console.error('Error creating subscription:', error)
+    console.error('Error in /api/start:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: 'Internal server error', details: message }, { status: 500 })
   }

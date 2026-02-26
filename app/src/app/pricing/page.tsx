@@ -49,7 +49,7 @@ const plans: Plan[] = [
       'Email alerts on changes',
       'Basic recommendations',
     ],
-    cta: 'Subscribe',
+    cta: 'Start Free Trial',
   },
   {
     name: 'Pro',
@@ -64,7 +64,7 @@ const plans: Plan[] = [
       'Priority prompt testing',
       'API access (coming soon)',
     ],
-    cta: 'Subscribe',
+    cta: 'Start Free Trial',
   },
   {
     name: 'Agency',
@@ -280,8 +280,8 @@ function PricingCards() {
 
     // Check if we have a lead ID (user came from report)
     if (!checkoutContext.leadId) {
-      // No lead ID - redirect to home to start a scan first
-      router.push('/?subscribe=' + tier)
+      // No lead ID - redirect to /start to collect domain + email
+      router.push('/start?tier=' + tier)
       return
     }
 
