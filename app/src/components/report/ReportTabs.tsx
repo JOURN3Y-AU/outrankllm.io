@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Lock, Lightbulb, FileCode } from 'lucide-react'
 
 import { tabs } from './shared/constants'
@@ -20,6 +20,7 @@ import {
   PrdTab,
   LockedTab,
 } from './tabs'
+import { RescanSection } from './RescanSection'
 
 type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
 
@@ -90,6 +91,8 @@ export function ReportTabs({
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [brandPlatformFilter, setBrandPlatformFilter] = useState<string>('all')
   const tabsRef = useRef<HTMLDivElement>(null)
+  const [hasLocalChanges, setHasLocalChanges] = useState(false)
+  const handleDataChanged = useCallback(() => setHasLocalChanges(true), [])
 
   // Restore active tab from sessionStorage after hydration (for back button restoration)
   useEffect(() => {
@@ -235,6 +238,7 @@ export function ReportTabs({
             isSubscriber={isSubscriber}
             customQuestionLimit={customQuestionLimit}
             platformData={platformData}
+            onDataChanged={handleDataChanged}
           />
         )}
         {activeTab === 'responses' && (
@@ -277,6 +281,7 @@ export function ReportTabs({
             onUpgradeClick={onUpgradeClick}
             isSubscriber={isSubscriber}
             blurCompetitors={shouldBlurCompetitors}
+            onDataChanged={handleDataChanged}
           />
         )}
         {activeTab === 'brandAwareness' && (
@@ -336,6 +341,16 @@ export function ReportTabs({
           )
         )}
       </div>
+
+      {/* Fixed bottom rescan bar — only on Setup and Competitors tabs */}
+      {(activeTab === 'setup' || activeTab === 'competitors') && (
+        <RescanSection
+          domainSubscriptionId={domainSubscriptionId || ''}
+          isSubscriber={isSubscriber}
+          hasLocalChanges={hasLocalChanges}
+          onRescanTriggered={() => setHasLocalChanges(false)}
+        />
+      )}
     </div>
   )
 }

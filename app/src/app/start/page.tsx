@@ -256,9 +256,8 @@ function StartContent() {
               className="form-input"
               placeholder="e.g. FREETRIAL"
               value={voucherCode}
-              onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+              onChange={(e) => setVoucherCode(e.target.value)}
               disabled={status === 'loading'}
-              style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
             />
           </div>
 

@@ -716,6 +716,7 @@ export function SetupTab({
   isSubscriber = false,
   customQuestionLimit = 0,
   platformData,
+  onDataChanged,
 }: {
   analysis: Analysis | null
   prompts?: Prompt[] | null
@@ -724,6 +725,7 @@ export function SetupTab({
   isSubscriber?: boolean
   customQuestionLimit?: number
   platformData?: PlatformData | null
+  onDataChanged?: () => void
 }) {
   // Suppress unused variable warnings
   void domain
@@ -841,6 +843,7 @@ export function SetupTab({
       setEditingId(null)
       setEditText('')
       setEditCategory('')
+      onDataChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
@@ -888,6 +891,7 @@ export function SetupTab({
       setNewQuestionText('')
       setNewQuestionCategory('other')
       setIsAddingNew(false)
+      onDataChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add question')
     } finally {
@@ -911,6 +915,7 @@ export function SetupTab({
 
       // Remove from local state
       setQuestions(prev => prev.filter(q => q.id !== questionId))
+      onDataChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete')
     } finally {
@@ -1595,6 +1600,7 @@ export function SetupTab({
                 isCustom: question.source === 'user_created',
               },
             ])
+            onDataChanged?.()
           }}
         />
       )}
@@ -1614,6 +1620,7 @@ export function SetupTab({
                   : q
               )
             )
+            onDataChanged?.()
           }}
         />
       )}

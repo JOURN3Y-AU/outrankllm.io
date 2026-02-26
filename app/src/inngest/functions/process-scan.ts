@@ -101,6 +101,7 @@ export const processScan = inngest.createFunction(
         status: "crawling",
         progress: 5,
         started_at: new Date().toISOString(),
+        trigger_type: "scheduled",
       }
       if (domainSubscriptionId) {
         insertData.domain_subscription_id = domainSubscriptionId
