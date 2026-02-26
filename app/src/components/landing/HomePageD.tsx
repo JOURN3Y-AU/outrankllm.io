@@ -302,7 +302,7 @@ export function HomePageD() {
                 Subscribe Now
               </Link>
               <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px', textAlign: 'center' }}>
-                Already trialled? Have a voucher?
+                Already trialled? Have a voucher? Want full features straight away?
               </span>
             </div>
           </div>
