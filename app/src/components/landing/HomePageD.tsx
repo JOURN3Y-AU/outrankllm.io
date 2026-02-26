@@ -279,7 +279,7 @@ export function HomePageD() {
           {/* Dual CTA Buttons */}
           <div id="cta-section" className="w-full" style={{ display: 'flex', gap: '12px', marginBottom: '40px' }}>
             {/* Free Trial column */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <button
                 ref={ctaButtonRef}
                 onClick={() => openModal('hero_cta')}
@@ -289,12 +289,12 @@ export function HomePageD() {
                 Start Your Free Trial
                 <ArrowRight className="w-5 h-5" />
               </button>
-              <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px' }}>
+              <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px', textAlign: 'center' }}>
                 Free &middot; No credit card needed
               </span>
             </div>
             {/* Subscribe column */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Link
                 href="/start"
                 className="form-button w-full flex items-center justify-center gap-2"
@@ -303,7 +303,7 @@ export function HomePageD() {
                 Subscribe Now
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px' }}>
+              <span className="text-[var(--text-dim)] text-xs font-mono" style={{ marginTop: '8px', textAlign: 'center' }}>
                 Already trialled? Have a voucher?
               </span>
             </div>
