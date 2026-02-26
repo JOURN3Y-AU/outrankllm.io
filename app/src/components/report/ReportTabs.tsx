@@ -20,6 +20,7 @@ import {
   PrdTab,
   LockedTab,
 } from './tabs'
+import { RescanSection } from './RescanSection'
 
 type EnrichmentStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'not_applicable'
 
@@ -336,6 +337,14 @@ export function ReportTabs({
           )
         )}
       </div>
+
+      {/* Fixed bottom rescan bar — only on Setup and Competitors tabs */}
+      {(activeTab === 'setup' || activeTab === 'competitors') && (
+        <RescanSection
+          domainSubscriptionId={domainSubscriptionId || ''}
+          isSubscriber={isSubscriber}
+        />
+      )}
     </div>
   )
 }

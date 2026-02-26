@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RotateCcw, CheckCircle, Loader2 } from 'lucide-react'
+import { RotateCcw, CheckCircle, Loader2, X } from 'lucide-react'
 
 interface RescanSectionProps {
   domainSubscriptionId: string
@@ -21,6 +21,7 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
   const [cooldownEndsAt, setCooldownEndsAt] = useState<Date | null>(null)
   const [countdownDisplay, setCountdownDisplay] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [dismissed, setDismissed] = useState(false)
 
   const checkStatus = useCallback(async () => {
     try {
@@ -106,91 +107,117 @@ export function RescanSection({ domainSubscriptionId, isSubscriber }: RescanSect
 
   if (!isSubscriber || !domainSubscriptionId) return null
   if (status === 'loading') return null
+  if (dismissed) return null
 
   return (
     <div
-      className="border border-[var(--border)] bg-[var(--surface)]"
-      style={{ padding: '24px', marginTop: '24px' }}
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        borderTop: '1px solid var(--border)',
+        backgroundColor: 'var(--surface)',
+        backdropFilter: 'blur(12px)',
+      }}
     >
-      <div className="flex items-center gap-2" style={{ marginBottom: '12px' }}>
-        <RotateCcw size={16} className="text-[var(--green)]" />
-        <span className="font-mono text-xs text-[var(--text-dim)] uppercase tracking-wider">
-          Rescan Now
-        </span>
-      </div>
-
-      {status === 'ready' && (
-        <>
-          <p className="text-sm text-[var(--text-mid)]" style={{ marginBottom: '16px' }}>
-            Your changes are saved automatically. Trigger a new scan to see their impact on your AI visibility.
-          </p>
-          <button
-            onClick={handleRescan}
-            className="flex items-center gap-2 bg-[var(--green)] text-[var(--bg)] font-mono text-sm transition-all hover:opacity-90"
-            style={{ padding: '10px 20px' }}
-          >
-            <RotateCcw size={14} />
-            Rescan Now
-          </button>
-        </>
-      )}
-
-      {status === 'triggering' && (
-        <div className="flex items-center gap-2 text-sm text-[var(--text-mid)]">
-          <Loader2 size={16} className="animate-spin text-[var(--green)]" />
-          Triggering rescan...
-        </div>
-      )}
-
-      {status === 'triggered' && (
-        <div className="flex items-center gap-2 text-sm text-[var(--green)]">
-          <CheckCircle size={16} />
-          Rescan triggered! You&apos;ll receive an email when your updated report is ready.
-        </div>
-      )}
-
-      {status === 'in_progress' && (
-        <div className="flex items-center gap-2 text-sm text-[var(--text-mid)]">
-          <Loader2 size={16} className="animate-spin text-[var(--green)]" />
-          Scan in progress... You&apos;ll receive an email when your updated report is ready.
-        </div>
-      )}
-
-      {status === 'cooldown' && (
-        <>
-          <p className="text-sm text-[var(--text-mid)]" style={{ marginBottom: '16px' }}>
-            Your changes are saved automatically. Trigger a new scan to see their impact on your AI visibility.
-          </p>
-          <button
-            disabled
-            className="flex items-center gap-2 bg-[var(--surface)] text-[var(--text-dim)] font-mono text-sm border border-[var(--border)] cursor-not-allowed"
-            style={{ padding: '10px 20px', opacity: 0.6 }}
-          >
-            <RotateCcw size={14} />
-            Rescan Now
-          </button>
-          {countdownDisplay && (
-            <p className="text-xs text-[var(--text-dim)] font-mono" style={{ marginTop: '8px' }}>
-              Next rescan available in {countdownDisplay}
-            </p>
+      <div
+        className="flex items-center justify-between"
+        style={{
+          maxWidth: '960px',
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          padding: '12px 24px',
+        }}
+      >
+        {/* Left side: icon + message */}
+        <div className="flex items-center gap-3" style={{ minWidth: 0, flex: 1 }}>
+          {status === 'ready' && (
+            <>
+              <RotateCcw size={16} className="text-[var(--green)] flex-shrink-0" />
+              <span className="text-sm text-[var(--text-mid)] truncate">
+                Changes saved. Rescan to see their impact on your AI visibility.
+              </span>
+            </>
           )}
-        </>
-      )}
 
-      {status === 'error' && (
-        <>
-          <p className="text-sm text-red-400" style={{ marginBottom: '12px' }}>
-            {errorMessage}
-          </p>
-          <button
-            onClick={checkStatus}
-            className="text-xs font-mono text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
-            style={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
-          >
-            Try again
-          </button>
-        </>
-      )}
+          {status === 'triggering' && (
+            <>
+              <Loader2 size={16} className="animate-spin text-[var(--green)] flex-shrink-0" />
+              <span className="text-sm text-[var(--text-mid)]">Triggering rescan...</span>
+            </>
+          )}
+
+          {status === 'triggered' && (
+            <>
+              <CheckCircle size={16} className="text-[var(--green)] flex-shrink-0" />
+              <span className="text-sm text-[var(--green)]">
+                Rescan triggered! You&apos;ll receive an email when your updated report is ready.
+              </span>
+            </>
+          )}
+
+          {status === 'in_progress' && (
+            <>
+              <Loader2 size={16} className="animate-spin text-[var(--green)] flex-shrink-0" />
+              <span className="text-sm text-[var(--text-mid)]">
+                Scan in progress... You&apos;ll receive an email when ready.
+              </span>
+            </>
+          )}
+
+          {status === 'cooldown' && (
+            <>
+              <RotateCcw size={16} className="text-[var(--text-dim)] flex-shrink-0" />
+              <span className="text-sm text-[var(--text-dim)]">
+                Next rescan available{countdownDisplay ? ` in ${countdownDisplay}` : ' soon'}
+              </span>
+            </>
+          )}
+
+          {status === 'error' && (
+            <>
+              <RotateCcw size={16} className="text-red-400 flex-shrink-0" />
+              <span className="text-sm text-red-400">{errorMessage}</span>
+            </>
+          )}
+        </div>
+
+        {/* Right side: action button + dismiss */}
+        <div className="flex items-center gap-3 flex-shrink-0" style={{ marginLeft: '16px' }}>
+          {status === 'ready' && (
+            <button
+              onClick={handleRescan}
+              className="flex items-center gap-2 bg-[var(--green)] text-[var(--bg)] font-mono text-sm transition-all hover:opacity-90"
+              style={{ padding: '8px 16px', whiteSpace: 'nowrap' }}
+            >
+              <RotateCcw size={14} />
+              Rescan Now
+            </button>
+          )}
+
+          {status === 'error' && (
+            <button
+              onClick={checkStatus}
+              className="font-mono text-xs text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
+              style={{ textDecoration: 'underline', textUnderlineOffset: '3px', whiteSpace: 'nowrap' }}
+            >
+              Try again
+            </button>
+          )}
+
+          {(status === 'triggered' || status === 'in_progress' || status === 'cooldown') && (
+            <button
+              onClick={() => setDismissed(true)}
+              className="text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
+              aria-label="Dismiss"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
