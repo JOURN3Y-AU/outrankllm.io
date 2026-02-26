@@ -207,11 +207,12 @@ async function handleDomainSubscriptionCheckout(
     throw new Error('Failed to update domain subscription')
   }
 
-  // Update lead tier to highest active tier
+  // Update lead tier to highest active tier and mark email as verified
+  // (paying customers don't need separate email verification)
   const highestTier = await getHighestTierForLead(leadId)
   await supabase
     .from('leads')
-    .update({ tier: highestTier })
+    .update({ tier: highestTier, email_verified: true })
     .eq('id', leadId)
 
   // Find existing scans for THIS SPECIFIC DOMAIN - they may not have domain_subscription_id yet
@@ -342,10 +343,11 @@ async function handleLegacyCheckout(
     throw subError
   }
 
-  // Update lead tier
+  // Update lead tier and mark email as verified
+  // (paying customers don't need separate email verification)
   const { error: leadError } = await supabase
     .from('leads')
-    .update({ tier: resolvedTier })
+    .update({ tier: resolvedTier, email_verified: true })
     .eq('id', leadId)
 
   if (leadError) {

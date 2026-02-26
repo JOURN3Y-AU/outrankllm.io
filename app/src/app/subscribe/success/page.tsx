@@ -202,7 +202,7 @@ function SuccessContent() {
             </li>
             <li className="flex items-center gap-3 text-sm">
               <Sparkles className="w-4 h-4 text-[var(--green)]" />
-              <span>Ready in ~10-15 minutes</span>
+              <span>Ready in ~10-15 minutes — we&apos;ll email you when it&apos;s done</span>
             </li>
             <li className="flex items-center gap-3 text-sm">
               <Sparkles className="w-4 h-4 text-[var(--green)]" />
@@ -259,7 +259,7 @@ function SuccessContent() {
             </li>
             <li className="flex items-center gap-3 text-sm">
               <Sparkles className="w-4 h-4 text-[var(--green)]" />
-              <span>Ready in ~10-15 minutes</span>
+              <span>Ready in ~10-15 minutes — we&apos;ll email you when it&apos;s done</span>
             </li>
           </ul>
         </div>

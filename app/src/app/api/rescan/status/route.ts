@@ -64,19 +64,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Get last completed scan time to detect changes
+    // Use enrichment_completed_at (if enrichment ran) or completed_at as the baseline,
+    // since the scan/enrichment process itself creates questions and competitors
     const { data: lastCompletedScan } = await supabase
       .from('scan_runs')
-      .select('created_at')
+      .select('created_at, completed_at, enrichment_completed_at')
       .eq('domain_subscription_id', domainSubscriptionId)
       .eq('status', 'complete')
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
 
-    // Check if questions or competitors were modified since last scan
+    // Check if questions or competitors were modified since last scan finished
     let hasChanges = false
     if (lastCompletedScan) {
-      const lastScanAt = lastCompletedScan.created_at
+      const lastScanAt = lastCompletedScan.enrichment_completed_at
+        || lastCompletedScan.completed_at
+        || lastCompletedScan.created_at
 
       const [{ data: recentQuestion }, { data: recentCompetitor }] = await Promise.all([
         supabase
