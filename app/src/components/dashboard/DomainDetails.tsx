@@ -126,7 +126,7 @@ export function DomainDetails({ subscription, reports, onUpdate, region }: Domai
               Your first scan is in progress
             </p>
             <p className="text-sm text-[var(--text-dim)]">
-              Results typically ready in 5-10 minutes
+              Results typically ready in 5-10 minutes — we&apos;ll email you when it&apos;s done
             </p>
           </div>
         )}
