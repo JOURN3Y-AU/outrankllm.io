@@ -51,7 +51,7 @@ const plans: Plan[] = [
       'Basic recommendations',
     ],
     cta: 'Start Free Trial',
-    secondaryCta: 'Subscribe now',
+    secondaryCta: 'Subscribe now for full access',
   },
   {
     name: 'Pro',
@@ -67,7 +67,7 @@ const plans: Plan[] = [
       'API access (coming soon)',
     ],
     cta: 'Start Free Trial',
-    secondaryCta: 'Subscribe now',
+    secondaryCta: 'Subscribe now for full access',
   },
   {
     name: 'Teams',
@@ -491,7 +491,7 @@ function PricingCards() {
                     )}
                   </button>
                 ) : (
-                  <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <Link
                       href="/"
                       className={`block w-full py-4 font-mono text-sm text-center transition-all ${
@@ -505,13 +505,16 @@ function PricingCards() {
                     {plan.secondaryCta && (
                       <Link
                         href={`/start?tier=${plan.tier}`}
-                        className="block w-full text-center font-mono text-xs text-[var(--text-dim)] hover:text-[var(--green)] transition-colors"
-                        style={{ marginTop: '10px', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                        className={`block w-full py-4 font-mono text-sm text-center transition-all ${
+                          plan.highlight
+                            ? 'border border-[var(--green)] text-[var(--green)] hover:bg-[var(--green)] hover:text-[var(--bg)]'
+                            : 'border border-[var(--border)] text-[var(--text-mid)] hover:border-[var(--green)] hover:text-[var(--text)]'
+                        }`}
                       >
                         {plan.secondaryCta}
                       </Link>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             </div>
