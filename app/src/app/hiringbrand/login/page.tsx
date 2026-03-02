@@ -246,15 +246,17 @@ function LoginForm() {
             marginTop: '24px',
             fontSize: '14px',
             color: hbColors.slateLight,
+            lineHeight: 1.5,
           }}
         >
           Don&apos;t have an account?{' '}
           <Link
-            href="/hiringbrand/signup"
+            href="/hiringbrand"
             style={{ color: hbColors.tealDeep, fontWeight: 500, textDecoration: 'none' }}
           >
-            Sign up
-          </Link>
+            Book a demo
+          </Link>{' '}
+          to get started.
         </p>
       )}
     </div>
