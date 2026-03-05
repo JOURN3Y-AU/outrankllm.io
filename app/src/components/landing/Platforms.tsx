@@ -67,7 +67,7 @@ export function Journ3yAttribution() {
         Designed and Developed by JOURN3Y Pty Ltd
       </span>
       <a
-        href="https://journ3y.com"
+        href="https://journ3y.ai"
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center opacity-80 hover:opacity-100 transition-opacity"
