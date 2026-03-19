@@ -80,21 +80,27 @@ export const hourlyScanDispatcher = inngest.createFunction(
     }
 
     // Queue scans for matching subscriptions
-    await step.run("queue-scans", async () => {
-      await inngest.send(
-        subscriptionsToScan.map((sub: DomainSubscriptionSchedule) => ({
-          name: "scan/process" as const,
-          data: {
-            scanId: null, // Will be created in first step of process-scan
-            domain: sub.domain,
-            email: sub.leads?.email || "",
-            leadId: sub.lead_id,
-            domainSubscriptionId: sub.id, // NEW: Link to domain subscription
-            skipEmail: false, // Send scan complete emails
-          },
-        }))
-      )
-    })
+    // Send events individually with step.sendEvent for better observability,
+    // and use step.sleep to stagger them 30s apart to avoid thundering herd
+    for (let i = 0; i < subscriptionsToScan.length; i++) {
+      const sub = subscriptionsToScan[i] as DomainSubscriptionSchedule
+
+      if (i > 0) {
+        await step.sleep(`stagger-${i}`, "30s")
+      }
+
+      await step.sendEvent(`queue-scan-${sub.domain}`, {
+        name: "scan/process",
+        data: {
+          scanId: null,
+          domain: sub.domain,
+          email: sub.leads?.email || "",
+          leadId: sub.lead_id,
+          domainSubscriptionId: sub.id,
+          skipEmail: false,
+        },
+      })
+    }
 
     return {
       queued: subscriptionsToScan.length,

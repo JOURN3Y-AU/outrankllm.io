@@ -31,6 +31,38 @@ const FREE_REPORT_EXPIRY_DAYS = parseInt(process.env.FREE_REPORT_EXPIRY_DAYS || 
 // Platform weights for scoring (from CLAUDE.md)
 const PLATFORMS = ["chatgpt", "claude", "gemini", "perplexity"] as const
 
+// onFailure handler: marks the scan as "failed" in the DB when Inngest exhausts retries
+// Without this, scan_runs stay stuck in intermediate states like "researching" forever
+const processScanFailureHandler = inngest.createFunction(
+  { id: "process-scan-failure" },
+  { event: "inngest/function.failed", if: 'event.data.function_id == "process-scan"' },
+  async ({ event }) => {
+    const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string } } | undefined
+    const scanId = originalEvent?.data?.scanId
+    const domain = originalEvent?.data?.domain
+    const errorMessage = (event.data.error as { message?: string })?.message || "Unknown error"
+
+    if (!scanId) {
+      console.error("[process-scan-failure] No scanId in failed event, cannot update DB")
+      return { updated: false }
+    }
+
+    const supabase = createServiceClient()
+    await supabase
+      .from("scan_runs")
+      .update({
+        status: "failed",
+        error_message: `Inngest function failed: ${errorMessage}`.slice(0, 500),
+      })
+      .eq("id", scanId)
+
+    console.error(`[process-scan-failure] Marked scan ${scanId} (${domain}) as failed: ${errorMessage}`)
+    return { updated: true, scanId, domain }
+  }
+)
+
+export { processScanFailureHandler }
+
 export const processScan = inngest.createFunction(
   {
     id: "process-scan",
@@ -39,6 +71,14 @@ export const processScan = inngest.createFunction(
     timeouts: {
       finish: "10m",
     },
+    // Limit concurrent scans to prevent LLM API rate limiting
+    // when weekly dispatcher fires all subscriber scans at once
+    concurrency: [
+      {
+        limit: 3,
+        scope: "fn",
+      },
+    ],
     // Cancel any existing runs for the same scan when a new one starts
     cancelOn: [
       {
