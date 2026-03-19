@@ -42,7 +42,7 @@ export const scanHealthMonitor = inngest.createFunction(
     id: "scan-health-monitor",
     retries: 1,
   },
-  { cron: "0 */6 * * *" }, // Every 6 hours
+  { cron: "0 23,5,11,17 * * *" }, // Every 6 hours starting 9am AEST (23:00 UTC)
   async ({ step }) => {
     const issues: string[] = []
 
