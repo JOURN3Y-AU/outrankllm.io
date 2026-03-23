@@ -11,7 +11,10 @@ interface StuckScan {
   status: string
   progress: number
   created_at: string
+  started_at: string | null
   brand: string | null
+  lead_id: string | null
+  domain_subscription_id: string | null
 }
 
 interface IncompleteSub {
@@ -54,7 +57,7 @@ export const scanHealthMonitor = inngest.createFunction(
 
       const { data, error } = await supabase
         .from("scan_runs")
-        .select("id, domain, status, progress, created_at, brand")
+        .select("id, domain, status, progress, created_at, started_at, brand, lead_id, domain_subscription_id")
         .not("status", "in", '("complete","failed")')
         .lt("created_at", cutoff)
         .order("created_at", { ascending: false })
@@ -73,7 +76,7 @@ export const scanHealthMonitor = inngest.createFunction(
 
       if (outrankScans.length > 0) {
         issues.push(
-          `**${outrankScans.length} stuck outrankllm scan(s):**\n` +
+          `**${outrankScans.length} stuck outrankllm scan(s) (auto-recovered):**\n` +
             outrankScans
               .map((s: StuckScan) => `  - ${s.domain} (${s.status}, ${s.progress}%, started ${s.created_at})`)
               .join("\n")
@@ -86,6 +89,55 @@ export const scanHealthMonitor = inngest.createFunction(
               .map((s: StuckScan) => `  - ${s.domain} (${s.status}, ${s.progress}%, started ${s.created_at})`)
               .join("\n")
         )
+      }
+    }
+
+    // Auto-recover: Mark stuck scans as failed and re-queue them
+    // Only re-queue outrankllm scans (HiringBrand has its own processing)
+    if (stuckScans.length > 0) {
+      const recoverable = stuckScans.filter((s: StuckScan) => !s.brand || s.brand === "outrankllm")
+
+      if (recoverable.length > 0) {
+        await step.run("auto-recover-stuck-scans", async () => {
+          const supabase = createServiceClient()
+
+          for (const scan of recoverable) {
+            // Mark as failed
+            await supabase
+              .from("scan_runs")
+              .update({
+                status: "failed",
+                error_message: "Auto-recovered by health monitor: scan stuck for >30 minutes",
+              })
+              .eq("id", scan.id)
+
+            // Re-queue if we have the lead_id (scheduled scans always do)
+            if (scan.lead_id && scan.domain) {
+              // Look up lead email for the scan event
+              const { data: lead } = await supabase
+                .from("leads")
+                .select("email")
+                .eq("id", scan.lead_id)
+                .single()
+
+              if (lead) {
+                await inngest.send({
+                  name: "scan/process",
+                  data: {
+                    scanId: null,
+                    domain: scan.domain,
+                    email: lead.email,
+                    leadId: scan.lead_id,
+                    domainSubscriptionId: scan.domain_subscription_id || undefined,
+                    skipEmail: false,
+                  },
+                })
+              }
+            }
+          }
+
+          console.log(`[HealthMonitor] Auto-recovered ${recoverable.length} stuck scan(s)`)
+        })
       }
     }
 

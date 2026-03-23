@@ -80,10 +80,13 @@ export const processScan = inngest.createFunction(
       },
     ],
     // Cancel any existing runs for the same scan when a new one starts
+    // Only match when scanId is not null — weekly scans use scanId: null,
+    // and null == null would cancel ALL concurrent weekly scans
     cancelOn: [
       {
         event: "scan/process",
         match: "data.scanId",
+        if: "event.data.scanId != null",
       },
     ],
   },
