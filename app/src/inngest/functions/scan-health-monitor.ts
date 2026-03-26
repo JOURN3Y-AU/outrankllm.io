@@ -15,6 +15,8 @@ interface StuckScan {
   brand: string | null
   lead_id: string | null
   domain_subscription_id: string | null
+  organization_id: string | null
+  monitored_domain_id: string | null
 }
 
 interface IncompleteSub {
@@ -57,7 +59,7 @@ export const scanHealthMonitor = inngest.createFunction(
 
       const { data, error } = await supabase
         .from("scan_runs")
-        .select("id, domain, status, progress, created_at, started_at, brand, lead_id, domain_subscription_id")
+        .select("id, domain, status, progress, created_at, started_at, brand, lead_id, domain_subscription_id, organization_id, monitored_domain_id")
         .not("status", "in", '("complete","failed")')
         .lt("created_at", cutoff)
         .order("created_at", { ascending: false })
@@ -84,7 +86,7 @@ export const scanHealthMonitor = inngest.createFunction(
       }
       if (hbScans.length > 0) {
         issues.push(
-          `**${hbScans.length} stuck HiringBrand scan(s):**\n` +
+          `**${hbScans.length} stuck HiringBrand scan(s) (auto-recovered):**\n` +
             hbScans
               .map((s: StuckScan) => `  - ${s.domain} (${s.status}, ${s.progress}%, started ${s.created_at})`)
               .join("\n")
@@ -93,15 +95,15 @@ export const scanHealthMonitor = inngest.createFunction(
     }
 
     // Auto-recover: Mark stuck scans as failed and re-queue them
-    // Only re-queue outrankllm scans (HiringBrand has its own processing)
     if (stuckScans.length > 0) {
-      const recoverable = stuckScans.filter((s: StuckScan) => !s.brand || s.brand === "outrankllm")
+      const outrankRecoverable = stuckScans.filter((s: StuckScan) => !s.brand || s.brand === "outrankllm")
+      const hbRecoverable = stuckScans.filter((s: StuckScan) => s.brand === "hiringbrand")
 
-      if (recoverable.length > 0) {
+      if (outrankRecoverable.length > 0) {
         await step.run("auto-recover-stuck-scans", async () => {
           const supabase = createServiceClient()
 
-          for (const scan of recoverable) {
+          for (const scan of outrankRecoverable) {
             // Mark as failed
             await supabase
               .from("scan_runs")
@@ -136,7 +138,39 @@ export const scanHealthMonitor = inngest.createFunction(
             }
           }
 
-          console.log(`[HealthMonitor] Auto-recovered ${recoverable.length} stuck scan(s)`)
+          console.log(`[HealthMonitor] Auto-recovered ${outrankRecoverable.length} stuck outrankllm scan(s)`)
+        })
+      }
+
+      if (hbRecoverable.length > 0) {
+        await step.run("auto-recover-stuck-hb-scans", async () => {
+          const supabase = createServiceClient()
+
+          for (const scan of hbRecoverable) {
+            // Mark as failed
+            await supabase
+              .from("scan_runs")
+              .update({
+                status: "failed",
+                error_message: "Auto-recovered by health monitor: scan stuck for >30 minutes",
+                completed_at: new Date().toISOString(),
+              })
+              .eq("id", scan.id)
+
+            // Re-queue if we have the organization_id and monitored_domain_id
+            if (scan.organization_id && scan.monitored_domain_id && scan.domain) {
+              await inngest.send({
+                name: "hiringbrand/scan" as const,
+                data: {
+                  domain: scan.domain,
+                  organizationId: scan.organization_id,
+                  monitoredDomainId: scan.monitored_domain_id,
+                },
+              })
+            }
+          }
+
+          console.log(`[HealthMonitor] Auto-recovered ${hbRecoverable.length} stuck HiringBrand scan(s)`)
         })
       }
     }
