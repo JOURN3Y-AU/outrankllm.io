@@ -4,6 +4,7 @@
  */
 
 import { detectPlatform, type PlatformDetection } from './platform-detect'
+import { extractHreflangCountries } from '@/lib/geo/detect'
 
 // Simple logger for crawl debugging
 const crawlLog = {
@@ -73,6 +74,7 @@ export interface CrawlResult {
   extractedLocations: string[]
   extractedServices: string[]
   extractedProducts: string[]
+  hreflangCountries: string[]  // Countries from <link rel="alternate" hreflang="..."> tags
   // Platform detection
   platformDetection: PlatformDetection | null
 }
@@ -534,6 +536,7 @@ export async function crawlSite(domain: string): Promise<CrawlResult> {
   let platformDetection: PlatformDetection | null = null
   let homepageHtml: string | null = null
   let homepageHeaders: Record<string, string> = {}
+  let hreflangCountries: string[] = []
 
   const homepageUrl = `https://${domain}`
   try {
@@ -557,6 +560,12 @@ export async function crawlSite(domain: string): Promise<CrawlResult> {
       crawlLog.info(`Platform detection: ${platformDetection.cms || 'Custom'}, Framework: ${platformDetection.framework || 'Unknown'}`)
       if (platformDetection.hasAiReadabilityIssues) {
         crawlLog.warn(`AI Readability issues detected: ${platformDetection.aiReadabilityIssues.join(', ')}`)
+      }
+
+      // Extract hreflang geo-targeting signals from homepage
+      hreflangCountries = extractHreflangCountries(homepageHtml)
+      if (hreflangCountries.length > 0) {
+        crawlLog.info(`Hreflang markets: ${hreflangCountries.join(', ')}`)
       }
     }
   } catch (error) {
@@ -658,6 +667,7 @@ export async function crawlSite(domain: string): Promise<CrawlResult> {
     extractedLocations: [...new Set(extractedLocations)],
     extractedServices: [...new Set(extractedServices)],
     extractedProducts: [...new Set(extractedProducts)],
+    hreflangCountries,
     platformDetection,
   }
 }
@@ -673,9 +683,14 @@ export function combineCrawledContent(result: CrawlResult): string {
   sections.push(`Has sitemap: ${result.hasSitemap ? 'Yes' : 'No'}`)
   sections.push(`Has robots.txt: ${result.hasRobotsTxt ? 'Yes' : 'No'}`)
 
+  // Include hreflang geo-targeting data — highest-confidence location signal
+  if (result.hreflangCountries.length > 0) {
+    sections.push(`\nHREFLANG TARGET MARKETS: ${result.hreflangCountries.join(', ')}`)
+  }
+
   // Include schema-extracted data upfront for the AI
   if (result.extractedLocations.length > 0) {
-    sections.push(`\nLOCATIONS FROM SCHEMA MARKUP: ${result.extractedLocations.join(', ')}`)
+    sections.push(`LOCATIONS FROM SCHEMA MARKUP: ${result.extractedLocations.join(', ')}`)
   }
   if (result.extractedServices.length > 0) {
     sections.push(`SERVICES FROM SCHEMA MARKUP: ${result.extractedServices.join(', ')}`)

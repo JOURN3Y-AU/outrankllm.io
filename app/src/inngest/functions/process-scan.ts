@@ -20,7 +20,7 @@ import { extractTopCompetitors } from "@/lib/ai/query"
 // Brand awareness is now handled by enrich-subscriber function
 import { sendVerificationEmail, sendScanCompleteEmail } from "@/lib/email/resend"
 import { trackServerEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
-import { detectGeography, extractTldCountry, countryToIsoCode } from "@/lib/geo/detect"
+import { detectGeography, extractTldCountry, detectLocationFromContent, countryToIsoCode } from "@/lib/geo/detect"
 import { log } from "@/lib/logger"
 import { getUserTier } from "@/lib/features/flags"
 import crypto from "crypto"
@@ -203,18 +203,34 @@ export const processScan = inngest.createFunction(
       const supabase = createServiceClient()
       await updateScanStatus(supabase, scanId, "analyzing", 25)
 
-      // Enhanced geo detection
-      const tldCountry = extractTldCountry(domain)
-      if (tldCountry) log.info(scanId, `TLD country: ${tldCountry}`)
-
       log.step(scanId, "Analyzing", "website content")
       const combinedContent = combineCrawledContent(crawlResult)
-      const analysis = await analyzeWebsite(combinedContent, tldCountry, scanId)
+
+      // Build location hint: content + hreflang signals take priority over TLD
+      const tldCountry = extractTldCountry(domain)
+      const contentGeo = detectLocationFromContent(combinedContent)
+      const hreflangCountries = crawlResult.hreflangCountries
+
+      let locationHint: string | null = null
+      if (hreflangCountries.length > 0) {
+        locationHint = hreflangCountries.length === 1
+          ? `Hreflang tags confirm this business targets ${hreflangCountries[0]}.`
+          : `Hreflang tags show this business targets multiple markets: ${hreflangCountries.join(', ')}.`
+        log.info(scanId, `Hreflang geo: ${hreflangCountries.join(', ')}`)
+      } else if (contentGeo.country) {
+        locationHint = `Content signals (${contentGeo.signals.join('; ')}) indicate this business is based in or primarily serves ${contentGeo.country}.`
+        log.info(scanId, `Content geo: ${contentGeo.country}`)
+      } else if (tldCountry) {
+        locationHint = `The domain uses a ${tldCountry} country code TLD, suggesting this business may operate in or primarily serve ${tldCountry}. Look for location hints in the content that confirm or clarify this.`
+        log.info(scanId, `TLD geo: ${tldCountry}`)
+      }
+
+      const analysis = await analyzeWebsite(combinedContent, locationHint, scanId)
       log.done(scanId, "Analysis", analysis.businessType)
 
-      // Enhanced geo detection - combine TLD + content + AI analysis
-      const geoResult = detectGeography(domain, combinedContent, analysis.location)
-      log.info(scanId, `Geo: ${geoResult.location} (${geoResult.confidence})`)
+      // Full geo detection combining all signals
+      const geoResult = detectGeography(domain, combinedContent, analysis.location, hreflangCountries)
+      log.info(scanId, `Geo: ${geoResult.location} (${geoResult.confidence}) signals: ${geoResult.signals.join(', ')}`)
 
       const finalLocation = geoResult.location || analysis.location
       const hasMetaDescriptions = crawlResult.pages.some((p) => p.hasMetaDescription)

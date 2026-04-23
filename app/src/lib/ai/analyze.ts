@@ -52,10 +52,10 @@ Respond with a JSON object containing:
 
 Return ONLY valid JSON, no other text.`
 
-export async function analyzeWebsite(crawledContent: string, tldCountry: string | null = null, runId?: string): Promise<BusinessAnalysis> {
+export async function analyzeWebsite(crawledContent: string, locationHint: string | null = null, runId?: string): Promise<BusinessAnalysis> {
   try {
-    const tldHint = tldCountry
-      ? `Note: The website domain uses a ${tldCountry} country code TLD, suggesting this business may be located in or primarily serve ${tldCountry}. Look for location hints that confirm or clarify this.`
+    const tldHint = locationHint
+      ? `Location context: ${locationHint}`
       : ''
 
     const prompt = ANALYSIS_PROMPT

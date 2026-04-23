@@ -1,5 +1,6 @@
 /**
- * Enhanced geographic detection combining TLD analysis and website content
+ * Enhanced geographic detection combining TLD analysis, hreflang tags, and website content.
+ * Signal priority: hreflang > schema address > content signals (phone/ABN/states) > TLD
  */
 
 // Country name to ISO 3166-1 alpha-2 code mapping
@@ -89,7 +90,6 @@ const TLD_COUNTRIES: Record<string, string> = {
   '.mx': 'Mexico',
   '.br': 'Brazil',
   '.ar': 'Argentina',
-  '.co': 'Colombia',
   '.cl': 'Chile',
 
   // Asia
@@ -115,6 +115,51 @@ const TLD_COUNTRIES: Record<string, string> = {
   '.ng': 'Nigeria',
   '.ke': 'Kenya',
 };
+
+// TLDs that are widely used as generic brand TLDs — NOT reliable geo signals
+// .co is Colombia's ccTLD but used globally (like .io, .ai, .me)
+const GENERIC_TLDS = new Set(['.co', '.io', '.ai', '.me', '.app', '.dev', '.ly', '.so', '.tv', '.fm', '.gg'])
+
+// ISO country codes from hreflang tags → country names
+const HREFLANG_COUNTRY_MAP: Record<string, string> = {
+  'AU': 'Australia', 'NZ': 'New Zealand', 'GB': 'United Kingdom',
+  'US': 'United States', 'CA': 'Canada', 'IE': 'Ireland',
+  'SG': 'Singapore', 'IN': 'India', 'ZA': 'South Africa',
+  'DE': 'Germany', 'FR': 'France', 'ES': 'Spain', 'IT': 'Italy',
+  'NL': 'Netherlands', 'BE': 'Belgium', 'AT': 'Austria', 'CH': 'Switzerland',
+  'SE': 'Sweden', 'NO': 'Norway', 'DK': 'Denmark', 'FI': 'Finland',
+  'PL': 'Poland', 'PT': 'Portugal', 'GR': 'Greece', 'JP': 'Japan',
+  'CN': 'China', 'KR': 'South Korea', 'HK': 'Hong Kong', 'TW': 'Taiwan',
+  'MY': 'Malaysia', 'TH': 'Thailand', 'PH': 'Philippines', 'ID': 'Indonesia',
+  'AE': 'United Arab Emirates', 'SA': 'Saudi Arabia', 'IL': 'Israel',
+  'BR': 'Brazil', 'MX': 'Mexico', 'AR': 'Argentina', 'CL': 'Chile',
+}
+
+/**
+ * Extract target countries from hreflang link tags in HTML.
+ * Returns countries in order of appearance — the first is usually the primary market.
+ * e.g. <link rel="alternate" hreflang="en-AU" href="..."> → ["Australia"]
+ */
+export function extractHreflangCountries(html: string): string[] {
+  const countries: string[] = []
+  const seen = new Set<string>()
+
+  const matches = html.matchAll(/<link[^>]*hreflang=["']([^"']+)["'][^>]*/gi)
+  for (const match of matches) {
+    const tag = match[1].trim()
+    if (tag === 'x-default') continue
+    const parts = tag.split('-')
+    if (parts.length >= 2) {
+      const code = parts[parts.length - 1].toUpperCase()
+      const country = HREFLANG_COUNTRY_MAP[code]
+      if (country && !seen.has(code)) {
+        seen.add(code)
+        countries.push(country)
+      }
+    }
+  }
+  return countries
+}
 
 // Major cities by country for location validation
 const MAJOR_CITIES: Record<string, string[]> = {
@@ -170,6 +215,8 @@ export function extractTldCountry(domain: string): string | null {
 
   for (const tld of sortedTlds) {
     if (lowerDomain.endsWith(tld)) {
+      // Skip TLDs that are commonly used as generic brand TLDs
+      if (GENERIC_TLDS.has(tld)) return null;
       return TLD_COUNTRIES[tld];
     }
   }
@@ -261,9 +308,49 @@ export function detectLocationFromContent(content: string): { country: string | 
     if (detectedCity) break;
   }
 
+  // Check for ABN / ACN (Australian Business Number / Company Number)
+  if (/\bABN[\s:]*\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\b/i.test(content) ||
+      /\bACN[\s:]*\d{3}\s?\d{3}\s?\d{3}\b/i.test(content)) {
+    signals.push('Australian business registration number (ABN/ACN) detected');
+    detectedCountry = 'Australia';
+  }
+
+  // Check for Australian mobile carriers (strong signal for AU-market products)
+  if (/\b(telstra|optus|vodafone australia)\b/i.test(content)) {
+    signals.push('Australian mobile carrier detected');
+    if (!detectedCountry) detectedCountry = 'Australia';
+  }
+
+  // Check for NZ carriers
+  if (/\b(spark nz|2degrees|vodafone new zealand)\b/i.test(content)) {
+    signals.push('New Zealand mobile carrier detected');
+    if (!detectedCountry) detectedCountry = 'New Zealand';
+  }
+
+  // Check for UK carriers
+  if (/\b(ee mobile|o2 uk|three uk|bt mobile|giffgaff)\b/i.test(content)) {
+    signals.push('UK mobile carrier detected');
+    if (!detectedCountry) detectedCountry = 'United Kingdom';
+  }
+
+  // Legal jurisdiction mentions in T&C / privacy policy
+  const auJurisdiction = /governed by the laws of\s+(new south wales|victoria|queensland|western australia|south australia|tasmania|australia)/i
+  if (auJurisdiction.test(content)) {
+    signals.push('Australian legal jurisdiction detected');
+    detectedCountry = 'Australia';
+  }
+  if (/governed by the laws of (england|scotland|wales|united kingdom)/i.test(content)) {
+    signals.push('UK legal jurisdiction detected');
+    if (!detectedCountry) detectedCountry = 'United Kingdom';
+  }
+
   // Check for currency symbols and mentions
+  if (/\bAUD\b|A\$\d/.test(content)) {
+    signals.push('Australian dollar (AUD) detected');
+    if (!detectedCountry) detectedCountry = 'Australia';
+  }
   if (/\$\d|AUD|A\$/i.test(content) && contentLower.includes('australia')) {
-    signals.push('Australian currency detected');
+    signals.push('Australian currency + country name detected');
     if (!detectedCountry) detectedCountry = 'Australia';
   }
   if (/£\d|GBP/i.test(content)) {
@@ -272,40 +359,51 @@ export function detectLocationFromContent(content: string): { country: string | 
   }
   if (/€\d|EUR/i.test(content)) {
     signals.push('Euro currency detected');
-    // Can't determine specific country from Euro
+    // Can't determine specific country from Euro alone
   }
 
   return { country: detectedCountry, city: detectedCity, signals };
 }
 
 /**
- * Combine multiple geo signals into a final location with confidence
+ * Combine multiple geo signals into a final location with confidence.
+ * Priority: hreflang > content signals (phone/ABN/carriers/legal) > TLD
  */
 export function combineGeoSignals(
   tldCountry: string | null,
   contentLocation: { country: string | null; city: string | null },
-  aiExtractedLocation: string | null
+  aiExtractedLocation: string | null,
+  hreflangCountries: string[] = []
 ): GeoDetectionResult {
   const signals: string[] = [];
   let finalCountry: string | null = null;
   let finalCity: string | null = null;
   let confidence: 'high' | 'medium' | 'low' = 'low';
 
-  // Start with TLD if available
-  if (tldCountry) {
-    signals.push(`TLD indicates ${tldCountry}`);
-    finalCountry = tldCountry;
+  // Priority 1: Hreflang — set deliberately by the business for SEO geo-targeting
+  if (hreflangCountries.length > 0) {
+    signals.push(`Hreflang tags target: ${hreflangCountries.join(', ')}`);
+    if (hreflangCountries.length === 1) {
+      // Single market — definitive
+      finalCountry = hreflangCountries[0];
+      confidence = 'high';
+    } else {
+      // Multi-market — use content/TLD to pick the primary; fall back to first hreflang
+      const contentConfirmed = hreflangCountries.find(c => contentLocation.country === c);
+      const tldConfirmed = hreflangCountries.find(c => tldCountry === c);
+      finalCountry = contentConfirmed || tldConfirmed || hreflangCountries[0];
+      confidence = (contentConfirmed || tldConfirmed) ? 'high' : 'medium';
+    }
   }
 
-  // Content analysis provides additional signals
+  // Priority 2: Content signals (phone numbers, ABN, carriers, legal text)
   if (contentLocation.country) {
-    signals.push(`Content analysis found ${contentLocation.country}`);
-    if (finalCountry && finalCountry === contentLocation.country) {
-      // TLD and content agree - high confidence
-      confidence = 'high';
-    } else if (!finalCountry) {
+    signals.push(`Content signals found: ${contentLocation.country}`);
+    if (!finalCountry) {
       finalCountry = contentLocation.country;
       confidence = 'medium';
+    } else if (finalCountry === contentLocation.country && confidence !== 'high') {
+      confidence = 'high';
     }
   }
 
@@ -314,13 +412,18 @@ export function combineGeoSignals(
     signals.push(`City detected: ${contentLocation.city}`);
   }
 
-  // AI extracted location can provide city-level detail
+  // Priority 3: TLD — weakest signal, only use as fallback
+  if (tldCountry && !finalCountry) {
+    signals.push(`TLD indicates ${tldCountry}`);
+    finalCountry = tldCountry;
+    // Keep confidence low — TLD alone is weak
+  }
+
+  // AI extracted location: use for city detail and confidence confirmation
   if (aiExtractedLocation) {
     signals.push(`AI analysis found: ${aiExtractedLocation}`);
 
-    // Try to extract city from AI location
-    if (!finalCity && aiExtractedLocation) {
-      // Check if AI location contains a known city
+    if (!finalCity) {
       for (const cities of Object.values(MAJOR_CITIES)) {
         for (const city of cities) {
           if (aiExtractedLocation.toLowerCase().includes(city.toLowerCase())) {
@@ -332,9 +435,8 @@ export function combineGeoSignals(
       }
     }
 
-    // If AI location mentions a country we already detected, increase confidence
     if (finalCountry && aiExtractedLocation.toLowerCase().includes(finalCountry.toLowerCase())) {
-      confidence = 'high';
+      if (confidence === 'medium') confidence = 'high';
     }
   }
 
@@ -349,11 +451,6 @@ export function combineGeoSignals(
     location = finalCountry;
   }
 
-  // Adjust confidence based on signal count
-  if (signals.length >= 3 && confidence === 'medium') {
-    confidence = 'high';
-  }
-
   return {
     location,
     country: finalCountry,
@@ -366,24 +463,18 @@ export function combineGeoSignals(
 }
 
 /**
- * Main function: Detect geographic location from domain and content
+ * Main function: Detect geographic location from domain, hreflang tags, and content.
+ * Pass hreflangCountries from the crawl result for best accuracy.
  */
 export function detectGeography(
   domain: string,
   websiteContent: string,
-  aiExtractedLocation: string | null = null
+  aiExtractedLocation: string | null = null,
+  hreflangCountries: string[] = []
 ): GeoDetectionResult {
-  // Step 1: Extract TLD country
   const tldCountry = extractTldCountry(domain);
-
-  // Step 2: Analyze website content for location signals
   const contentLocation = detectLocationFromContent(websiteContent);
-
-  // Step 3: Combine all signals
-  const result = combineGeoSignals(tldCountry, contentLocation, aiExtractedLocation);
-
-  // Add content signals to result
+  const result = combineGeoSignals(tldCountry, contentLocation, aiExtractedLocation, hreflangCountries);
   result.signals = [...result.signals, ...contentLocation.signals];
-
   return result;
 }
