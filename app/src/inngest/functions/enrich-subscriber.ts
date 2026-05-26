@@ -549,10 +549,12 @@ export const enrichSubscriber = inngest.createFunction(
         const generatedPlan = await generateActionPlan(actionPlanInput, scanRunId)
 
         // Archive any existing completed/dismissed actions before saving new ones
-        // First get the existing plan for this domain subscription or lead
+        // Get the most recent existing plan for this domain subscription or lead
         let existingPlanQuery = supabase
           .from("action_plans")
           .select("id")
+          .order("created_at", { ascending: false })
+          .limit(1)
 
         if (domainSubscriptionId) {
           existingPlanQuery = existingPlanQuery.eq("domain_subscription_id", domainSubscriptionId)
@@ -560,7 +562,8 @@ export const enrichSubscriber = inngest.createFunction(
           existingPlanQuery = existingPlanQuery.eq("lead_id", leadId)
         }
 
-        const { data: existingPlan } = await existingPlanQuery.single()
+        const { data: existingPlans } = await existingPlanQuery
+        const existingPlan = existingPlans?.[0] || null
 
         let existingActions: { id: string; title: string; description: string; category: string | null; status: string }[] | null = null
         if (existingPlan) {
@@ -589,16 +592,15 @@ export const enrichSubscriber = inngest.createFunction(
           log.info(scanRunId, `Archived ${historyInserts.length} completed actions to history`)
         }
 
-        // Delete existing action plan for this domain subscription or lead (will recreate fresh)
-        let deletePlanQuery = supabase.from("action_plans").delete()
-        if (domainSubscriptionId) {
-          deletePlanQuery = deletePlanQuery.eq("domain_subscription_id", domainSubscriptionId)
-        } else {
-          deletePlanQuery = deletePlanQuery.eq("lead_id", leadId)
-        }
-        await deletePlanQuery
+        // Safety net: Also filter at insert time in case Claude still generates similar actions
+        // We already passed completedActionTitles to Claude, but this ensures no duplicates
+        const completedTitlesNormalized = new Set(completedActionTitles.map((t: string) => normalizeTitle(t)))
 
-        // Create new action plan
+        // Build action items first so we can include the accurate total_actions count in the plan
+        const filteredActions = generatedPlan.priorityActions
+          .filter((action) => !completedTitlesNormalized.has(normalizeTitle(action.title)))
+
+        // Create new action plan — old plans are preserved so old report URLs keep their data
         const { data: planData, error: planError } = await supabase
           .from("action_plans")
           .insert({
@@ -610,9 +612,10 @@ export const enrichSubscriber = inngest.createFunction(
             content_priorities: generatedPlan.contentPriorities,
             keyword_map: generatedPlan.keywordMap,
             key_takeaways: generatedPlan.keyTakeaways,
-            quick_wins_count: generatedPlan.priorityActions.filter((a) => a.effort === "low" && a.impact >= 2).length,
-            strategic_count: generatedPlan.priorityActions.filter((a) => a.effort === "medium").length,
-            backlog_count: generatedPlan.priorityActions.filter((a) => a.effort === "high").length,
+            total_actions: filteredActions.length,
+            quick_wins_count: filteredActions.filter((a) => a.effort === "low" && a.impact >= 2).length,
+            strategic_count: filteredActions.filter((a) => a.effort === "medium").length,
+            backlog_count: filteredActions.filter((a) => a.effort === "high").length,
           })
           .select("id")
           .single()
@@ -621,14 +624,7 @@ export const enrichSubscriber = inngest.createFunction(
           throw new Error(`Failed to create action plan: ${planError.message}`)
         }
 
-        // Safety net: Also filter at insert time in case Claude still generates similar actions
-        // We already passed completedActionTitles to Claude, but this ensures no duplicates
-        const completedTitlesNormalized = new Set(completedActionTitles.map((t: string) => normalizeTitle(t)))
-
-        // Insert action items (skip if similar action was previously completed)
-        const actionInserts = generatedPlan.priorityActions
-          .filter((action) => !completedTitlesNormalized.has(normalizeTitle(action.title)))
-          .map((action, index) => ({
+        const actionInserts = filteredActions.map((action, index) => ({
             plan_id: planData.id,
             title: action.title,
             description: action.description,
@@ -651,6 +647,13 @@ export const enrichSubscriber = inngest.createFunction(
           const { error: itemsError } = await supabase.from("action_items").insert(actionInserts)
           if (itemsError) {
             log.warn(scanRunId, `Failed to insert action items: ${itemsError.message}`)
+          } else {
+            // Update total_actions with accurate count after successful insert
+            // This guards against any count mismatch from the initial insert
+            await supabase
+              .from("action_plans")
+              .update({ total_actions: actionInserts.length })
+              .eq("id", planData.id)
           }
         }
 

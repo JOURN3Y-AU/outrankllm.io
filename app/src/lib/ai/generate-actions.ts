@@ -495,6 +495,50 @@ CATEGORY DEFINITIONS:
 - citations: Getting mentioned in authoritative sources
 - local: Geographic/location-based optimizations
 
+ONLINE-ONLY / NATIONAL SERVICE BUSINESSES - CRITICAL SCHEMA GUIDANCE:
+When a business has a physical address in one city but serves customers nationally or across a broader region online (e.g. online lenders, SaaS, telecoms, insurance, e-commerce), apply this pattern:
+
+1. DETECT the mismatch: Physical location listed (e.g. "Sydney") but services are online/national. Signals include:
+   - Domain is .com.au / .co.uk / .com but location is a single city
+   - Services include "online application", "nationwide", "across Australia/UK/US"
+   - Industry is financial services, insurance, SaaS, e-commerce, telecoms
+   - The business type suggests customers don't visit the physical location
+
+2. DO NOT recommend LocalBusiness schema alone — it implies a physical premises customers visit.
+   Instead recommend the correct industry-specific schema type:
+   - Financial services / lenders: "@type": ["FinancialService", "LocalBusiness"] with areaServed
+   - Insurance: "@type": ["InsuranceAgency", "LocalBusiness"] with areaServed
+   - Online retail: "@type": ["OnlineStore", "Organization"] with areaServed
+   - SaaS / software: "@type": "SoftwareApplication" or "Organization" with areaServed
+   - General online business: "@type": ["Service", "Organization"] with areaServed
+
+3. ALWAYS recommend the areaServed field to explicitly declare geographic reach:
+   - National (recommended for online-only): "areaServed": {"@type": "Country", "name": "Australia"}
+   - Multi-state: "areaServed": [{"@type": "State", "name": "NSW"}, {"@type": "State", "name": "VIC"}]
+   - Specific region/suburb targeting: "areaServed": [{"@type": "Country", "name": "Australia"}, {"@type": "AdministrativeArea", "name": "Western Sydney"}, {"@type": "AdministrativeArea", "name": "Regional NSW"}]
+   - IMPORTANT: For businesses targeting suburbs and regional areas (not just CBDs), listing both the
+     Country AND key AdministrativeArea regions signals to AI that this business is relevant to
+     non-metropolitan searches — which is especially powerful for financial services, healthcare,
+     and services where metro competitors dominate but regional demand is underserved.
+   - Without areaServed, AI platforms assume the business only serves its registered address city
+
+4. ALWAYS pair the physical address with a serviceChannel block to clarify online delivery:
+   "availableChannel": {
+     "@type": "ServiceChannel",
+     "serviceUrl": "https://domain.com/apply",
+     "serviceType": "Online",
+     "availableLanguage": "English"
+   }
+
+5. For LOCATION-SPECIFIC landing pages (e.g. /personal-loans-sydney), use a SCOPED variant:
+   Add a page-specific schema block with "areaServed": {"@type": "City", "name": "Sydney"}
+   Keep the sitewide schema with the full national areaServed — these don't conflict.
+   This tells AI: "this page is specifically about Sydney" without limiting national positioning.
+
+6. EXPLAIN the impact clearly in the recommendation: without areaServed, AI treats the business
+   as Sydney-only. With areaServed set to the country, AI will correctly recommend the business
+   for queries from any location in that country.
+
 PLATFORM-SPECIFIC RECOMMENDATIONS:
 When platform/CMS data is available, you MUST tailor recommendations to the specific technology stack. This is critical for actionable advice.
 
