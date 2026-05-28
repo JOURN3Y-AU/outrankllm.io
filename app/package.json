@@ -27,7 +27,7 @@
     "clsx": "^2.1.1",
     "gray-matter": "^4.0.3",
     "html2canvas": "^1.4.1",
-    "inngest": "^3.49.1",
+    "inngest": "^3.54.2",
     "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.1.0",
