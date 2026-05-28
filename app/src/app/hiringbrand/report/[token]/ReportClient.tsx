@@ -822,7 +822,8 @@ export function ReportClient({ data, userRole = null, isSuperAdmin = false }: Re
                       alignSelf: 'stretch',
                     }}
                   >
-                    {report.strategicSummary.scoreInterpretation.differentiation}
+                    {report.strategicSummary.scoreInterpretation.differentiation
+                      .replace(/\b\d+\/100\b/, `${report.differentiationScore ?? 0}/100`)}
                   </p>
                 )}
                 <button

@@ -89,7 +89,12 @@ async function getTrendsData(
       competitorRank: h.competitor_rank,
       competitorCount: h.competitor_count,
       dimensionScores: (h.dimension_scores || {}) as Record<HBEmployerDimension, number>,
-      roleFamilyScores: (h.role_family_scores || {}) as HBRoleFamilyScores,
+      roleFamilyScores: Object.fromEntries(
+        Object.entries((h.role_family_scores || {}) as HBRoleFamilyScores).map(([k, v]) => [
+          k,
+          { ...v, differentiation: v.differentiation != null ? scaleDifferentiationScore(v.differentiation) ?? undefined : undefined },
+        ])
+      ) as HBRoleFamilyScores,
     }))
 
   // Deduplicate competitor history - keep only most recent entry per day
