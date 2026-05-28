@@ -130,6 +130,12 @@ export async function generateStrategicSummary(
   const target = competitorAnalysis.employers.find((e) => e.isTarget)
   const competitors = competitorAnalysis.employers.filter((e) => !e.isTarget)
 
+  // Filter out the company being analyzed — it can appear in topCompetitors because AI
+  // responses frequently mention the employer by name when describing them.
+  const filteredTopCompetitors = topCompetitors.filter(
+    (c) => c.name.toLowerCase() !== companyName.toLowerCase()
+  )
+
   if (!target) {
     throw new Error('Target employer not found in competitor analysis')
   }
@@ -217,7 +223,7 @@ SENTIMENT DISTRIBUTION (${totalResponses} responses):
 - Mixed (4-5): ${sentimentCounts.mixed} (${Math.round(sentimentCounts.mixed / totalResponses * 100)}%)
 - Negative (1-3): ${sentimentCounts.negative} (${Math.round(sentimentCounts.negative / totalResponses * 100)}%)
 
-TOP COMPETITOR MENTIONS: ${topCompetitors.slice(0, 5).map(c => c.name).join(', ')}
+COMPETITORS (use these names for topCompetitor — NEVER use ${companyName} itself): ${filteredTopCompetitors.slice(0, 5).map(c => c.name).join(', ')}
 
 COMPETITOR HIGHLIGHTS:
 ${competitorHighlights}
@@ -253,10 +259,17 @@ Create a strategic summary that a recruitment agent could confidently present to
       competitorAvg: competitorAvg[s.dimension] || 5,
     }))
 
+    // Fallback competitor name if the AI picked the company itself
+    const fallbackCompetitor = filteredTopCompetitors[0]?.name ?? competitors[0]?.name ?? 'a competitor'
+
     const enrichedGaps = result.object.gaps.slice(0, 3).map((g) => ({
       ...g,
       score: target.scores[g.dimension as EmployerDimension] || 5,
       competitorAvg: competitorAvg[g.dimension] || 5,
+      topCompetitor:
+        g.topCompetitor.toLowerCase() === companyName.toLowerCase()
+          ? fallbackCompetitor
+          : g.topCompetitor,
     }))
 
     return {
