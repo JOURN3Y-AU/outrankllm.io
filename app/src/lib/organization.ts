@@ -9,7 +9,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 // TYPES
 // ============================================
 
-export type OrganizationTier = 'brand' | 'agency_10' | 'agency_20' | 'enterprise'
+export type OrganizationTier = 'brand' | 'pro_5' | 'agency_10' | 'agency_20' | 'enterprise'
 export type OrganizationStatus = 'active' | 'past_due' | 'canceled' | 'incomplete'
 export type MemberRole = 'owner' | 'admin' | 'viewer'
 
@@ -91,9 +91,10 @@ export interface UpdateOrganizationInput {
 // Tier to domain limit mapping
 export const TIER_DOMAIN_LIMITS: Record<OrganizationTier, number> = {
   brand: 1,
+  pro_5: 5,
   agency_10: 10,
   agency_20: 20,
-  enterprise: 100, // custom, but need a default
+  enterprise: 100,
 }
 
 // ============================================

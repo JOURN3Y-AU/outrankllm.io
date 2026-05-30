@@ -16,6 +16,8 @@ import {
   Zap,
   TrendingUp,
   MessageSquare,
+  Check,
+  Tag,
 } from 'lucide-react'
 
 const hbStyles = {
@@ -442,21 +444,36 @@ export default function HiringBrandLandingPage() {
             hiring<span style={{ fontWeight: 800 }}>brand</span>
             <span style={{ color: 'var(--hb-gold)' }}>.io</span>
           </span>
-          <Link
-            href="/hiringbrand/login"
-            style={{
-              fontSize: '14px',
-              fontWeight: 500,
-              color: 'var(--hb-slate-mid)',
-              textDecoration: 'none',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: '1.5px solid var(--hb-surface-dim)',
-              transition: 'border-color 0.2s',
-            }}
-          >
-            Sign In
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Link
+              href="/hiringbrand/login"
+              style={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'var(--hb-slate-mid)',
+                textDecoration: 'none',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: '1.5px solid var(--hb-surface-dim)',
+              }}
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/hiringbrand/signup"
+              style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'white',
+                textDecoration: 'none',
+                padding: '8px 18px',
+                borderRadius: '8px',
+                background: 'var(--hb-coral)',
+              }}
+            >
+              Get 2 months free
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -470,26 +487,30 @@ export default function HiringBrandLandingPage() {
         <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
           <div
             style={{
-              maxWidth: '640px',
+              maxWidth: '680px',
               margin: '0 auto',
               textAlign: 'center',
-              marginBottom: '48px',
+              marginBottom: '40px',
             }}
           >
             <div
               style={{
-                display: 'inline-block',
-                padding: '6px 14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 18px',
                 borderRadius: '100px',
-                background: 'rgba(74, 189, 172, 0.15)',
-                color: 'var(--hb-teal-deep)',
-                fontSize: '13px',
-                fontWeight: 600,
+                background: 'var(--hb-gold)',
+                color: 'var(--hb-slate)',
+                fontSize: '14px',
+                fontWeight: 700,
                 marginBottom: '24px',
                 fontFamily: "'Source Sans 3', sans-serif",
               }}
             >
-              AI Employer Reputation Intelligence
+              <Tag size={14} />
+              Webinar offer: 2 months free with code{' '}
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.5px' }}>TORCPro</span>
             </div>
             <h1
               style={{
@@ -510,16 +531,62 @@ export default function HiringBrandLandingPage() {
                 fontSize: '18px',
                 color: 'var(--hb-slate-mid)',
                 lineHeight: 1.6,
+                marginBottom: '32px',
                 fontFamily: "'Source Sans 3', sans-serif",
               }}
             >
               Platforms like ChatGPT, Claude, and Gemini are shaping how candidates perceive
               employer brands. Find out what they&apos;re saying.
             </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Link
+                href="/hiringbrand/signup"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '15px 28px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  background: 'var(--hb-coral)',
+                  color: 'white',
+                  borderRadius: '10px',
+                  textDecoration: 'none',
+                  fontFamily: "'Outfit', sans-serif",
+                }}
+              >
+                Get 2 months free
+                <ArrowRight size={18} />
+              </Link>
+              <a
+                href="#demo"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('demo-form')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '15px 28px',
+                  fontSize: '16px',
+                  fontWeight: 500,
+                  background: 'white',
+                  color: 'var(--hb-teal-deep)',
+                  borderRadius: '10px',
+                  textDecoration: 'none',
+                  border: '1.5px solid var(--hb-teal)',
+                  fontFamily: "'Source Sans 3', sans-serif",
+                }}
+              >
+                Book a Demo
+              </a>
+            </div>
           </div>
 
           {/* Lead form card */}
           <div
+            id="demo-form"
             style={{
               maxWidth: '480px',
               margin: '0 auto',
@@ -529,6 +596,9 @@ export default function HiringBrandLandingPage() {
               boxShadow: '0 4px 24px rgba(0, 0, 0, 0.06)',
             }}
           >
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--hb-slate)', marginBottom: '20px', fontFamily: "'Outfit', sans-serif", textAlign: 'center' }}>
+              Book a Demo
+            </h3>
             <Suspense
               fallback={
                 <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -788,12 +858,8 @@ export default function HiringBrandLandingPage() {
 
           {/* Bottom CTA */}
           <div style={{ textAlign: 'center', marginTop: '48px' }}>
-            <a
-              href="#top"
-              onClick={(e) => {
-                e.preventDefault()
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
+            <Link
+              href="/hiringbrand/signup"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -803,9 +869,7 @@ export default function HiringBrandLandingPage() {
                 fontWeight: 600,
                 background: 'var(--hb-coral)',
                 color: 'white',
-                border: 'none',
                 borderRadius: '10px',
-                cursor: 'pointer',
                 textDecoration: 'none',
                 transition: 'transform 0.1s, box-shadow 0.2s',
               }}
@@ -818,9 +882,128 @@ export default function HiringBrandLandingPage() {
                 e.currentTarget.style.boxShadow = 'none'
               }}
             >
-              Book a Demo
+              Get 2 months free
               <TrendingUp size={18} />
-            </a>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section style={{ padding: '80px 24px', background: 'white' }} id="pricing">
+        <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <h2 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--hb-slate)', marginBottom: '12px', fontFamily: "'Outfit', sans-serif" }}>
+              Simple pricing
+            </h2>
+            <p style={{ fontSize: '16px', color: 'var(--hb-slate-mid)', lineHeight: 1.6, fontFamily: "'Source Sans 3', sans-serif" }}>
+              One plan, everything included, no surprises.
+            </p>
+          </div>
+
+          {/* Pricing card */}
+          <div style={{
+            border: '2px solid var(--hb-teal)',
+            borderRadius: '20px',
+            overflow: 'hidden',
+            boxShadow: '0 8px 32px rgba(74, 189, 172, 0.12)',
+          }}>
+            {/* Card header */}
+            <div style={{ background: 'var(--hb-teal)', padding: '28px 36px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px', fontFamily: "'Source Sans 3', sans-serif" }}>
+                    Pro Plan
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                    <span style={{ fontSize: '44px', fontWeight: 700, color: 'white', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>A$89</span>
+                    <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.8)', fontFamily: "'Source Sans 3', sans-serif" }}>/month</span>
+                  </div>
+                </div>
+                <div style={{ background: 'var(--hb-gold)', color: 'var(--hb-slate)', fontSize: '12px', fontWeight: 700, padding: '6px 12px', borderRadius: '100px', fontFamily: "'Source Sans 3', sans-serif", whiteSpace: 'nowrap' }}>
+                  2 months free — code TORCPro
+                </div>
+              </div>
+            </div>
+
+            {/* Card body */}
+            <div style={{ padding: '32px 36px' }}>
+              {[
+                'Monitor up to 5 employer brands',
+                'Scan ChatGPT, Claude, Gemini & Perplexity',
+                'Weekly automated rescans',
+                'Competitor benchmarking & radar chart',
+                '90-day action plan with recommendations',
+                'PDF & PowerPoint exports',
+                'Trend tracking over time',
+                'Invite team members',
+              ].map((feature) => (
+                <div key={feature} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--hb-teal-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Check size={12} style={{ color: 'var(--hb-teal-deep)' }} />
+                  </div>
+                  <span style={{ fontSize: '15px', color: 'var(--hb-slate-mid)', fontFamily: "'Source Sans 3', sans-serif" }}>{feature}</span>
+                </div>
+              ))}
+
+              {/* Promo code banner */}
+              <div style={{ background: 'var(--hb-gold)', borderRadius: '12px', padding: '16px 20px', margin: '24px 0', textAlign: 'center' }}>
+                <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--hb-slate)', margin: '0 0 4px', fontFamily: "'Outfit', sans-serif" }}>
+                  2 months free — webinar offer
+                </p>
+                <p style={{ fontSize: '14px', color: 'var(--hb-slate)', margin: 0, fontFamily: "'Source Sans 3', sans-serif" }}>
+                  Enter code{' '}
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '15px', background: 'rgba(0,0,0,0.1)', padding: '2px 8px', borderRadius: '4px' }}>TORCPro</span>
+                  {' '}at checkout
+                </p>
+              </div>
+
+              <Link
+                href="/hiringbrand/signup"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  fontFamily: "'Outfit', sans-serif",
+                  background: 'var(--hb-coral)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  textDecoration: 'none',
+                  transition: 'transform 0.1s, box-shadow 0.2s',
+                  boxSizing: 'border-box',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(252, 74, 26, 0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              >
+                Get Started
+                <ArrowRight size={18} />
+              </Link>
+              <p style={{ textAlign: 'center', marginTop: '12px', fontSize: '13px', color: 'var(--hb-slate-light)', fontFamily: "'Source Sans 3', sans-serif" }}>
+                Secure payment via Stripe · Cancel anytime
+              </p>
+            </div>
+          </div>
+
+          {/* Enterprise callout */}
+          <div style={{ textAlign: 'center', marginTop: '28px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--hb-slate-mid)', fontFamily: "'Source Sans 3', sans-serif" }}>
+              Need 10+ brands or custom onboarding?{' '}
+              <a href="mailto:hello@hiringbrand.io" style={{ color: 'var(--hb-teal-deep)', fontWeight: 500, textDecoration: 'none' }}>
+                Talk to us →
+              </a>
+            </p>
           </div>
         </div>
       </section>

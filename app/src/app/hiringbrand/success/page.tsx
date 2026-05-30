@@ -234,6 +234,7 @@ function SuccessContent() {
                 </div>
                 <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--hb-slate)' }}>
                   {orgData.tier === 'brand' ? 'Brand' :
+                   orgData.tier === 'pro_5' ? 'Pro' :
                    orgData.tier === 'agency_10' ? 'Agency 10' :
                    orgData.tier === 'agency_20' ? 'Agency 20' : orgData.tier}
                 </div>

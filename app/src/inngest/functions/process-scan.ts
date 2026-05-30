@@ -37,27 +37,49 @@ const processScanFailureHandler = inngest.createFunction(
   { id: "process-scan-failure" },
   { event: "inngest/function.failed", if: 'event.data.function_id == "process-scan"' },
   async ({ event }) => {
-    const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string } } | undefined
+    const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string; leadId?: string } } | undefined
     const scanId = originalEvent?.data?.scanId
     const domain = originalEvent?.data?.domain
+    const leadId = originalEvent?.data?.leadId
     const errorMessage = (event.data.error as { message?: string })?.message || "Unknown error"
 
-    if (!scanId) {
-      console.error("[process-scan-failure] No scanId in failed event, cannot update DB")
+    const supabase = createServiceClient()
+
+    let resolvedScanId = scanId || null
+
+    // Weekly scans use scanId: null — the scan_run is created inside the function.
+    // Fall back to finding the most recent non-terminal scan for this lead+domain.
+    if (!resolvedScanId && domain && leadId) {
+      const { data: scan } = await supabase
+        .from("scan_runs")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("domain", domain)
+        .not("status", "in", '("complete","failed")')
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (scan) {
+        resolvedScanId = scan.id
+      }
+    }
+
+    if (!resolvedScanId) {
+      console.error("[process-scan-failure] Could not resolve scanId, cannot update DB")
       return { updated: false }
     }
 
-    const supabase = createServiceClient()
     await supabase
       .from("scan_runs")
       .update({
         status: "failed",
         error_message: `Inngest function failed: ${errorMessage}`.slice(0, 500),
       })
-      .eq("id", scanId)
+      .eq("id", resolvedScanId)
 
-    console.error(`[process-scan-failure] Marked scan ${scanId} (${domain}) as failed: ${errorMessage}`)
-    return { updated: true, scanId, domain }
+    console.error(`[process-scan-failure] Marked scan ${resolvedScanId} (${domain}) as failed: ${errorMessage}`)
+    return { updated: true, scanId: resolvedScanId, domain }
   }
 )
 
@@ -67,15 +89,15 @@ export const processScan = inngest.createFunction(
   {
     id: "process-scan",
     retries: 3,
-    // Total function timeout: 10 minutes (parallel platform queries + finalization)
+    // Total function timeout: 20 minutes (buffer for slow API responses under load)
     timeouts: {
-      finish: "10m",
+      finish: "20m",
     },
     // Limit concurrent scans to prevent LLM API rate limiting
     // when weekly dispatcher fires all subscriber scans at once
     concurrency: [
       {
-        limit: 3,
+        limit: 5,
         scope: "fn",
       },
     ],

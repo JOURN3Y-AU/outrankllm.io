@@ -128,6 +128,7 @@ function formatDate(dateStr: string | null): string {
 function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, { bg: string; text: string }> = {
     brand: { bg: hb.tealLight, text: hb.tealDeep },
+    pro_5: { bg: `${hb.gold}25`, text: '#B8860B' },
     agency_10: { bg: hb.goldLight, text: '#B8860B' },
     agency_20: { bg: hb.goldLight, text: '#B8860B' },
     enterprise: { bg: `${hb.coral}15`, text: hb.coral },
@@ -781,6 +782,7 @@ function EditRow({
       <td style={{ padding: '12px 8px' }}>
         <select value={tier} onChange={(e) => setTier(e.target.value)} style={selectStyle}>
           <option value="brand">brand</option>
+          <option value="pro_5">pro_5</option>
           <option value="agency_10">agency_10</option>
           <option value="agency_20">agency_20</option>
           <option value="enterprise">enterprise</option>
@@ -1004,6 +1006,7 @@ function CreateOrgForm({
               style={{ ...inputStyle, background: hb.surface }}
             >
               <option value="brand">brand</option>
+              <option value="pro_5">pro_5</option>
               <option value="agency_10">agency_10</option>
               <option value="agency_20">agency_20</option>
               <option value="enterprise">enterprise</option>

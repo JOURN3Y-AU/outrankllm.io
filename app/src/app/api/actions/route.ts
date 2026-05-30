@@ -136,7 +136,27 @@ export async function GET(request: Request) {
       planQuery = planQuery.order('created_at', { ascending: false }).limit(1)
     }
 
-    const { data: plan, error: planError } = await planQuery.single()
+    let { data: plan, error: planError } = await planQuery.single()
+
+    // If no plan found for this specific run_id, fall back to the latest plan for the domain.
+    // This handles old report URLs where the plan was replaced by a newer scan's enrichment.
+    if ((planError || !plan) && runId) {
+      let fallbackQuery = supabase
+        .from('action_plans')
+        .select('*, page_edits, keyword_map, key_takeaways')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (domainSubscriptionId) {
+        fallbackQuery = fallbackQuery.eq('domain_subscription_id', domainSubscriptionId)
+      } else {
+        fallbackQuery = fallbackQuery.eq('lead_id', leadId)
+      }
+
+      const { data: fallbackPlan } = await fallbackQuery.single()
+      plan = fallbackPlan ?? null
+      planError = null
+    }
 
     if (planError || !plan) {
       // No plan exists yet - may still be generating via enrichment

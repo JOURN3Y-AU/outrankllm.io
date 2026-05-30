@@ -16,6 +16,7 @@ export type BillingFrequency = 'monthly' | 'annual'
 // Tier display names
 export const HB_TIER_NAMES: Record<OrganizationTier, string> = {
   brand: 'Brand',
+  pro_5: 'Pro',
   agency_10: 'Agency 10',
   agency_20: 'Agency 20',
   enterprise: 'Enterprise',
@@ -25,11 +26,13 @@ export const HB_TIER_NAMES: Record<OrganizationTier, string> = {
 export const HB_TIER_PRICES: Record<PricingRegion, Record<Exclude<OrganizationTier, 'enterprise'>, number>> = {
   AU: {
     brand: 99,
+    pro_5: 89,
     agency_10: 449,
-    agency_20: 899, // ~$899 AUD target
+    agency_20: 899,
   },
   INTL: {
     brand: 79,
+    pro_5: 89,
     agency_10: 349,
     agency_20: 599,
   },
@@ -88,6 +91,7 @@ export const HB_STRIPE_PRICES: Record<
   AU: {
     monthly: {
       brand: process.env.STRIPE_HB_BRAND_MONTHLY_AU,
+      pro_5: process.env.STRIPE_HB_PRO5_MONTHLY_AU,
       agency_10: process.env.STRIPE_HB_AGENCY10_MONTHLY_AU,
       agency_20: process.env.STRIPE_HB_AGENCY20_MONTHLY_AU,
     },
@@ -134,6 +138,7 @@ export function isHiringBrandPrice(priceId: string): boolean {
 // Domain limits per tier
 export const HB_DOMAIN_LIMITS: Record<OrganizationTier, number> = {
   brand: 1,
+  pro_5: 5,
   agency_10: 10,
   agency_20: 20,
   enterprise: 100,
