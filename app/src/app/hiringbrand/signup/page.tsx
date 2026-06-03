@@ -196,7 +196,7 @@ function SignupForm() {
 
         {/* First employer domain */}
         <div style={{ marginBottom: '28px' }}>
-          <label style={labelStyle}>First Employer to Monitor</label>
+          <label style={labelStyle}>First Employer Domain to Monitor</label>
           <div style={{ position: 'relative' }}>
             <Globe size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: C.slateLight, pointerEvents: 'none' }} />
             <input
@@ -211,7 +211,7 @@ function SignupForm() {
             />
           </div>
           <p style={{ fontSize: '12px', color: C.slateLight, marginTop: '5px' }}>
-            You can add up to 4 more brands after signup
+            Enter the employer&apos;s website domain (e.g. letstorc.com) · You can add up to 4 more after signup
           </p>
         </div>
 
