@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { generateText, createGateway } from 'ai'
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { getAdminSession } from '@/lib/admin'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from '@/lib/ai/anthropic-model'
+import {
+  CLAUDE_MODEL,
+  CLAUDE_GATEWAY_MODEL,
+  CLAUDE_PROVIDER_OPTIONS,
+  isModelUnavailableError,
+} from '@/lib/ai/anthropic-model'
+
+// Same construction as the scan pipeline, so this checks what actually runs.
+const gateway = createGateway({
+  apiKey: process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '',
+})
+const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' })
 
 /**
  * Admin endpoint that pings every model the scan pipeline depends on.
@@ -35,67 +48,40 @@ interface ModelStatus {
   model: string
   via: 'anthropic' | 'gateway'
   ok: boolean
-  status: number | null
   error: string | null
+  /** True when the failure is a retired/inaccessible model ID, not a transient error. */
+  unavailable?: boolean
 }
 
-/** Cheapest possible round trip that still proves the model ID resolves. */
+/**
+ * Cheapest round trip that still proves the model ID resolves.
+ *
+ * Deliberately goes through the same `ai` SDK providers the scan pipeline uses,
+ * rather than raw fetch. The gateway authenticates via Vercel OIDC when no
+ * explicit key is set, so a hand-rolled Bearer request reports a false failure
+ * in production while the real scan path works fine.
+ */
 async function ping(check: (typeof CHECKS)[number]): Promise<ModelStatus> {
-  const base: Omit<ModelStatus, 'ok' | 'status' | 'error'> = {
+  const base: Omit<ModelStatus, 'ok' | 'error'> = {
     platform: check.platform,
     model: check.model,
     via: check.via,
   }
 
   try {
-    const response =
-      check.via === 'anthropic'
-        ? await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-              'anthropic-version': '2023-06-01',
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: check.model,
-              max_tokens: 1,
-              messages: [{ role: 'user', content: 'ping' }],
-            }),
-          })
-        : await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || ''}`,
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: check.model,
-              max_tokens: 1,
-              messages: [{ role: 'user', content: 'ping' }],
-            }),
-          })
-
-    if (response.ok) {
-      return { ...base, ok: true, status: response.status, error: null }
-    }
-
-    const body = (await response.json().catch(() => null)) as
-      | { error?: { message?: string } }
-      | null
-
-    return {
-      ...base,
-      ok: false,
-      status: response.status,
-      error: body?.error?.message ?? `HTTP ${response.status}`,
-    }
+    await generateText({
+      model: check.via === 'anthropic' ? anthropic(check.model) : gateway(check.model),
+      prompt: 'ping',
+      maxOutputTokens: 4,
+      providerOptions: CLAUDE_PROVIDER_OPTIONS,
+    })
+    return { ...base, ok: true, error: null }
   } catch (error) {
     return {
       ...base,
       ok: false,
-      status: null,
       error: error instanceof Error ? error.message : 'Request failed',
+      unavailable: isModelUnavailableError(error),
     }
   }
 }
