@@ -21,7 +21,10 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'o4-mini-search': { input: 0.0011, output: 0.0044 },  // o4-mini with web search
   'gpt-4o-search': { input: 0.0025, output: 0.01 },  // gpt-4o with web search (outrankllm brand scans)
   // Anthropic
-  'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },
+  // NOTE: when CLAUDE_MODEL changes in src/lib/ai/anthropic-model.ts, add the new
+  // ID here too — an unpriced model silently tracks $0 cost.
+  'claude-sonnet-5': { input: 0.003, output: 0.015 },
+  'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },  // retired 2026-06-15
   'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
   'claude-3-haiku-20240307': { input: 0.00025, output: 0.00125 },
   // Google
@@ -42,6 +45,7 @@ const MODEL_MAP: Record<string, string> = {
   'openai/o4-mini': 'o4-mini',
   'openai/o4-mini-search': 'o4-mini-search',
   'openai/gpt-4o-search': 'gpt-4o-search',
+  'anthropic/claude-sonnet-5': 'claude-sonnet-5',
   'anthropic/claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
   'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
   'anthropic/claude-3-haiku-20240307': 'claude-3-haiku-20240307',

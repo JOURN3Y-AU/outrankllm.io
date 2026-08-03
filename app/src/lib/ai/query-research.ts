@@ -15,6 +15,7 @@ const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
 })
 import type { BusinessAnalysis } from './analyze'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
 
 // Check if gateway API key is available
 const hasGatewayKey = !!(process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY)
@@ -240,7 +241,7 @@ export async function researchQueriesOnPlatform(
     // Use gateway if available, otherwise use direct SDK
     const modelMap: Record<Platform, string> = {
       chatgpt: 'openai/gpt-4o',
-      claude: 'anthropic/claude-sonnet-4-20250514',
+      claude: CLAUDE_GATEWAY_MODEL,
       gemini: 'google/gemini-2.0-flash',
     }
 
@@ -250,7 +251,7 @@ export async function researchQueriesOnPlatform(
       : platform === 'chatgpt'
         ? openai('gpt-4o')
         : platform === 'claude'
-          ? anthropic('claude-sonnet-4-20250514')
+          ? anthropic(CLAUDE_MODEL)
           : google('gemini-2.0-flash')
 
     const result = await generateText({

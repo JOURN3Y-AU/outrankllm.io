@@ -12,6 +12,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { trackCost } from './costs'
 import type { HBJobFamily, HBResponse } from '@/app/hiringbrand/report/components/shared/types'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, CLAUDE_PROVIDER_OPTIONS } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -215,11 +216,13 @@ Keep recommendations SPECIFIC to ${roleFamilyDisplayName} — not generic employ
 
   try {
     const result = await generateObject({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       schema: roleActionPlanSchema,
       system: systemPrompt,
       prompt: userPrompt,
-      temperature: 0.3, // Lower temperature for consistent strategic advice
+      // No temperature: Claude Sonnet 5 rejects non-default sampling params with
+      // a 400. Consistency comes from the schema + prompt instead.
+      providerOptions: CLAUDE_PROVIDER_OPTIONS,
     })
 
     // Track cost
@@ -227,7 +230,7 @@ Keep recommendations SPECIFIC to ${roleFamilyDisplayName} — not generic employ
       await trackCost({
         runId,
         step: `role_action_plan_${roleFamily}`,
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

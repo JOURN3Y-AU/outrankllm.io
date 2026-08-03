@@ -9,6 +9,7 @@ import { openai } from '@ai-sdk/openai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { trackCost } from './costs'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
 
 // Initialize Google with explicit API key
 const google = createGoogleGenerativeAI({
@@ -190,7 +191,7 @@ export async function researchEmployerOnPlatform(
   try {
     const modelMap: Record<Platform, string> = {
       chatgpt: 'openai/gpt-4o',
-      claude: 'anthropic/claude-sonnet-4-20250514',
+      claude: CLAUDE_GATEWAY_MODEL,
       gemini: 'google/gemini-2.0-flash',
     }
 
@@ -199,7 +200,7 @@ export async function researchEmployerOnPlatform(
       : platform === 'chatgpt'
         ? openai('gpt-4o')
         : platform === 'claude'
-          ? anthropic('claude-sonnet-4-20250514')
+          ? anthropic(CLAUDE_MODEL)
           : google('gemini-2.0-flash')
 
     const result = await generateText({

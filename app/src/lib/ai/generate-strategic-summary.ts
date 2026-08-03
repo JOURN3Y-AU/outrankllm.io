@@ -16,6 +16,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { trackCost } from './costs'
 import type { CompetitorAnalysis, EmployerDimension } from './compare-employers'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -232,7 +233,7 @@ Create a strategic summary that a recruitment agent could confidently present to
 
   try {
     const result = await generateObject({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       schema: strategicSummarySchema,
       system: systemPrompt,
       prompt: userPrompt,
@@ -243,7 +244,7 @@ Create a strategic summary that a recruitment agent could confidently present to
       await trackCost({
         runId,
         step: 'strategic_summary',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

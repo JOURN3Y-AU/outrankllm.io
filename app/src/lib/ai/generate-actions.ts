@@ -13,6 +13,7 @@ import { generateText } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { trackCost, trackTavilyCost } from './costs'
 import { log } from '@/lib/logger'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -786,7 +787,7 @@ export async function generateActionPlan(
 
   try {
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       system: systemPrompt,
       prompt: userPrompt,
       maxOutputTokens: 8000,
@@ -809,7 +810,7 @@ export async function generateActionPlan(
       await trackCost({
         runId,
         step: 'generate_action_plan',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

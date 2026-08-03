@@ -176,6 +176,24 @@ ChatGPT (weight 10), Perplexity (weight 4), Gemini (weight 2), Claude (weight 1)
 | Scoring | `src/lib/ai/search-providers.ts` |
 | Features | `src/lib/features/flags.ts` |
 | Pricing | `src/lib/geo/pricing-region.ts` |
+| Claude model config | `src/lib/ai/anthropic-model.ts` |
+
+## Claude Model Retirements
+
+Anthropic retires dated model IDs on a schedule. When one retires the API returns
+`404 not_found_error` with the message `model: <id>`, and **every Claude query
+fails silently** — the error text gets recorded as if it were an AI response.
+This happened with `claude-sonnet-4-20250514` (retired 2026-06-15): Claude was
+broken from 2026-06-16 to 2026-08-03 across 64 scan runs before anyone noticed.
+
+- `CLAUDE_MODEL` in `src/lib/ai/anthropic-model.ts` is the **single source of
+  truth**. No other file should hardcode a Claude model ID.
+- After changing it, add the new ID to `MODEL_PRICING` and `MODEL_MAP` in
+  `src/lib/ai/costs.ts` — an unpriced model silently tracks $0.
+- Verify all platforms any time: `GET /api/admin/model-health` (admin session
+  required; returns 503 if any model is unreachable).
+- Claude Sonnet 5 rejects non-default `temperature`/`top_p`/`top_k` with a 400 —
+  don't add sampling params to Claude calls.
 
 ## Scoring Formula
 

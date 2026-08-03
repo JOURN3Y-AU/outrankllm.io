@@ -5,6 +5,7 @@
 
 import { generateText, createGateway } from 'ai'
 import { trackCost } from './costs'
+import { CLAUDE_GATEWAY_MODEL, CLAUDE_PROVIDER_OPTIONS, isModelUnavailableError, logModelUnavailable } from './anthropic-model'
 
 // Initialize Vercel AI Gateway
 const gateway = createGateway({
@@ -37,16 +38,17 @@ async function queryPlatform(
 ): Promise<QueryResult> {
   const startTime = Date.now()
 
+  // Map platform to Vercel AI Gateway model string.
+  // Declared outside the try so the catch can report which model failed.
+  const modelMap: Record<Platform, string> = {
+    chatgpt: 'openai/gpt-4o',
+    claude: CLAUDE_GATEWAY_MODEL,
+    gemini: 'google/gemini-2.0-flash',
+    perplexity: 'perplexity/sonar-pro',
+  }
+
   try {
     let response: string
-
-    // Map platform to Vercel AI Gateway model string
-    const modelMap: Record<Platform, string> = {
-      chatgpt: 'openai/gpt-4o',
-      claude: 'anthropic/claude-sonnet-4-20250514',
-      gemini: 'google/gemini-2.0-flash',
-      perplexity: 'perplexity/sonar-pro',
-    }
 
     const modelString = modelMap[platform]
     if (!modelString) {
@@ -58,6 +60,8 @@ async function queryPlatform(
       system: SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: 1000,
+      // Namespaced per provider, so this only affects the Claude call.
+      providerOptions: CLAUDE_PROVIDER_OPTIONS,
     })
     response = result.text
 
@@ -94,6 +98,13 @@ async function queryPlatform(
       error: null,
     }
   } catch (error) {
+    // Surface a retired/inaccessible model loudly. This is the failure that went
+    // unnoticed for two months when claude-sonnet-4-20250514 was retired — every
+    // Claude query 404'd and was recorded as an ordinary empty response.
+    if (isModelUnavailableError(error)) {
+      logModelUnavailable(`scan query (${platform})`, modelMap[platform] ?? platform, error)
+    }
+
     return {
       platform,
       promptText: prompt,

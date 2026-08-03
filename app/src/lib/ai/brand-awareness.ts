@@ -18,6 +18,7 @@ import { createPerplexity } from '@ai-sdk/perplexity'
 import { trackCost, trackTavilyCost } from './costs'
 import { log } from '@/lib/logger'
 import type { BusinessAnalysis } from './analyze'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, isModelUnavailableError, logModelUnavailable } from './anthropic-model'
 
 // Initialize direct API clients (bypasses Vercel AI Gateway rate limits)
 const openai = createOpenAI({
@@ -65,6 +66,12 @@ export interface BrandAwarenessResult {
   recognized: boolean
   attributeMentioned: boolean
   responseText: string
+  /**
+   * Set when the query failed (API error, retired model, timeout). An errored
+   * result is NOT evidence the brand is unrecognised — it is excluded from
+   * recognition scoring in analyzeBrandAwareness().
+   */
+  error?: string
   confidenceScore: number
   comparedTo?: string
   positioning?: 'stronger' | 'weaker' | 'equal' | 'not_compared'
@@ -352,7 +359,7 @@ async function runQueryOnPlatform(
 
       case 'claude': {
         // Use Tavily search + Claude for grounded response
-        modelString = 'anthropic/claude-sonnet-4-20250514'
+        modelString = CLAUDE_GATEWAY_MODEL
 
         // For competitor comparisons, search for each business individually
         // rather than searching for the conversational question
@@ -402,7 +409,7 @@ async function runQueryOnPlatform(
 
         if (searchContext) {
           const result = await generateText({
-            model: anthropic('claude-sonnet-4-20250514'),
+            model: anthropic(CLAUDE_MODEL),
             system: BRAND_SYSTEM_PROMPT,
             prompt: `Based on these search results, answer the user's question.
 
@@ -432,7 +439,7 @@ Provide a helpful answer based on the search results.`,
         } else {
           // Fallback to standard Claude if Tavily fails
           const result = await generateText({
-            model: anthropic('claude-sonnet-4-20250514'),
+            model: anthropic(CLAUDE_MODEL),
             system: BRAND_SYSTEM_PROMPT,
             prompt: query.prompt,
             maxOutputTokens: 800,
@@ -591,7 +598,16 @@ USER QUESTION: ${query.prompt}`,
       responseTimeMs,
     }
   } catch (error) {
-    console.error(`Brand awareness query failed for ${platform}:`, error)
+    // A failed API call is NOT the same as "the AI doesn't know this brand".
+    // Previously the raw error text was stored as responseText and scored as an
+    // unrecognised brand, so a retired model ID looked like poor brand
+    // visibility in the customer's report. Mark it as an error instead.
+    if (isModelUnavailableError(error)) {
+      logModelUnavailable(`brand awareness ${query.type} (${platform})`, CLAUDE_MODEL, error)
+    } else {
+      log.error(runId, `Brand awareness ${query.type} failed for ${platform}`, error instanceof Error ? error.message : String(error))
+    }
+
     return {
       platform,
       queryType: query.type,
@@ -599,7 +615,8 @@ USER QUESTION: ${query.prompt}`,
       testedAttribute: query.testedAttribute,
       recognized: false,
       attributeMentioned: false,
-      responseText: error instanceof Error ? error.message : 'Query failed',
+      responseText: '',
+      error: error instanceof Error ? error.message : 'Query failed',
       confidenceScore: 0,
       comparedTo: query.comparedTo,
       positioning: 'not_compared',
@@ -1143,10 +1160,15 @@ export function analyzeBrandAwareness(
   results: BrandAwarenessResult[],
   analysis: BusinessAnalysis
 ): BrandAwarenessAnalysis {
-  // Calculate overall recognition
-  const brandRecallResults = results.filter(r => r.queryType === 'brand_recall')
+  // Calculate overall recognition.
+  // Errored queries are excluded: a platform outage or a retired model ID means
+  // we have no evidence either way, and counting it as "not recognised" would
+  // understate the brand's actual visibility.
+  const brandRecallResults = results.filter(r => r.queryType === 'brand_recall' && !r.error)
   const recognizedCount = brandRecallResults.filter(r => r.recognized).length
-  const overallRecognition = Math.round((recognizedCount / brandRecallResults.length) * 100)
+  const overallRecognition = brandRecallResults.length > 0
+    ? Math.round((recognizedCount / brandRecallResults.length) * 100)
+    : 0
 
   // Analyze service knowledge
   const serviceCheckResults = results.filter(r => r.queryType === 'service_check')
@@ -1279,7 +1301,7 @@ Important:
 
   try {
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       prompt,
       maxOutputTokens: 1000,
     })
@@ -1288,7 +1310,7 @@ Important:
       await trackCost({
         runId,
         step: 'competitive_summary',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

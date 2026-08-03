@@ -44,6 +44,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import crypto from 'crypto'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from '@/lib/ai/anthropic-model'
 
 // OpenAI client for researchability and enhanced analysis
 const openai = createOpenAI({
@@ -238,7 +239,7 @@ Keep quotes SHORT (5-15 words each) and EXACT from the response text.`
 
   try {
     const result = await generateObject({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       schema: batchSentimentSchema,
       system: systemPrompt,
       prompt: `Analyze these ${validResponses.length} AI responses about ${companyName} and score each one from 1-10.
@@ -255,7 +256,7 @@ Return a score and driving phrases for each response ID. Be sure to differentiat
       await trackCost({
         runId,
         step: 'batch_sentiment_analysis',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,
@@ -373,7 +374,7 @@ Also identify:
 
   try {
     const result = await generateObject({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       schema: batchDifferentiationSchema,
       system: systemPrompt,
       prompt: `Analyze these ${responses.length} AI responses about ${companyName} as an employer:
@@ -388,7 +389,7 @@ Evaluate the overall differentiation across all responses. How well does AI dist
       await trackCost({
         runId,
         step: 'batch_differentiation_analysis',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

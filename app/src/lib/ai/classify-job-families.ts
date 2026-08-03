@@ -16,6 +16,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { trackCost } from './costs'
 import type { HBJobFamily } from '@/app/hiringbrand/report/components/shared/types'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, CLAUDE_PROVIDER_OPTIONS } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -128,10 +129,12 @@ Now classify the roles for this employer.`
 
   try {
     const { object: result, usage } = await generateObject({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       schema: classificationResultSchema,
       prompt,
-      temperature: 0.3, // Lower temperature for consistent classifications
+      // No temperature: Claude Sonnet 5 rejects non-default sampling params with
+      // a 400. Consistency comes from the schema + prompt instead.
+      providerOptions: CLAUDE_PROVIDER_OPTIONS,
     })
 
     // Track cost if runId provided
@@ -139,7 +142,7 @@ Now classify the roles for this employer.`
       await trackCost({
         runId,
         step: 'classify_job_families',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: usage.inputTokens || 0,
           outputTokens: usage.outputTokens || 0,

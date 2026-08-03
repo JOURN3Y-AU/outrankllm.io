@@ -8,6 +8,7 @@ import { generateObject } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { trackCost } from './costs'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -242,7 +243,7 @@ IMPORTANT: Use the EXACT employer names as listed above. Do not rename, expand, 
 
   try {
     const result = await generateObject({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       schema: comparisonResultSchema,
       system: systemPrompt,
       prompt: userPrompt,
@@ -253,7 +254,7 @@ IMPORTANT: Use the EXACT employer names as listed above. Do not rename, expand, 
       await trackCost({
         runId,
         step: 'compare_employers',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

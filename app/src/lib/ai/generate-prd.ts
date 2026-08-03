@@ -17,6 +17,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
 import { type PlatformDataInput } from './generate-actions'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -571,7 +572,7 @@ export async function generatePrd(
 
   try {
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic(CLAUDE_MODEL),
       system: systemPrompt,
       prompt: userPrompt,
       maxOutputTokens: 16000, // Increased to prevent truncation of code snippets
@@ -594,7 +595,7 @@ export async function generatePrd(
       await trackCost({
         runId,
         step: 'generate_prd',
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: CLAUDE_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,
