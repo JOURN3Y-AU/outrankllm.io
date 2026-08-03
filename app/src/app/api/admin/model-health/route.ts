@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText, createGateway } from 'ai'
+import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createPerplexity } from '@ai-sdk/perplexity'
 import { getAdminSession } from '@/lib/admin'
 import {
   CLAUDE_MODEL,
@@ -9,11 +12,17 @@ import {
   isModelUnavailableError,
 } from '@/lib/ai/anthropic-model'
 
-// Same construction as the scan pipeline, so this checks what actually runs.
+// Constructed exactly as in src/lib/ai/search-providers.ts, so this checks what
+// the scan actually runs rather than an approximation of it.
 const gateway = createGateway({
   apiKey: process.env.VERCEL_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '',
 })
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || '' })
 const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' })
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY || '',
+})
+const perplexity = createPerplexity({ apiKey: process.env.PERPLEXITY_API_KEY || '' })
 
 /**
  * Admin endpoint that pings every model the scan pipeline depends on.
@@ -34,19 +43,31 @@ const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-/** Every model the pipeline calls, and how it is addressed. */
+/**
+ * Every model the scan pipeline actually calls.
+ *
+ * Most of the pipeline (src/lib/ai/search-providers.ts, brand-awareness.ts) uses
+ * the vendor SDKs directly; only a few paths go through the Vercel AI Gateway.
+ * Both are checked, because a model ID can be retired from either independently.
+ */
 const CHECKS = [
+  // search-providers.ts — the main scan
+  { platform: 'chatgpt', model: 'gpt-4o-mini', via: 'openai' as const },
+  { platform: 'chatgpt', model: 'o4-mini', via: 'openai' as const },
   { platform: 'claude', model: CLAUDE_MODEL, via: 'anthropic' as const },
+  { platform: 'gemini', model: 'gemini-2.5-flash', via: 'google' as const },
+  { platform: 'perplexity', model: 'sonar-pro', via: 'perplexity' as const },
+  // brand-awareness.ts / query-research.ts / employer-research.ts
+  { platform: 'chatgpt', model: 'gpt-4o', via: 'openai' as const },
   { platform: 'claude', model: CLAUDE_GATEWAY_MODEL, via: 'gateway' as const },
-  { platform: 'chatgpt', model: 'openai/gpt-4o', via: 'gateway' as const },
-  { platform: 'gemini', model: 'google/gemini-2.0-flash', via: 'gateway' as const },
-  { platform: 'perplexity', model: 'perplexity/sonar-pro', via: 'gateway' as const },
 ]
+
+type Via = 'openai' | 'anthropic' | 'google' | 'perplexity' | 'gateway'
 
 interface ModelStatus {
   platform: string
   model: string
-  via: 'anthropic' | 'gateway'
+  via: Via
   ok: boolean
   error: string | null
   /** True when the failure is a retired/inaccessible model ID, not a transient error. */
@@ -68,11 +89,20 @@ async function ping(check: (typeof CHECKS)[number]): Promise<ModelStatus> {
     via: check.via,
   }
 
+  const providers: Record<Via, (id: string) => Parameters<typeof generateText>[0]['model']> = {
+    openai: (id) => openai(id),
+    anthropic: (id) => anthropic(id),
+    google: (id) => google(id),
+    perplexity: (id) => perplexity(id),
+    gateway: (id) => gateway(id),
+  }
+
   try {
     await generateText({
-      model: check.via === 'anthropic' ? anthropic(check.model) : gateway(check.model),
-      prompt: 'ping',
-      maxOutputTokens: 4,
+      model: providers[check.via](check.model),
+      prompt: 'Say OK.',
+      // OpenAI and Perplexity both reject a max-token cap below 16.
+      maxOutputTokens: 16,
       providerOptions: CLAUDE_PROVIDER_OPTIONS,
     })
     return { ...base, ok: true, error: null }
