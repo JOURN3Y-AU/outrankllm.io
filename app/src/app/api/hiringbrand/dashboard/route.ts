@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireHBSession } from '@/lib/hiringbrand-auth'
+import { getSession } from '@/lib/auth'
 import {
   getOrganizationMembers,
   getPendingInvites,
@@ -137,8 +138,19 @@ export async function GET() {
     if (message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    if (message === 'No organization found') {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 })
+    if (message === 'No organization found' || message === 'No role found') {
+      // Name the signed-in email — users with accounts on both products land
+      // here when they sign in with the wrong one, and a bare "no organization"
+      // gives them nothing to act on.
+      const session = await getSession()
+      return NextResponse.json(
+        {
+          error: session
+            ? `You're signed in as ${session.email}, which isn't linked to a HiringBrand account. If you use a different email for HiringBrand, sign out and try that one.`
+            : 'No organization found',
+        },
+        { status: 404 }
+      )
     }
 
     console.error('Dashboard data error:', error)

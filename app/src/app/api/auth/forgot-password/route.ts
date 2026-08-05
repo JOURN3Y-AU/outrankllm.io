@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { createServiceClient } from '@/lib/supabase/server'
-import { sendPasswordResetEmail } from '@/lib/email/resend'
+import { sendPasswordResetEmail, type AuthBrand } from '@/lib/email/resend'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json()
+    const { email, brand } = await request.json()
+    const authBrand: AuthBrand = brand === 'hiringbrand' ? 'hiringbrand' : 'outrankllm'
 
     if (!email) {
       return NextResponse.json(
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Send the reset email
-      await sendPasswordResetEmail(lead.email, token)
+      await sendPasswordResetEmail(lead.email, token, authBrand)
     }
 
     return NextResponse.json({

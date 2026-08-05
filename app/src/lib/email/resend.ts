@@ -368,22 +368,40 @@ outrankllm.io
   `.trim();
 }
 
+export type AuthBrand = 'outrankllm' | 'hiringbrand';
+
 /**
  * Send password reset email
+ *
+ * Brand-aware: a HiringBrand user gets HiringBrand branding and a link back to
+ * hiringbrand.io, not an outrankllm-branded email for a product they don't use.
  */
 export async function sendPasswordResetEmail(
   email: string,
-  token: string
+  token: string,
+  brand: AuthBrand = 'outrankllm'
 ): Promise<EmailResult> {
-  const resetUrl = `${APP_URL}/reset-password?token=${token}`;
+  const isHB = brand === 'hiringbrand';
+  // Same fallback chain as the HB invite email: HB_APP_URL in production,
+  // NEXT_PUBLIC_APP_URL so links stay on localhost in dev.
+  const hbUrl = process.env.HB_APP_URL || APP_URL;
+  const resetUrl = isHB
+    ? `${hbUrl}/hiringbrand/reset-password?token=${token}`
+    : `${APP_URL}/reset-password?token=${token}`;
 
   try {
     const { data, error } = await resend.emails.send({
-      from: `outrankllm <${FROM_EMAIL}>`,
+      from: isHB ? 'HiringBrand <noreply@hiringbrand.io>' : `outrankllm <${FROM_EMAIL}>`,
       to: email,
-      subject: 'Reset your password - outrankllm',
-      html: generatePasswordResetEmailHtml(resetUrl),
-      text: generatePasswordResetEmailText(resetUrl),
+      subject: isHB
+        ? 'Reset your password - HiringBrand'
+        : 'Reset your password - outrankllm',
+      html: isHB
+        ? generateHBPasswordResetEmailHtml(resetUrl)
+        : generatePasswordResetEmailHtml(resetUrl),
+      text: isHB
+        ? generateHBPasswordResetEmailText(resetUrl)
+        : generatePasswordResetEmailText(resetUrl),
     });
 
     if (error) {
@@ -498,6 +516,78 @@ If you didn't request this password reset, you can safely ignore this email.
 Your password will remain unchanged.
 
 outrankllm.io
+  `.trim();
+}
+
+function generateHBPasswordResetEmailHtml(resetUrl: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your password - HiringBrand</title>
+</head>
+<body style="margin:0;padding:0;font-family:'Source Sans 3',system-ui,sans-serif;background:#F1F5F9;">
+  <div style="max-width:520px;margin:40px auto;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+    <!-- Header -->
+    <div style="background:#4ABDAC;padding:24px;text-align:center;">
+      <span style="font-family:'Outfit',system-ui,sans-serif;font-size:24px;font-weight:700;color:white;">
+        hiring<span style="font-weight:800;">brand</span><span style="color:#F7B733;">.io</span>
+      </span>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:32px;">
+      <h1 style="font-family:'Outfit',system-ui,sans-serif;font-size:22px;font-weight:700;color:#1E293B;margin:0 0 16px;">
+        Reset your password
+      </h1>
+      <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 28px;">
+        Click the button below to set a new password for your HiringBrand account.
+      </p>
+
+      <!-- CTA -->
+      <div style="text-align:center;margin:0 0 28px;">
+        <a href="${resetUrl}" style="display:inline-block;padding:14px 32px;background:#FC4A1A;color:white;text-decoration:none;border-radius:12px;font-size:16px;font-weight:600;font-family:'Outfit',system-ui,sans-serif;">
+          Reset Password
+        </a>
+      </div>
+
+      <p style="font-size:13px;color:#94A3B8;margin:0;text-align:center;">
+        This link expires in 1 hour. If you didn't request it, you can safely ignore
+        this email &mdash; your password will remain unchanged.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#F1F5F9;padding:16px;text-align:center;">
+      <p style="font-size:12px;color:#94A3B8;margin:0;">
+        &copy; ${new Date().getFullYear()} HiringBrand.io &bull; AI Employer Reputation Intelligence
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+function generateHBPasswordResetEmailText(resetUrl: string): string {
+  return `
+HiringBrand - Password Reset
+
+Reset your password
+
+Click the link below to set a new password for your HiringBrand account:
+
+${resetUrl}
+
+This link expires in 1 hour.
+
+---
+If you didn't request this password reset, you can safely ignore this email.
+Your password will remain unchanged.
+
+hiringbrand.io
   `.trim();
 }
 

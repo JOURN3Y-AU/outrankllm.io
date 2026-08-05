@@ -3,21 +3,13 @@
 import { useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-
-const hbColors = {
-  teal: '#4ABDAC',
-  tealDeep: '#2D8A7C',
-  tealLight: '#E8F7F5',
-  coral: '#FC4A1A',
-  coralLight: '#FFF0EC',
-  gold: '#F7B733',
-  slate: '#1E293B',
-  slateMid: '#475569',
-  slateLight: '#94A3B8',
-  surface: '#FFFFFF',
-  surfaceDim: '#F1F5F9',
-  error: '#EF4444',
-}
+import {
+  HBAuthShell,
+  hbColors,
+  hbInputStyle,
+  hbLabelStyle,
+  hbButtonStyle,
+} from '@/components/hiringbrand/HBAuthShell'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -92,28 +84,6 @@ function LoginForm() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '12px 16px',
-    fontSize: '15px',
-    fontFamily: "'Source Sans 3', system-ui, sans-serif",
-    border: `1px solid ${hbColors.slateLight}40`,
-    borderRadius: '10px',
-    outline: 'none',
-    transition: 'border-color 0.15s ease',
-    boxSizing: 'border-box',
-    color: hbColors.slate,
-  }
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: hbColors.slateMid,
-    marginBottom: '6px',
-    fontFamily: "'Source Sans 3', system-ui, sans-serif",
-  }
-
   return (
     <div>
       <h1
@@ -144,14 +114,14 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '20px' }}>
-          <label style={labelStyle}>Email</label>
+          <label style={hbLabelStyle}>Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@company.com"
             required
-            style={inputStyle}
+            style={hbInputStyle}
             onFocus={(e) => {
               e.currentTarget.style.borderColor = hbColors.teal
             }}
@@ -162,7 +132,28 @@ function LoginForm() {
         </div>
 
         <div style={{ marginBottom: '20px' }}>
-          <label style={labelStyle}>Password</label>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+            }}
+          >
+            <label style={hbLabelStyle}>Password</label>
+            {!isSetupMode && (
+              <Link
+                href="/hiringbrand/forgot-password"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: hbColors.tealDeep,
+                  textDecoration: 'none',
+                }}
+              >
+                Forgot password?
+              </Link>
+            )}
+          </div>
           <input
             type="password"
             value={password}
@@ -170,7 +161,7 @@ function LoginForm() {
             placeholder={isSetupMode ? 'Create a password (8+ characters)' : 'Enter your password'}
             required
             minLength={8}
-            style={inputStyle}
+            style={hbInputStyle}
             onFocus={(e) => {
               e.currentTarget.style.borderColor = hbColors.teal
             }}
@@ -182,7 +173,7 @@ function LoginForm() {
 
         {isSetupMode && (
           <div style={{ marginBottom: '20px' }}>
-            <label style={labelStyle}>Confirm Password</label>
+            <label style={hbLabelStyle}>Confirm Password</label>
             <input
               type="password"
               value={confirmPassword}
@@ -190,7 +181,7 @@ function LoginForm() {
               placeholder="Confirm your password"
               required
               minLength={8}
-              style={inputStyle}
+              style={hbInputStyle}
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = hbColors.teal
               }}
@@ -216,23 +207,7 @@ function LoginForm() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '14px',
-            fontSize: '16px',
-            fontWeight: 600,
-            fontFamily: "'Outfit', system-ui, sans-serif",
-            background: loading ? hbColors.slateLight : hbColors.coral,
-            color: 'white',
-            border: 'none',
-            borderRadius: '12px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-        >
+        <button type="submit" disabled={loading} style={hbButtonStyle(loading)}>
           {loading
             ? (isSetupMode ? 'Setting up...' : 'Signing in...')
             : (isSetupMode ? 'Set Password & Continue' : 'Sign In')}
@@ -265,75 +240,16 @@ function LoginForm() {
 
 export default function HiringBrandLoginPage() {
   return (
-    <div style={{ minHeight: '100vh', background: hbColors.surfaceDim }}>
-      {/* Nav */}
-      <nav
-        style={{
-          background: hbColors.teal,
-          padding: '16px 24px',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
+    <HBAuthShell>
+      <Suspense
+        fallback={
+          <div style={{ textAlign: 'center', padding: '40px', color: hbColors.slateMid }}>
+            Loading...
+          </div>
+        }
       >
-        <Link
-          href="/hiringbrand"
-          style={{
-            fontSize: '24px',
-            fontWeight: 700,
-            color: 'white',
-            textDecoration: 'none',
-            fontFamily: "'Outfit', system-ui, sans-serif",
-          }}
-        >
-          hiring<span style={{ fontWeight: 800 }}>brand</span>
-          <span style={{ color: hbColors.gold }}>.io</span>
-        </Link>
-      </nav>
-
-      {/* Main content */}
-      <main
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: 'calc(100vh - 64px)',
-          padding: '48px 24px',
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: '440px',
-            background: 'white',
-            borderRadius: '24px',
-            padding: '48px',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.06)',
-          }}
-        >
-          <Suspense
-            fallback={
-              <div style={{ textAlign: 'center', padding: '40px', color: hbColors.slateMid }}>
-                Loading...
-              </div>
-            }
-          >
-            <LoginForm />
-          </Suspense>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer
-        style={{
-          textAlign: 'center',
-          padding: '24px',
-          fontSize: '13px',
-          color: hbColors.slateLight,
-        }}
-      >
-        &copy; {new Date().getFullYear()} HiringBrand.io
-      </footer>
-    </div>
+        <LoginForm />
+      </Suspense>
+    </HBAuthShell>
   )
 }
