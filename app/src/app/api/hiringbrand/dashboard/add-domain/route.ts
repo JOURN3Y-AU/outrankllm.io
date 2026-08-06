@@ -18,6 +18,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'domain is required' }, { status: 400 })
     }
 
+    // Required: without it the scan falls back to whatever the AI reads off the
+    // crawled site, which has produced job-ad titles and even a staff member's
+    // name as the subject of an entire report.
+    const cleanCompanyName = typeof companyName === 'string' ? companyName.trim() : ''
+    if (!cleanCompanyName) {
+      return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
+    }
+
     // Clean domain
     const cleanDomain = domain
       .toLowerCase()
@@ -36,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Add the domain
     const monitoredDomain = await addMonitoredDomain(org.id, cleanDomain, {
-      companyName: companyName || undefined,
+      companyName: cleanCompanyName,
       isPrimary: true,
       addedBy: session.lead_id,
     })

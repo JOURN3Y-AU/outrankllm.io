@@ -237,10 +237,20 @@ For each response, extract 2-4 EXACT QUOTES (word-for-word from the text) that d
 - negativePhrases: Quotes that lower the score (concerns, warnings, negatives)
 Keep quotes SHORT (5-15 words each) and EXACT from the response text.`
 
+  // This call returns one object PER response, each with up to 8 quotes, so the
+  // output grows with the batch. The SDK default cap of 4096 output tokens
+  // silently truncated it once scans grew past ~40 responses: the JSON came back
+  // incomplete, schema validation threw, and every response fell through to the
+  // neutral default of 5 — which is why every report scored exactly 44 for two
+  // months. Measured usage is ~110 output tokens per response, so budget 200
+  // each with a floor for small scans.
+  const maxOutputTokens = Math.min(32000, Math.max(8000, validResponses.length * 200))
+
   try {
     const result = await generateObject({
       model: anthropic(CLAUDE_MODEL),
       schema: batchSentimentSchema,
+      maxOutputTokens,
       system: systemPrompt,
       prompt: `Analyze these ${validResponses.length} AI responses about ${companyName} and score each one from 1-10.
 
@@ -289,12 +299,22 @@ Return a score and driving phrases for each response ID. Be sure to differentiat
     console.log(`Batch sentiment analysis complete: ${results.size} responses scored`)
     return results
   } catch (error) {
-    console.error('Batch sentiment analysis failed:', error)
-    // Return defaults for all responses on failure
-    for (const r of validResponses) {
-      results.set(r.id, { score: 5, category: 'mixed', positivePhrases: [], negativePhrases: [] })
-    }
-    return results
+    // Do NOT fall back to neutral scores here. Defaulting every response to 5
+    // produces a complete-looking report in which every desirability score is
+    // exactly 44, with nothing on the surface to indicate the analysis never
+    // ran — that failure went unnoticed from 2026-06-16 to 2026-08-06. Throwing
+    // lets Inngest retry the step and, if it keeps failing, marks the scan
+    // failed rather than publishing fabricated sentiment.
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error(
+      `\n🚨 [SENTIMENT_FAILED] Batch sentiment analysis failed for "${companyName}"\n` +
+        `   run: ${runId}\n` +
+        `   responses: ${validResponses.length}, maxOutputTokens: ${maxOutputTokens}\n` +
+        `   error: ${detail}\n` +
+        `   If this is a truncation error (finishReason "length"), the output budget\n` +
+        `   is too small for the batch size — see maxOutputTokens above.\n`
+    )
+    throw error
   }
 }
 

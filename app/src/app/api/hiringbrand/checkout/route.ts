@@ -111,8 +111,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create organization' }, { status: 500 })
     }
 
-    // Add first monitored domain
+    // Add first monitored domain. Seed the company name from the organization
+    // name the customer just entered — without one the scan falls back to
+    // whatever the AI reads off the crawled site, which has produced job-ad
+    // titles and a staff member's name as the subject of a whole report.
     await addMonitoredDomain(org.id, domain, {
+      companyName: organizationName?.trim() || undefined,
       isPrimary: true,
       addedBy: leadId,
     })

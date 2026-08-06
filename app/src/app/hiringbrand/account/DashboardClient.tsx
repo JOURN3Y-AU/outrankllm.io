@@ -412,7 +412,7 @@ function AddDomainModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           domain: domain.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''),
-          companyName: companyName || undefined,
+          companyName: companyName.trim(),
         }),
       })
 
@@ -517,15 +517,28 @@ function AddDomainModal({
                 fontFamily: fonts.body,
               }}
             >
-              Company Name <span style={{ fontWeight: 400, color: hb.slateLight }}>(optional)</span>
+              Company Name *
             </label>
             <input
               type="text"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Will be detected automatically"
+              placeholder="The Recruitment Company"
+              required
               style={inputStyle}
             />
+            <p
+              style={{
+                fontSize: '12px',
+                color: hb.slateLight,
+                marginTop: '6px',
+                lineHeight: 1.5,
+                fontFamily: fonts.body,
+              }}
+            >
+              Exactly how the employer should be named when we ask AI platforms about
+              them. This is the subject of every question in the scan, so get it right.
+            </p>
           </div>
 
           {error && (
