@@ -8,6 +8,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { hbColors, hbFonts, hbShadows, getScoreColor } from './shared/constants'
+import { HBChangePasswordModal } from './HBChangePasswordModal'
 
 // Brand info for the report switcher
 export interface NavBrand {
@@ -30,6 +31,7 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
   const [reportOpen, setReportOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [downloadOpen, setDownloadOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [pptxState, setPptxState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
   const [pdfState, setPdfState] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
   const reportRef = useRef<HTMLDivElement>(null)
@@ -512,6 +514,33 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
               </svg>
               Manage Account
             </a>
+            <button
+              onClick={() => { setChangePasswordOpen(true); setAccountOpen(false) }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                padding: '12px 16px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: hbColors.slate,
+                fontSize: '14px',
+                fontWeight: 500,
+                fontFamily: hbFonts.body,
+                textAlign: 'left',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = hbColors.surfaceDim }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={hbColors.slateMid} strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              Change Password
+            </button>
             <div style={{ height: '1px', background: `${hbColors.slateLight}20`, margin: '0 12px' }} />
             <button
               onClick={handleLogout}
@@ -545,6 +574,11 @@ export function HBNav({ organizationName, brands, currentReportToken, companyNam
         )}
       </div>
       </div>
+
+      <HBChangePasswordModal
+        isOpen={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+      />
     </nav>
   )
 }

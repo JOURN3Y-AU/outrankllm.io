@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, logout } from '@/lib/auth-client'
-import { User, LogOut, LayoutDashboard, Menu, X, HelpCircle, Bug, MessageSquare } from 'lucide-react'
+import { User, LogOut, LayoutDashboard, Menu, X, HelpCircle, Bug, MessageSquare, Lock } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { FeedbackModal } from '@/components/feedback/FeedbackModal'
+import { ChangePasswordModal } from '@/components/auth/ChangePasswordModal'
 
 type FeedbackType = 'bug' | 'feature' | 'feedback' | 'other'
 
@@ -16,6 +17,7 @@ export function Nav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('feedback')
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
 
@@ -32,6 +34,12 @@ export function Nav() {
   const openFeedbackModal = (type: FeedbackType) => {
     setFeedbackType(type)
     setFeedbackModalOpen(true)
+    setMobileMenuOpen(false)
+  }
+
+  const openChangePassword = () => {
+    setChangePasswordOpen(true)
+    setMenuOpen(false)
     setMobileMenuOpen(false)
   }
 
@@ -136,6 +144,15 @@ export function Nav() {
                         <LayoutDashboard className="w-4 h-4" />
                         Dashboard
                       </Link>
+
+                      <button
+                        onClick={openChangePassword}
+                        className="w-full flex items-center gap-3 text-sm text-[var(--text-mid)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] transition-colors"
+                        style={{ padding: '10px 16px' }}
+                      >
+                        <Lock className="w-4 h-4" />
+                        Change Password
+                      </button>
 
                       {/* Help options in account dropdown */}
                       <button
@@ -265,6 +282,14 @@ export function Nav() {
                         Dashboard
                       </Link>
                       <button
+                        onClick={openChangePassword}
+                        className="w-full flex items-center gap-3 text-sm text-[var(--text-mid)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] transition-colors"
+                        style={{ padding: '12px 16px' }}
+                      >
+                        <Lock size={16} />
+                        Change Password
+                      </button>
+                      <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-3 text-sm text-[var(--text-mid)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] transition-colors"
                         style={{ padding: '12px 16px' }}
@@ -295,6 +320,12 @@ export function Nav() {
         isOpen={feedbackModalOpen}
         onClose={() => setFeedbackModalOpen(false)}
         initialType={feedbackType}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
       />
     </>
   )
