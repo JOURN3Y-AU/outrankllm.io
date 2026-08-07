@@ -26,8 +26,12 @@ interface IncompleteSub {
   leads: { email: string } | { email: string }[] | null
 }
 
-// How long a scan can be in a non-terminal state before we consider it stuck
-const STUCK_THRESHOLD_MINUTES = 30
+// How long a scan can be in a non-terminal state before we consider it stuck.
+// Must stay above the longest Inngest `timeouts.finish` across the scan
+// functions (currently 30m for HiringBrand, 20m for outrankllm) — otherwise
+// this monitor marks scans failed while Inngest is still legitimately running
+// them, and the recovery races the run it is supposed to be recovering.
+const STUCK_THRESHOLD_MINUTES = 40
 
 // How long a domain_subscription can remain "incomplete" before alerting
 const INCOMPLETE_SUB_THRESHOLD_HOURS = 1
@@ -36,7 +40,7 @@ const INCOMPLETE_SUB_THRESHOLD_HOURS = 1
  * Scan Health Monitor
  *
  * Runs every 6 hours and checks for:
- * 1. Stuck scans (not complete/failed after 30 minutes)
+ * 1. Stuck scans (not complete/failed after STUCK_THRESHOLD_MINUTES)
  * 2. Domain subscriptions stuck in "incomplete" state (signup flow failures)
  * 3. High failure rate in recent scans
  *

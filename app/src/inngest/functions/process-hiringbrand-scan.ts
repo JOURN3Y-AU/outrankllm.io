@@ -630,7 +630,13 @@ export const processHiringBrandScan = inngest.createFunction(
   {
     id: 'process-hiringbrand-scan',
     retries: 3,
-    timeouts: { finish: '20m' },
+    // Wall-clock budget for the whole scan, not per step. Scans were already
+    // finishing at 19.8m against the previous 20m ceiling, and raising the
+    // sentiment output budget added time to that step — so the slowest scans
+    // would have started being cancelled here. Headroom, not a target: if scans
+    // routinely approach 30m, the fix is to speed up the pipeline, not to keep
+    // raising this.
+    timeouts: { finish: '30m' },
     cancelOn: [{ event: 'hiringbrand/scan', match: 'data.monitoredDomainId' }],
   },
   { event: 'hiringbrand/scan' },
