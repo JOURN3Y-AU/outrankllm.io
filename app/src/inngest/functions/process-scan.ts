@@ -85,6 +85,83 @@ const processScanFailureHandler = inngest.createFunction(
 
 export { processScanFailureHandler }
 
+/**
+ * Marks the scan as failed when Inngest CANCELS a run.
+ *
+ * Cancellation is not failure: `inngest/function.failed` does not fire for it,
+ * so processScanFailureHandler never ran and the scan_run sat in an
+ * intermediate state until the health monitor swept it up to six hours later
+ * with "Auto-recovered by health monitor: scan stuck for >30 minutes". That
+ * message describes the sweeper, not the cause, which is why a hung provider
+ * call went undiagnosed across 179 failed scans.
+ *
+ * Runs are cancelled either by `timeouts.finish` expiring or by `cancelOn`
+ * matching a newer run for the same scan.
+ */
+const processScanCancelledHandler = inngest.createFunction(
+  { id: "process-scan-cancelled" },
+  { event: "inngest/function.cancelled", if: 'event.data.function_id == "process-scan"' },
+  async ({ event }) => {
+    const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string; leadId?: string } } | undefined
+    const scanId = originalEvent?.data?.scanId
+    const domain = originalEvent?.data?.domain
+    const leadId = originalEvent?.data?.leadId
+
+    const supabase = createServiceClient()
+
+    let resolvedScanId = scanId || null
+
+    // Weekly scans use scanId: null — same fallback as the failure handler.
+    if (!resolvedScanId && domain && leadId) {
+      const { data: scan } = await supabase
+        .from("scan_runs")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("domain", domain)
+        .not("status", "in", '("complete","failed")')
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (scan) {
+        resolvedScanId = scan.id
+      }
+    }
+
+    if (!resolvedScanId) {
+      console.error("[process-scan-cancelled] Could not resolve scanId, cannot update DB")
+      return { updated: false }
+    }
+
+    // Record the stage it died at — that is the diagnostic signal. A run
+    // cancelled mid-"querying" means a provider call hung rather than threw.
+    const { data: existing } = await supabase
+      .from("scan_runs")
+      .select("status, progress")
+      .eq("id", resolvedScanId)
+      .single()
+
+    await supabase
+      .from("scan_runs")
+      .update({
+        status: "failed",
+        error_message:
+          `Inngest cancelled the run (timeouts.finish expired or superseded). ` +
+          `Stalled at stage "${existing?.status ?? "unknown"}" (${existing?.progress ?? "?"}%). ` +
+          `A run cancelled mid-stage usually means a provider call hung without throwing.`.slice(0, 500),
+      })
+      .eq("id", resolvedScanId)
+
+    console.error(
+      `[process-scan-cancelled] Marked scan ${resolvedScanId} (${domain}) as failed — ` +
+        `stalled at "${existing?.status}" (${existing?.progress}%)`
+    )
+    return { updated: true, scanId: resolvedScanId, domain }
+  }
+)
+
+export { processScanCancelledHandler }
+
 export const processScan = inngest.createFunction(
   {
     id: "process-scan",
@@ -93,11 +170,18 @@ export const processScan = inngest.createFunction(
     timeouts: {
       finish: "20m",
     },
-    // Limit concurrent scans to prevent LLM API rate limiting
-    // when weekly dispatcher fires all subscriber scans at once
+    // Limit concurrent scans to prevent LLM API rate limiting when the weekly
+    // dispatcher fires all subscriber scans at once.
+    //
+    // This limit multiplies: each scan fans its ChatGPT and Perplexity queries
+    // out one step per prompt, so ~13 run concurrently within a single scan.
+    // At a limit of 5 that was ~65 simultaneous agentic web searches against
+    // one provider, which is what pushed calls into stalling. Lowered to 3
+    // (~39). The weekly batch takes longer in wall-clock but completes, which
+    // it previously did not.
     concurrency: [
       {
-        limit: 5,
+        limit: 3,
         scope: "fn",
       },
     ],

@@ -37,6 +37,46 @@ const perplexity = createPerplexity({
 
 export type SearchPlatform = 'chatgpt' | 'claude' | 'gemini' | 'perplexity'
 
+/**
+ * Per-request wall-clock timeouts for the platform queries.
+ *
+ * Every one of these calls needs a hard ceiling. A provider request that stalls
+ * without settling never throws, so the Inngest step never returns and the
+ * function's `retries` never engage — the run simply hangs until
+ * `timeouts.finish` cancels it. Cancellation emits no failure event, so the
+ * cause is never recorded and the scan surfaces hours later as a generic
+ * "stuck" row swept up by the health monitor.
+ *
+ * That is exactly what happened: only Perplexity carried a timeout, and between
+ * 2026-05 and 2026-08 the weekly batch lost ~12 scans every Sunday to a hung
+ * ChatGPT call, 179 failures in total, all reported as "stuck" with no cause.
+ *
+ * ChatGPT gets the longest budget because it runs an agentic multi-step
+ * web_search loop rather than a single completion.
+ */
+const CHATGPT_TIMEOUT_MS = 120_000
+const CLAUDE_TIMEOUT_MS = 90_000
+const GEMINI_TIMEOUT_MS = 90_000
+const TAVILY_TIMEOUT_MS = 30_000 // Plain search API, runs before the Claude call
+
+/**
+ * Runs a provider call under a hard timeout, aborting it if it stalls.
+ * The abort surfaces as a thrown error, which callers already handle and
+ * Inngest can retry.
+ */
+async function withAbortTimeout<T>(
+  timeoutMs: number,
+  fn: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fn(controller.signal)
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export interface SearchSource {
   url: string
   title: string
@@ -222,24 +262,27 @@ async function queryOpenAIWithSearch(
     // Use OpenAI Responses API with o4-mini reasoning model and web_search tool
     // o4-mini provides agentic multi-step search for more comprehensive results
     // Using 'medium' context size to balance cost vs coverage
-    const result = await generateText({
-      model: openai.responses('o4-mini'),
-      tools: {
-        web_search: openai.tools.webSearch({
-          searchContextSize: 'medium',
-          userLocation: {
-            type: 'approximate',
-            // Set country/city/region based on detected location in query or business context
-            ...(detectedLocation?.country && { country: detectedLocation.country }),
-            ...(detectedLocation?.city && { city: detectedLocation.city }),
-            ...(detectedLocation?.region && { region: detectedLocation.region }),
-          },
-        }),
-      },
-      system: SYSTEM_PROMPT,
-      prompt: query,
-      maxOutputTokens: 4000, // Increased for web search responses which can be long
-    })
+    const result = await withAbortTimeout(CHATGPT_TIMEOUT_MS, (abortSignal) =>
+      generateText({
+        model: openai.responses('o4-mini'),
+        tools: {
+          web_search: openai.tools.webSearch({
+            searchContextSize: 'medium',
+            userLocation: {
+              type: 'approximate',
+              // Set country/city/region based on detected location in query or business context
+              ...(detectedLocation?.country && { country: detectedLocation.country }),
+              ...(detectedLocation?.city && { city: detectedLocation.city }),
+              ...(detectedLocation?.region && { region: detectedLocation.region }),
+            },
+          }),
+        },
+        system: SYSTEM_PROMPT,
+        prompt: query,
+        maxOutputTokens: 4000, // Increased for web search responses which can be long
+        abortSignal,
+      })
+    )
 
     const responseTimeMs = Date.now() - startTime
     const responseText = result.text
@@ -385,10 +428,11 @@ async function queryClaudeWithTavily(
       .join('\n\n')
 
     // Query Claude with the search context via direct API
-    const result = await generateText({
-      model: anthropic(CLAUDE_MODEL),
-      system: SYSTEM_PROMPT,
-      prompt: `Based on these search results, answer the user's question.
+    const result = await withAbortTimeout(CLAUDE_TIMEOUT_MS, (abortSignal) =>
+      generateText({
+        model: anthropic(CLAUDE_MODEL),
+        system: SYSTEM_PROMPT,
+        prompt: `Based on these search results, answer the user's question.
 
 SEARCH RESULTS:
 ${searchContext}
@@ -396,8 +440,10 @@ ${searchContext}
 USER QUESTION: ${query}
 
 Provide a helpful answer based on the search results. Mention specific businesses and sources when relevant.`,
-      maxOutputTokens: 1500,
-    })
+        maxOutputTokens: 1500,
+        abortSignal,
+      })
+    )
 
     const responseTimeMs = Date.now() - startTime
     const responseText = result.text
@@ -465,19 +511,22 @@ async function searchWithTavily(
   }
 
   try {
-    const response = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        search_depth: 'advanced',
-        include_answer: false,
-        max_results: 5,
-      }),
-    })
+    const response = await withAbortTimeout(TAVILY_TIMEOUT_MS, (signal) =>
+      fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query,
+          search_depth: 'advanced',
+          include_answer: false,
+          max_results: 5,
+        }),
+        signal,
+      })
+    )
 
     if (!response.ok) {
       throw new Error(`Tavily API error: ${response.status}`)
@@ -521,15 +570,18 @@ async function queryGeminiWithSearch(
   try {
     // Try Gemini with Google Search tool for grounding
     // Using gemini-2.5-flash for better search grounding support
-    const result = await generateText({
-      model: google('gemini-2.5-flash'),
-      tools: {
-        google_search: google.tools.googleSearch({}),
-      },
-      system: SYSTEM_PROMPT,
-      prompt: query,
-      maxOutputTokens: 1500,
-    })
+    const result = await withAbortTimeout(GEMINI_TIMEOUT_MS, (abortSignal) =>
+      generateText({
+        model: google('gemini-2.5-flash'),
+        tools: {
+          google_search: google.tools.googleSearch({}),
+        },
+        system: SYSTEM_PROMPT,
+        prompt: query,
+        maxOutputTokens: 1500,
+        abortSignal,
+      })
+    )
 
     const responseTimeMs = Date.now() - startTime
     const responseText = result.text
