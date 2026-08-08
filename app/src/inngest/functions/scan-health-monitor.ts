@@ -98,6 +98,36 @@ export const scanHealthMonitor = inngest.createFunction(
       }
     }
 
+    /**
+     * Guards the re-queue against an infinite retry loop.
+     *
+     * Re-queueing was unconditional, so a scan that fails for a deterministic
+     * reason got retried every 6 hours forever. Each attempt pays for the full
+     * ChatGPT search phase before dying, at roughly $0.046 per query — a
+     * HiringBrand sentiment bug quietly burned ~$45 of OpenAI credit across 32
+     * failed runs this way. Retry once, then leave it failed and let the alert
+     * do its job: a scan failing repeatedly needs a human, not another attempt.
+     */
+    async function alreadyRetried(scan: StuckScan): Promise<boolean> {
+      const supabase = createServiceClient()
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+      let query = supabase
+        .from("scan_runs")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "failed")
+        .eq("domain", scan.domain)
+        .gt("created_at", since)
+        .like("error_message", "Auto-recovered by health monitor%")
+
+      query = scan.monitored_domain_id
+        ? query.eq("monitored_domain_id", scan.monitored_domain_id)
+        : query.eq("lead_id", scan.lead_id)
+
+      const { count } = await query
+      return (count ?? 0) > 0
+    }
+
     // Auto-recover: Mark stuck scans as failed and re-queue them
     if (stuckScans.length > 0) {
       const outrankRecoverable = stuckScans.filter((s: StuckScan) => !s.brand || s.brand === "outrankllm")
@@ -117,8 +147,9 @@ export const scanHealthMonitor = inngest.createFunction(
               })
               .eq("id", scan.id)
 
-            // Re-queue if we have the lead_id (scheduled scans always do)
-            if (scan.lead_id && scan.domain) {
+            // Re-queue if we have the lead_id (scheduled scans always do),
+            // but only if this domain hasn't already been retried today.
+            if (scan.lead_id && scan.domain && !(await alreadyRetried(scan))) {
               // Look up lead email for the scan event
               const { data: lead } = await supabase
                 .from("leads")
@@ -161,8 +192,14 @@ export const scanHealthMonitor = inngest.createFunction(
               })
               .eq("id", scan.id)
 
-            // Re-queue if we have the organization_id and monitored_domain_id
-            if (scan.organization_id && scan.monitored_domain_id && scan.domain) {
+            // Re-queue if we have the organization_id and monitored_domain_id,
+            // but only if this brand hasn't already been retried today.
+            if (
+              scan.organization_id &&
+              scan.monitored_domain_id &&
+              scan.domain &&
+              !(await alreadyRetried(scan))
+            ) {
               await inngest.send({
                 name: "hiringbrand/scan" as const,
                 data: {

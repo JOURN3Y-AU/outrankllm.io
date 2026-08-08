@@ -195,6 +195,26 @@ interface ResponseForSentiment {
   response: string
 }
 
+/**
+ * Repairs the model returning its JSON as a *string* rather than an object —
+ * i.e. `{"scores": "{\"scores\":[...]}"}` instead of `{"scores": [...]}`.
+ *
+ * Sonnet 5 does this intermittently on the larger batches here, and schema
+ * validation rejects it. Left unhandled it looks identical to the truncation
+ * bug: the call throws and no sentiment is recorded at all. Unwrapping the
+ * inner payload costs nothing when the output is already well-formed, since
+ * this only runs after a validation failure.
+ */
+async function repairDoubleEncodedJson({ text }: { text: string }): Promise<string | null> {
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed?.scores === 'string') return parsed.scores
+  } catch {
+    // Not parseable at all — nothing this can repair.
+  }
+  return null
+}
+
 async function batchAnalyzeSentiment(
   responses: ResponseForSentiment[],
   companyName: string,
@@ -251,6 +271,7 @@ Keep quotes SHORT (5-15 words each) and EXACT from the response text.`
       model: anthropic(CLAUDE_MODEL),
       schema: batchSentimentSchema,
       maxOutputTokens,
+      experimental_repairText: repairDoubleEncodedJson,
       system: systemPrompt,
       prompt: `Analyze these ${validResponses.length} AI responses about ${companyName} and score each one from 1-10.
 
