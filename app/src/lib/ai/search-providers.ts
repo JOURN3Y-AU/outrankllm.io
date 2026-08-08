@@ -16,7 +16,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createPerplexity } from '@ai-sdk/perplexity'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
+import { CLAUDE_SEARCH_MODEL, CLAUDE_SEARCH_GATEWAY_MODEL } from './anthropic-model'
 
 // Initialize direct API clients (bypasses Vercel AI Gateway rate limits)
 const openai = createOpenAI({
@@ -430,7 +430,7 @@ async function queryClaudeWithTavily(
     // Query Claude with the search context via direct API
     const result = await withAbortTimeout(CLAUDE_TIMEOUT_MS, (abortSignal) =>
       generateText({
-        model: anthropic(CLAUDE_MODEL),
+        model: anthropic(CLAUDE_SEARCH_MODEL),
         system: SYSTEM_PROMPT,
         prompt: `Based on these search results, answer the user's question.
 
@@ -453,7 +453,7 @@ Provide a helpful answer based on the search results. Mention specific businesse
       await trackCost({
         runId,
         step: `search_${platform}_tavily`,
-        model: CLAUDE_GATEWAY_MODEL,
+        model: CLAUDE_SEARCH_GATEWAY_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,

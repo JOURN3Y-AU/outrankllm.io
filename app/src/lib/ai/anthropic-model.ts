@@ -21,6 +21,30 @@ export const CLAUDE_MODEL = 'claude-sonnet-5'
 export const CLAUDE_GATEWAY_MODEL = `anthropic/${CLAUDE_MODEL}` as const
 
 /**
+ * Model used ONLY to simulate what Claude tells a user — the `search_claude_*`
+ * and `brand_*_claude` steps, where we feed Tavily results in and ask for an
+ * answer.
+ *
+ * Kept separate from CLAUDE_MODEL because the two jobs have different economics.
+ * Claude carries a weight of 1 out of 17 in the scoring formula — 6% of the
+ * score — but at Sonnet pricing this step was 25% of the entire AI bill, four
+ * times its influence. The work itself is summarising supplied search results,
+ * which Haiku handles well, and the step is already an approximation of Claude's
+ * real product rather than the product itself.
+ *
+ * Internal analysis — sentiment, differentiation, strategic summaries — stays on
+ * CLAUDE_MODEL. Those are cheap (all of them together are a few dollars a month)
+ * and quality there moves the customer-visible numbers.
+ *
+ * Same retirement rules apply: add any new ID to MODEL_PRICING and MODEL_MAP in
+ * src/lib/ai/costs.ts, or it silently tracks $0.
+ */
+export const CLAUDE_SEARCH_MODEL = 'claude-haiku-4-5'
+
+/** Same search model addressed through the Vercel AI Gateway. */
+export const CLAUDE_SEARCH_GATEWAY_MODEL = `anthropic/${CLAUDE_SEARCH_MODEL}` as const
+
+/**
  * Claude Sonnet 5 runs adaptive thinking by default, and `max_tokens` caps
  * thinking + visible text together — so a tight output budget can truncate the
  * answer. We disable thinking: these calls simulate what a consumer AI assistant

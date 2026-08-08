@@ -24,6 +24,9 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // NOTE: when CLAUDE_MODEL changes in src/lib/ai/anthropic-model.ts, add the new
   // ID here too — an unpriced model silently tracks $0 cost.
   'claude-sonnet-5': { input: 0.003, output: 0.015 },
+  // $1/$5 per million tokens — a third of Sonnet. Used for the Claude platform
+  // simulation only (CLAUDE_SEARCH_MODEL), not internal analysis.
+  'claude-haiku-4-5': { input: 0.001, output: 0.005 },
   'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },  // retired 2026-06-15
   'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
   'claude-3-haiku-20240307': { input: 0.00025, output: 0.00125 },
@@ -45,7 +48,11 @@ const MODEL_MAP: Record<string, string> = {
   'openai/o4-mini': 'o4-mini',
   'openai/o4-mini-search': 'o4-mini-search',
   'openai/gpt-4o-search': 'gpt-4o-search',
+  // Tavily fallback for the brand ChatGPT queries — a plain gpt-4o completion
+  // over search results. Was unmapped, so every fallback tracked $0.
+  'openai/gpt-4o-tavily': 'gpt-4o',
   'anthropic/claude-sonnet-5': 'claude-sonnet-5',
+  'anthropic/claude-haiku-4-5': 'claude-haiku-4-5',
   'anthropic/claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
   'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
   'anthropic/claude-3-haiku-20240307': 'claude-3-haiku-20240307',

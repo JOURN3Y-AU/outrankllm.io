@@ -18,7 +18,14 @@ import { createPerplexity } from '@ai-sdk/perplexity'
 import { trackCost, trackTavilyCost } from './costs'
 import { log } from '@/lib/logger'
 import type { BusinessAnalysis } from './analyze'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, isModelUnavailableError, logModelUnavailable } from './anthropic-model'
+import {
+  CLAUDE_MODEL,
+  CLAUDE_GATEWAY_MODEL,
+  CLAUDE_SEARCH_MODEL,
+  CLAUDE_SEARCH_GATEWAY_MODEL,
+  isModelUnavailableError,
+  logModelUnavailable,
+} from './anthropic-model'
 
 // Initialize direct API clients (bypasses Vercel AI Gateway rate limits)
 const openai = createOpenAI({
@@ -234,8 +241,12 @@ async function runChatGPTQuery(
   let result: { text: string; usage?: { inputTokens?: number; outputTokens?: number } } | null = null
 
   try {
+    // o4-mini, matching the main search_chatgpt step. These brand queries were
+    // the only ChatGPT simulation running on gpt-4o — same platform, two
+    // different models, with the pricier one on the brand steps. Aligning them
+    // makes the two ChatGPT numbers comparable and costs less per call.
     result = await generateText({
-      model: openai.responses('gpt-4o'),
+      model: openai.responses('o4-mini'),
       tools: {
         web_search: openai.tools.webSearch({
           searchContextSize: 'medium',
@@ -338,7 +349,7 @@ async function runQueryOnPlatform(
       case 'chatgpt': {
         // Use gpt-4o with web_search tool for grounded search (with retry + Tavily fallback)
         const result = await runChatGPTQuery(query, runId)
-        modelString = result.usedTavily ? 'openai/gpt-4o-tavily' : 'openai/gpt-4o-search'
+        modelString = result.usedTavily ? 'openai/gpt-4o-tavily' : 'openai/o4-mini-search'
 
         responseText = result.text
 
@@ -359,7 +370,7 @@ async function runQueryOnPlatform(
 
       case 'claude': {
         // Use Tavily search + Claude for grounded response
-        modelString = CLAUDE_GATEWAY_MODEL
+        modelString = CLAUDE_SEARCH_GATEWAY_MODEL
 
         // For competitor comparisons, search for each business individually
         // rather than searching for the conversational question
@@ -409,7 +420,7 @@ async function runQueryOnPlatform(
 
         if (searchContext) {
           const result = await generateText({
-            model: anthropic(CLAUDE_MODEL),
+            model: anthropic(CLAUDE_SEARCH_MODEL),
             system: BRAND_SYSTEM_PROMPT,
             prompt: `Based on these search results, answer the user's question.
 
@@ -439,7 +450,7 @@ Provide a helpful answer based on the search results.`,
         } else {
           // Fallback to standard Claude if Tavily fails
           const result = await generateText({
-            model: anthropic(CLAUDE_MODEL),
+            model: anthropic(CLAUDE_SEARCH_MODEL),
             system: BRAND_SYSTEM_PROMPT,
             prompt: query.prompt,
             maxOutputTokens: 800,
@@ -603,7 +614,13 @@ USER QUESTION: ${query.prompt}`,
     // unrecognised brand, so a retired model ID looked like poor brand
     // visibility in the customer's report. Mark it as an error instead.
     if (isModelUnavailableError(error)) {
-      logModelUnavailable(`brand awareness ${query.type} (${platform})`, CLAUDE_MODEL, error)
+      // Name the model this platform actually uses — this alert exists to tell
+      // you which ID to replace, so printing the wrong one defeats it.
+      logModelUnavailable(
+        `brand awareness ${query.type} (${platform})`,
+        platform === 'claude' ? CLAUDE_SEARCH_MODEL : CLAUDE_MODEL,
+        error
+      )
     } else {
       log.error(runId, `Brand awareness ${query.type} failed for ${platform}`, error instanceof Error ? error.message : String(error))
     }
