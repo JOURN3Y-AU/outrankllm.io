@@ -44,7 +44,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import crypto from 'crypto'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from '@/lib/ai/anthropic-model'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, repairMalformedJson } from '@/lib/ai/anthropic-model'
 
 // OpenAI client for researchability and enhanced analysis
 const openai = createOpenAI({
@@ -209,29 +209,8 @@ interface ResponseForSentiment {
  * 2 of 5 brands failing. Returning null when nothing needs repairing keeps the
  * well-formed path untouched; this only runs after a validation failure.
  */
-async function repairMalformedJson({ text }: { text: string }): Promise<string | null> {
-  let candidate = text.trim()
-
-  const fenced = candidate.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fenced) candidate = fenced[1].trim()
-
-  // Trim anything outside the outermost JSON object.
-  const start = candidate.indexOf('{')
-  const end = candidate.lastIndexOf('}')
-  if (start !== -1 && end !== -1 && end > start) {
-    candidate = candidate.slice(start, end + 1)
-  }
-
-  try {
-    const parsed = JSON.parse(candidate)
-    if (typeof parsed?.scores === 'string') return parsed.scores
-  } catch {
-    // Still unparseable — hand back the trimmed candidate if trimming changed
-    // anything, in case it fixed a truncated wrapper. Otherwise give up.
-  }
-
-  return candidate === text.trim() ? null : candidate
-}
+// Now shared — employer comparison hits the same malformed-JSON shapes.
+// See repairMalformedJson in src/lib/ai/anthropic-model.ts.
 
 async function batchAnalyzeSentiment(
   responses: ResponseForSentiment[],
@@ -1938,17 +1917,41 @@ export const processHiringBrandScan = inngest.createFunction(
         runId: scanId,
       })
 
-      // Use the target employer's differentiation score from the competitive analysis
-      // (consistent with what's shown on Competitors page, uses 0.5 threshold for strengths)
+      // Use the target employer's differentiation score from the competitive
+      // analysis (consistent with the Competitors page, 0.5 threshold for
+      // strengths) — but ONLY when the comparison actually produced one.
+      //
+      // compareEmployers hands back a flat 50 for every employer when it fails
+      // or cannot compare, and this update was overwriting the genuine score
+      // computed earlier in the scan with that placeholder. It is detectable:
+      // a real comparison produces a spread (letstorc scored 11/9/24/30/9/22),
+      // whereas the failure path gives every employer, target and competitors
+      // alike, exactly 50. Across reports since June, 50 appears 28 times while
+      // every genuinely computed value falls between 5 and 19 — nothing in
+      // between, because 50 was never measured.
       const targetEmployer = analysis.employers.find((e) => e.isTarget)
-      const differentiationScore = targetEmployer?.differentiationScore ?? 50
+      const employerScores = analysis.employers.map((e) => e.differentiationScore)
+      const comparisonIsFlat =
+        employerScores.length > 1 && new Set(employerScores).size === 1
 
-      // Update report with competitor analysis and differentiation score
+      const differentiationScore =
+        targetEmployer && !comparisonIsFlat ? targetEmployer.differentiationScore : null
+
+      if (differentiationScore === null) {
+        console.warn(
+          `[differentiation] competitor comparison produced no usable score for ` +
+            `"${reliableCompanyName}" (target found: ${!!targetEmployer}, flat: ${comparisonIsFlat}) — ` +
+            `keeping the score from batch differentiation analysis rather than overwriting it with a placeholder`
+        )
+      }
+
+      // Update the competitor analysis either way; only touch the score when
+      // the comparison genuinely produced one.
       await supabase
         .from('reports')
         .update({
           competitor_analysis: analysis,
-          differentiation_score: differentiationScore,
+          ...(differentiationScore !== null ? { differentiation_score: differentiationScore } : {}),
         })
         .eq('id', report.reportId)
 

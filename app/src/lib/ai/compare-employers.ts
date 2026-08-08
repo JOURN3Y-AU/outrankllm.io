@@ -8,7 +8,7 @@ import { generateObject } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { trackCost } from './costs'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, repairMalformedJson } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -245,6 +245,16 @@ IMPORTANT: Use the EXACT employer names as listed above. Do not rename, expand, 
     const result = await generateObject({
       model: anthropic(CLAUDE_MODEL),
       schema: comparisonResultSchema,
+      // Same failure that broke batch sentiment for two months. This returns
+      // every employer with 7 dimension scores plus 2-4 highlights, then the
+      // insights block — well past the SDK's 4096-token default, which
+      // truncates the JSON and sends the whole call into the catch below. The
+      // catch then hands back a flat placeholder (every dimension 5, every
+      // differentiation 50, "Analysis unavailable") that the report presents as
+      // real data. Budget the output explicitly and repair the malformed shapes
+      // Sonnet 5 intermittently returns.
+      maxOutputTokens: Math.min(16000, Math.max(4000, allEmployers.length * 700)),
+      experimental_repairText: repairMalformedJson,
       system: systemPrompt,
       prompt: userPrompt,
     })

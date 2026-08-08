@@ -59,6 +59,49 @@ export const CLAUDE_PROVIDER_OPTIONS = {
 } as const
 
 /**
+ * Repairs the malformed JSON shapes Sonnet 5 intermittently returns from
+ * `generateObject` on larger structured outputs. Three observed:
+ *
+ *   1. Double-encoded — a field holding a JSON *string* instead of an object.
+ *   2. Wrapped in markdown fences.
+ *   3. Preceded or followed by prose, so the payload fails to parse.
+ *
+ * All three surface identically at the call site: the call throws and the
+ * caller's catch runs. That is how batch sentiment scored every response as a
+ * neutral 5 for two months, and how employer comparison silently returned a
+ * flat placeholder for every employer.
+ *
+ * Pass as `experimental_repairText`. Returning null when nothing needs
+ * repairing leaves the well-formed path untouched — this only runs after a
+ * validation failure. Pair it with an explicit `maxOutputTokens`: the SDK
+ * default of 4096 truncates these outputs, which produces the same symptom.
+ */
+export async function repairMalformedJson({ text }: { text: string }): Promise<string | null> {
+  let candidate = text.trim()
+
+  const fenced = candidate.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fenced) candidate = fenced[1].trim()
+
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    candidate = candidate.slice(start, end + 1)
+  }
+
+  try {
+    const parsed = JSON.parse(candidate)
+    // Unwrap any top-level field that came back as a JSON string.
+    for (const value of Object.values(parsed ?? {})) {
+      if (typeof value === 'string' && value.trim().startsWith('{')) return value
+    }
+  } catch {
+    // Still unparseable — fall through to the trimmed candidate.
+  }
+
+  return candidate === text.trim() ? null : candidate
+}
+
+/**
  * Detects the failure mode that silently broke Claude for two months: the model
  * ID is gone (retired/renamed) or this account cannot reach it.
  *
