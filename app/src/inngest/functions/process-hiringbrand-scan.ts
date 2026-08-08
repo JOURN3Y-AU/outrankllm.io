@@ -345,9 +345,9 @@ Return a score and driving phrases for each response ID. Be sure to differentiat
     }
   }
 
-  for (const chunk of chunks) {
-    // Categories: Strong (9-10), Positive (6-8), Mixed (4-5), Negative (1-3)
-    for (const item of await scoreChunk(chunk)) {
+  /** Categories: Strong (9-10), Positive (6-8), Mixed (4-5), Negative (1-3) */
+  const record = (items: z.infer<typeof batchSentimentSchema>['scores']) => {
+    for (const item of items) {
       const score = Math.min(10, Math.max(1, Math.round(item.score)))
       const category: SentimentCategory =
         score >= 9 ? 'strong' : score >= 6 ? 'positive' : score >= 4 ? 'mixed' : 'negative'
@@ -360,25 +360,58 @@ Return a score and driving phrases for each response ID. Be sure to differentiat
     }
   }
 
-  // Require most responses to be scored before trusting the average.
+  for (const chunk of chunks) record(await scoreChunk(chunk))
+
+  // Sweep up whatever is still unscored, in smaller chunks, inside this same
+  // step execution.
+  //
+  // Without this, a shortfall throws and Inngest retries the WHOLE step —
+  // re-running every chunk including the ones that already succeeded. One brand
+  // burned 7 sentiment calls on a 3-chunk scan that way and used its entire
+  // 30-minute budget without finishing. Retrying only the stragglers, and in
+  // smaller batches (smaller outputs are what made chunking work in the first
+  // place), keeps the cost proportional to the actual failure.
+  const stragglers = validResponses.filter((r) => !results.has(r.id))
+  if (stragglers.length > 0) {
+    console.warn(
+      `[sentiment] ${stragglers.length}/${validResponses.length} unscored after first pass ` +
+        `for "${companyName}" — retrying those in smaller chunks`
+    )
+    for (let i = 0; i < stragglers.length; i += 10) {
+      record(await scoreChunk(stragglers.slice(i, i + 10)))
+    }
+  }
+
+  // Require enough responses to be scored before trusting the average.
   //
   // Never fill the gaps with a neutral 5. Defaulting every response to 5
   // produces a complete-looking report in which desirability is exactly 44,
   // with nothing on the surface to show the analysis never ran — that went
-  // unnoticed from 2026-06-16 to 2026-08-06. A partial result is fine (the
-  // scored responses are a fair sample), but below this bar the average is not
-  // trustworthy, so fail loudly and let Inngest retry the step.
+  // unnoticed from 2026-06-16 to 2026-08-06.
+  //
+  // The bar is 70%, not 90%. Gaps are now genuinely missing rather than
+  // fabricated, so the scored responses are a fair sample and an average over
+  // 40 of 52 is sound. Setting it higher mainly bought repeated whole-step
+  // retries — expensive, slow, and no more accurate. This threshold exists to
+  // catch wholesale failure, not to chase the last few responses.
   const coverage = results.size / validResponses.length
-  if (coverage < 0.9) {
+  if (coverage < 0.7) {
     console.error(
       `\n🚨 [SENTIMENT_FAILED] Only ${results.size}/${validResponses.length} responses scored ` +
         `(${Math.round(coverage * 100)}%) for "${companyName}"\n` +
         `   run: ${runId}, chunks: ${chunks.length}\n` +
-        `   Refusing to publish an average built on partial data.\n`
+        `   Refusing to publish an average built on this little data.\n`
     )
     throw new Error(
-      `Sentiment coverage ${Math.round(coverage * 100)}% below 90% threshold ` +
+      `Sentiment coverage ${Math.round(coverage * 100)}% below 70% threshold ` +
         `(${results.size}/${validResponses.length} responses)`
+    )
+  }
+
+  if (coverage < 1) {
+    console.warn(
+      `[sentiment] "${companyName}" scored ${results.size}/${validResponses.length} ` +
+        `(${Math.round(coverage * 100)}%) — average is over the scored subset`
     )
   }
 
@@ -2658,3 +2691,68 @@ function generateEmployerSummary(
 
   return summary
 }
+
+/**
+ * Marks a HiringBrand scan as failed when Inngest CANCELS the run.
+ *
+ * The outrankllm pipeline got this handler; HiringBrand did not, and it has the
+ * same hole. Cancellation does not emit `inngest/function.failed`, so a
+ * cancelled scan sits in an intermediate state with no error recorded until the
+ * health monitor sweeps it up to six hours later with a message describing the
+ * sweeper rather than the cause.
+ *
+ * Runs are cancelled either by `timeouts.finish` expiring or by `cancelOn`
+ * matching a newer dispatch for the same monitored_domain_id — the latter is
+ * easy to trigger accidentally by dispatching the same brand twice.
+ */
+export const processHiringBrandScanCancelledHandler = inngest.createFunction(
+  { id: 'process-hiringbrand-scan-cancelled' },
+  {
+    event: 'inngest/function.cancelled',
+    if: 'event.data.function_id == "process-hiringbrand-scan"',
+  },
+  async ({ event }) => {
+    const originalEvent = event.data.event as
+      | { data?: { domain?: string; organizationId?: string; monitoredDomainId?: string } }
+      | undefined
+    const monitoredDomainId = originalEvent?.data?.monitoredDomainId
+    const domain = originalEvent?.data?.domain
+
+    if (!monitoredDomainId) {
+      console.error('[hiringbrand-scan-cancelled] No monitoredDomainId on the event, cannot update')
+      return { updated: false }
+    }
+
+    const supabase = createServiceClient()
+
+    // The most recent non-terminal run for this brand is the cancelled one.
+    const { data: scan } = await supabase
+      .from('scan_runs')
+      .select('id, status, progress')
+      .eq('monitored_domain_id', monitoredDomainId)
+      .eq('brand', 'hiringbrand')
+      .not('status', 'in', '("complete","failed")')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (!scan) return { updated: false }
+
+    await supabase
+      .from('scan_runs')
+      .update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        error_message:
+          `Inngest cancelled the run (timeouts.finish expired, or a newer dispatch for the ` +
+          `same brand superseded it). Stalled at stage "${scan.status}" (${scan.progress}%).`.slice(0, 500),
+      })
+      .eq('id', scan.id)
+
+    console.error(
+      `[hiringbrand-scan-cancelled] Marked ${scan.id} (${domain}) failed — ` +
+        `stalled at "${scan.status}" (${scan.progress}%)`
+    )
+    return { updated: true, scanId: scan.id, domain }
+  }
+)

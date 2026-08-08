@@ -3,7 +3,7 @@ import { inngest } from "@/inngest/client"
 import { processScan, processScanFailureHandler, processScanCancelledHandler } from "@/inngest/functions/process-scan"
 import { hourlyScanDispatcher } from "@/inngest/functions/hourly-scan-dispatcher"
 import { enrichSubscriber } from "@/inngest/functions/enrich-subscriber"
-import { processHiringBrandScan } from "@/inngest/functions/process-hiringbrand-scan"
+import { processHiringBrandScan, processHiringBrandScanCancelledHandler } from "@/inngest/functions/process-hiringbrand-scan"
 import { hiringBrandWeeklyDispatcher } from "@/inngest/functions/hiringbrand-weekly-dispatcher"
 import { scanHealthMonitor } from "@/inngest/functions/scan-health-monitor"
 
@@ -16,5 +16,5 @@ export const maxDuration = 600
 // This route handles all Inngest events and cron triggers
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [processScan, processScanFailureHandler, processScanCancelledHandler, hourlyScanDispatcher, enrichSubscriber, processHiringBrandScan, hiringBrandWeeklyDispatcher, scanHealthMonitor],
+  functions: [processScan, processScanFailureHandler, processScanCancelledHandler, hourlyScanDispatcher, enrichSubscriber, processHiringBrandScan, processHiringBrandScanCancelledHandler, hiringBrandWeeklyDispatcher, scanHealthMonitor],
 })
