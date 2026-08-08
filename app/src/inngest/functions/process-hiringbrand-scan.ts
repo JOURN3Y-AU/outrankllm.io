@@ -196,23 +196,41 @@ interface ResponseForSentiment {
 }
 
 /**
- * Repairs the model returning its JSON as a *string* rather than an object —
- * i.e. `{"scores": "{\"scores\":[...]}"}` instead of `{"scores": [...]}`.
+ * Repairs the malformed JSON shapes Sonnet 5 intermittently returns on these
+ * batches. Observed across replays of five brands' real responses:
  *
- * Sonnet 5 does this intermittently on the larger batches here, and schema
- * validation rejects it. Left unhandled it looks identical to the truncation
- * bug: the call throws and no sentiment is recorded at all. Unwrapping the
- * inner payload costs nothing when the output is already well-formed, since
- * this only runs after a validation failure.
+ *   1. Double-encoded — `{"scores": "{\"scores\":[...]}"}`, where `scores` is a
+ *      JSON *string* rather than an array. Schema validation rejects it.
+ *   2. Wrapped in markdown fences.
+ *   3. Preceded or followed by prose, so the whole payload fails to parse.
+ *
+ * All three surface identically at the call site — the call throws and no
+ * sentiment is recorded — which is why the first fix (case 1 only) still left
+ * 2 of 5 brands failing. Returning null when nothing needs repairing keeps the
+ * well-formed path untouched; this only runs after a validation failure.
  */
-async function repairDoubleEncodedJson({ text }: { text: string }): Promise<string | null> {
+async function repairMalformedJson({ text }: { text: string }): Promise<string | null> {
+  let candidate = text.trim()
+
+  const fenced = candidate.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fenced) candidate = fenced[1].trim()
+
+  // Trim anything outside the outermost JSON object.
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    candidate = candidate.slice(start, end + 1)
+  }
+
   try {
-    const parsed = JSON.parse(text)
+    const parsed = JSON.parse(candidate)
     if (typeof parsed?.scores === 'string') return parsed.scores
   } catch {
-    // Not parseable at all — nothing this can repair.
+    // Still unparseable — hand back the trimmed candidate if trimming changed
+    // anything, in case it fixed a truncated wrapper. Otherwise give up.
   }
-  return null
+
+  return candidate === text.trim() ? null : candidate
 }
 
 async function batchAnalyzeSentiment(
@@ -257,48 +275,79 @@ For each response, extract 2-4 EXACT QUOTES (word-for-word from the text) that d
 - negativePhrases: Quotes that lower the score (concerns, warnings, negatives)
 Keep quotes SHORT (5-15 words each) and EXACT from the response text.`
 
-  // This call returns one object PER response, each with up to 8 quotes, so the
-  // output grows with the batch. The SDK default cap of 4096 output tokens
-  // silently truncated it once scans grew past ~40 responses: the JSON came back
-  // incomplete, schema validation threw, and every response fell through to the
-  // neutral default of 5 — which is why every report scored exactly 44 for two
-  // months. Measured usage is ~110 output tokens per response, so budget 200
-  // each with a floor for small scans.
-  const maxOutputTokens = Math.min(32000, Math.max(8000, validResponses.length * 200))
+  // Score in chunks rather than one call for the whole scan.
+  //
+  // Asking for all ~55 responses at once produces a very large structured
+  // output, and at that size Sonnet 5 intermittently returns malformed JSON —
+  // sometimes double-encoded, sometimes not parseable at all. Verified offline
+  // against five brands' real responses: a single call scored 3 of 5, while
+  // chunks of 20 with a repair hook and one retry scored 5 of 5 at 100%
+  // coverage. Smaller outputs are simply less likely to come back malformed,
+  // and a chunk that does fail costs that chunk rather than the whole scan.
+  const CHUNK_SIZE = 20
+  const chunks: ResponseForSentiment[][] = []
+  for (let i = 0; i < validResponses.length; i += CHUNK_SIZE) {
+    chunks.push(validResponses.slice(i, i + CHUNK_SIZE))
+  }
 
-  try {
-    const result = await generateObject({
-      model: anthropic(CLAUDE_MODEL),
-      schema: batchSentimentSchema,
-      maxOutputTokens,
-      experimental_repairText: repairDoubleEncodedJson,
-      system: systemPrompt,
-      prompt: `Analyze these ${validResponses.length} AI responses about ${companyName} and score each one from 1-10.
+  /** Score one chunk, retrying once — these failures are intermittent. */
+  const scoreChunk = async (
+    rows: ResponseForSentiment[],
+    attempt = 0
+  ): Promise<z.infer<typeof batchSentimentSchema>['scores']> => {
+    const formatted = rows
+      .map(
+        (r) =>
+          `[${r.id}] Platform: ${r.platform.toUpperCase()}
+Question: "${r.question}"
+Response (truncated): "${r.response.slice(0, 800)}${r.response.length > 800 ? '...' : ''}"`
+      )
+      .join('\n\n---\n\n')
+
+    try {
+      const result = await generateObject({
+        model: anthropic(CLAUDE_MODEL),
+        schema: batchSentimentSchema,
+        // Measured at ~110 output tokens per response; 250 leaves headroom.
+        maxOutputTokens: Math.min(32000, Math.max(4000, rows.length * 250)),
+        experimental_repairText: repairMalformedJson,
+        system: systemPrompt,
+        prompt: `Analyze these ${rows.length} AI responses about ${companyName} and score each one from 1-10.
 
 For each response, extract the EXACT phrases (word-for-word quotes) that drove your score decision.
 
-${formattedResponses}
+${formatted}
 
 Return a score and driving phrases for each response ID. Be sure to differentiate between responses.`,
-    })
-
-    // Track cost
-    if (result.usage) {
-      await trackCost({
-        runId,
-        step: 'batch_sentiment_analysis',
-        model: CLAUDE_GATEWAY_MODEL,
-        usage: {
-          inputTokens: result.usage.inputTokens || 0,
-          outputTokens: result.usage.outputTokens || 0,
-          totalTokens: (result.usage.inputTokens || 0) + (result.usage.outputTokens || 0),
-        },
       })
-    }
 
-    // Process results
+      if (result.usage) {
+        await trackCost({
+          runId,
+          step: 'batch_sentiment_analysis',
+          model: CLAUDE_GATEWAY_MODEL,
+          usage: {
+            inputTokens: result.usage.inputTokens || 0,
+            outputTokens: result.usage.outputTokens || 0,
+            totalTokens: (result.usage.inputTokens || 0) + (result.usage.outputTokens || 0),
+          },
+        })
+      }
+
+      return result.object.scores
+    } catch (error) {
+      if (attempt < 1) return scoreChunk(rows, attempt + 1)
+      console.error(
+        `[sentiment] chunk of ${rows.length} failed after retry for "${companyName}": ` +
+          `${error instanceof Error ? error.message : String(error)}`
+      )
+      return []
+    }
+  }
+
+  for (const chunk of chunks) {
     // Categories: Strong (9-10), Positive (6-8), Mixed (4-5), Negative (1-3)
-    for (const item of result.object.scores) {
+    for (const item of await scoreChunk(chunk)) {
       const score = Math.min(10, Math.max(1, Math.round(item.score)))
       const category: SentimentCategory =
         score >= 9 ? 'strong' : score >= 6 ? 'positive' : score >= 4 ? 'mixed' : 'negative'
@@ -309,34 +358,35 @@ Return a score and driving phrases for each response ID. Be sure to differentiat
         negativePhrases: item.negativePhrases || [],
       })
     }
-
-    // Set default for any responses that weren't scored
-    for (const r of validResponses) {
-      if (!results.has(r.id)) {
-        results.set(r.id, { score: 5, category: 'mixed', positivePhrases: [], negativePhrases: [] })
-      }
-    }
-
-    console.log(`Batch sentiment analysis complete: ${results.size} responses scored`)
-    return results
-  } catch (error) {
-    // Do NOT fall back to neutral scores here. Defaulting every response to 5
-    // produces a complete-looking report in which every desirability score is
-    // exactly 44, with nothing on the surface to indicate the analysis never
-    // ran — that failure went unnoticed from 2026-06-16 to 2026-08-06. Throwing
-    // lets Inngest retry the step and, if it keeps failing, marks the scan
-    // failed rather than publishing fabricated sentiment.
-    const detail = error instanceof Error ? error.message : String(error)
-    console.error(
-      `\n🚨 [SENTIMENT_FAILED] Batch sentiment analysis failed for "${companyName}"\n` +
-        `   run: ${runId}\n` +
-        `   responses: ${validResponses.length}, maxOutputTokens: ${maxOutputTokens}\n` +
-        `   error: ${detail}\n` +
-        `   If this is a truncation error (finishReason "length"), the output budget\n` +
-        `   is too small for the batch size — see maxOutputTokens above.\n`
-    )
-    throw error
   }
+
+  // Require most responses to be scored before trusting the average.
+  //
+  // Never fill the gaps with a neutral 5. Defaulting every response to 5
+  // produces a complete-looking report in which desirability is exactly 44,
+  // with nothing on the surface to show the analysis never ran — that went
+  // unnoticed from 2026-06-16 to 2026-08-06. A partial result is fine (the
+  // scored responses are a fair sample), but below this bar the average is not
+  // trustworthy, so fail loudly and let Inngest retry the step.
+  const coverage = results.size / validResponses.length
+  if (coverage < 0.9) {
+    console.error(
+      `\n🚨 [SENTIMENT_FAILED] Only ${results.size}/${validResponses.length} responses scored ` +
+        `(${Math.round(coverage * 100)}%) for "${companyName}"\n` +
+        `   run: ${runId}, chunks: ${chunks.length}\n` +
+        `   Refusing to publish an average built on partial data.\n`
+    )
+    throw new Error(
+      `Sentiment coverage ${Math.round(coverage * 100)}% below 90% threshold ` +
+        `(${results.size}/${validResponses.length} responses)`
+    )
+  }
+
+  console.log(
+    `Batch sentiment analysis complete: ${results.size}/${validResponses.length} responses scored ` +
+      `across ${chunks.length} chunks`
+  )
+  return results
 }
 
 /**
