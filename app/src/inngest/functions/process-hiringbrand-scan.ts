@@ -1811,9 +1811,17 @@ export const processHiringBrandScan = inngest.createFunction(
         .slice(0, 10)
         .map(([name, count]) => ({ name, count }))
 
-      // Generate employer-focused summary
+      // Generate employer-focused summary.
+      //
+      // Override companyName the same way every other consumer of this analysis
+      // does — this was the one call site that passed employerAnalysis.analysis
+      // through unmodified, so the summary used whatever name the AI read off
+      // the crawled site rather than the one stored on the brand. That is how a
+      // report opened with "Frankie Gaffney has moderate AI employer
+      // reputation" while monitored_domains.company_name said "The Outsourced
+      // Recruitment Company".
       const summary = generateEmployerSummary(
-        employerAnalysis.analysis,
+        { ...employerAnalysis.analysis, companyName: reliableCompanyName },
         scores,
         topCompetitors,
         researchResult.competitors
