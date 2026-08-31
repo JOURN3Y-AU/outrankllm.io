@@ -46,14 +46,40 @@ export async function GET(request: NextRequest) {
     }
 
     const results: SearchResult[] = []
-    const seenLeadIds = new Set<string>()
 
-    // Helper to add result if not duplicate
+    // One row per lead AND domain. Keying on lead alone hid every domain on a
+    // multi-domain account except the most recently scanned one.
+    const seen = new Set<string>()
+
     const addResult = (result: SearchResult) => {
-      if (!seenLeadIds.has(result.lead_id)) {
-        seenLeadIds.add(result.lead_id)
-        results.push(result)
-      }
+      const key = `${result.lead_id}::${(result.domain || '').toLowerCase()}`
+      if (seen.has(key)) return
+      seen.add(key)
+      results.push(result)
+    }
+
+    interface LeadRow {
+      id: string
+      email: string
+      domain: string
+      tier: string
+      created_at: string
+    }
+
+    interface ReportRow {
+      url_token: string
+      visibility_score: number
+      created_at: string
+      expires_at: string | null
+      run: { lead_id: string; domain: string | null }
+    }
+
+    interface ScanDomainReportRow {
+      url_token: string
+      visibility_score: number
+      created_at: string
+      expires_at: string | null
+      run: { domain: string | null; lead: LeadRow | null } | null
     }
 
     if (isToken) {
@@ -99,8 +125,18 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // For non-token searches, always search emails
-    // Search by email (partial match)
+    // For non-token searches, collect every lead whose email or domain matches,
+    // then list one row per DOMAIN they have scanned.
+    //
+    // This used to key on lead_id alone: the email pass took each lead's single
+    // most recent report and marked the lead seen, and the domain passes then
+    // skipped it. On a multi-domain account only the most recently scanned
+    // domain was reachable. Searching "therecruitmentcompany.com" returned
+    // theservicescompany.com, because that domain had scanned six hours earlier
+    // under the same login, and the domain actually searched for could not be
+    // opened from admin at all.
+    const candidateLeads = new Map<string, LeadRow>()
+
     const { data: emailLeads } = await supabase
       .from('leads')
       .select('id, email, domain, tier, created_at')
@@ -108,61 +144,17 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(20)
 
-    if (emailLeads) {
-      for (const lead of emailLeads) {
-        // Get latest report for this lead
-        const { data: latestReport } = await supabase
-          .from('reports')
-          .select(`
-            url_token,
-            visibility_score,
-            created_at,
-            expires_at,
-            run:scan_runs!inner(lead_id, domain)
-          `)
-          .eq('run.lead_id', lead.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (latestReport) {
-          const scanDomain = (latestReport.run as { domain: string } | null)?.domain
-          addResult({
-            type: 'report',
-            token: latestReport.url_token,
-            email: lead.email,
-            domain: scanDomain || lead.domain,
-            tier: lead.tier,
-            visibility_score: latestReport.visibility_score,
-            created_at: latestReport.created_at,
-            expires_at: latestReport.expires_at,
-            is_expired: latestReport.expires_at ? new Date(latestReport.expires_at) < new Date() : false,
-            lead_id: lead.id,
-          })
-        } else {
-          // Lead exists but no report yet
-          addResult({
-            type: 'lead',
-            email: lead.email,
-            domain: lead.domain,
-            tier: lead.tier,
-            created_at: lead.created_at,
-            lead_id: lead.id,
-          })
-        }
-      }
+    for (const lead of (emailLeads || []) as LeadRow[]) {
+      candidateLeads.set(lead.id, lead)
     }
 
-    // If NOT a definite email search, also search by domain
-    if (!isDefinitelyEmail) {
-      // Normalize domain query
-      const normalizedDomain = query
-        .toLowerCase()
-        .replace(/^https?:\/\//, '')
-        .replace(/^www\./, '')
-        .split('/')[0]
+    const normalizedDomain = query
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .split('/')[0]
 
-      // Search leads by domain
+    if (!isDefinitelyEmail) {
       const { data: domainLeads } = await supabase
         .from('leads')
         .select('id, email, domain, tier, created_at')
@@ -170,54 +162,85 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .limit(20)
 
-      if (domainLeads) {
-        for (const lead of domainLeads) {
-          // Skip if already found via email search
-          if (seenLeadIds.has(lead.id)) continue
+      for (const lead of (domainLeads || []) as LeadRow[]) {
+        candidateLeads.set(lead.id, lead)
+      }
+    }
 
-          // Get latest report for this lead
-          const { data: latestReport } = await supabase
-            .from('reports')
-            .select(`
-              url_token,
-              visibility_score,
-              created_at,
-              expires_at,
-              run:scan_runs!inner(lead_id, domain)
-            `)
-            .eq('run.lead_id', lead.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
+    // Per-domain tier. The badge used to show leads.tier, which is the account's
+    // highest tier, so every domain on a multi-domain account looked like the
+    // best one — a Starter domain sitting beside two Pro domains rendered as
+    // Pro. domain_subscriptions holds the tier actually being paid for.
+    const tierByLeadDomain = new Map<string, string>()
 
-          if (latestReport) {
-            const scanDomain = (latestReport.run as { domain: string } | null)?.domain
-            addResult({
-              type: 'report',
-              token: latestReport.url_token,
-              email: lead.email,
-              domain: scanDomain || lead.domain,
-              tier: lead.tier,
-              visibility_score: latestReport.visibility_score,
-              created_at: latestReport.created_at,
-              expires_at: latestReport.expires_at,
-              is_expired: latestReport.expires_at ? new Date(latestReport.expires_at) < new Date() : false,
-              lead_id: lead.id,
-            })
-          } else {
-            addResult({
-              type: 'lead',
-              email: lead.email,
-              domain: lead.domain,
-              tier: lead.tier,
-              created_at: lead.created_at,
-              lead_id: lead.id,
-            })
-          }
-        }
+    // Every report belonging to those leads, newest first. One query rather than
+    // one per lead, so adding per-domain rows costs nothing.
+    const leadIds = [...candidateLeads.keys()]
+    const reportRows: ReportRow[] = []
+
+    if (leadIds.length > 0) {
+      const { data: subs } = await supabase
+        .from('domain_subscriptions')
+        .select('lead_id, domain, tier')
+        .in('lead_id', leadIds)
+
+      for (const sub of (subs || []) as { lead_id: string; domain: string; tier: string }[]) {
+        tierByLeadDomain.set(`${sub.lead_id}::${sub.domain.toLowerCase()}`, sub.tier)
       }
 
-      // Also search scan_runs.domain for multi-domain cases
+      const { data } = await supabase
+        .from('reports')
+        .select(`
+          url_token,
+          visibility_score,
+          created_at,
+          expires_at,
+          run:scan_runs!inner(lead_id, domain)
+        `)
+        .in('run.lead_id', leadIds)
+        .order('created_at', { ascending: false })
+        .limit(200)
+
+      reportRows.push(...((data || []) as unknown as ReportRow[]))
+    }
+
+    for (const report of reportRows) {
+      const lead = candidateLeads.get(report.run.lead_id)
+      if (!lead) continue
+      const reportDomain = report.run.domain || lead.domain
+      addResult({
+        type: 'report',
+        token: report.url_token,
+        email: lead.email,
+        domain: reportDomain,
+        tier: tierByLeadDomain.get(`${lead.id}::${(reportDomain || '').toLowerCase()}`) ?? lead.tier,
+        visibility_score: report.visibility_score,
+        created_at: report.created_at,
+        expires_at: report.expires_at,
+        is_expired: report.expires_at ? new Date(report.expires_at) < new Date() : false,
+        lead_id: lead.id,
+      })
+    }
+
+    // Leads with no report at all still deserve a row.
+    for (const lead of candidateLeads.values()) {
+      if (reportRows.some((r) => r.run.lead_id === lead.id)) continue
+      addResult({
+        type: 'lead',
+        email: lead.email,
+        domain: lead.domain,
+        tier: lead.tier,
+        created_at: lead.created_at,
+        lead_id: lead.id,
+      })
+    }
+
+    // Finally, reports whose SCANNED domain matches even though the owning lead's
+    // email and lead.domain do not — the common shape for a domain added to an
+    // existing account. `!inner` is required here: without it PostgREST applies
+    // the filter to the embed instead of the parent, so it returns an arbitrary
+    // page of reports with `run` nulled out rather than the matching ones.
+    if (!isDefinitelyEmail) {
       const { data: scanDomainReports } = await supabase
         .from('reports')
         .select(`
@@ -225,36 +248,31 @@ export async function GET(request: NextRequest) {
           visibility_score,
           created_at,
           expires_at,
-          run:scan_runs(
+          run:scan_runs!inner(
             domain,
-            lead:leads(id, email, domain, tier)
+            lead:leads!inner(id, email, domain, tier)
           )
         `)
         .ilike('run.domain', `%${normalizedDomain}%`)
         .order('created_at', { ascending: false })
-        .limit(20)
+        .limit(50)
 
-      if (scanDomainReports) {
-        for (const report of scanDomainReports) {
-          if (!report.run?.lead) continue
-
-          const lead = report.run.lead as { id: string; email: string; domain: string; tier: string }
-          if (seenLeadIds.has(lead.id)) continue
-
-          const scanDomain = report.run.domain as string | null
-          addResult({
-            type: 'report',
-            token: report.url_token,
-            email: lead.email,
-            domain: scanDomain || lead.domain,
-            tier: lead.tier,
-            visibility_score: report.visibility_score,
-            created_at: report.created_at,
-            expires_at: report.expires_at,
-            is_expired: report.expires_at ? new Date(report.expires_at) < new Date() : false,
-            lead_id: lead.id,
-          })
-        }
+      for (const report of (scanDomainReports || []) as unknown as ScanDomainReportRow[]) {
+        const run = report.run
+        const lead = run?.lead
+        if (!run || !lead) continue
+        addResult({
+          type: 'report',
+          token: report.url_token,
+          email: lead.email,
+          domain: run.domain || lead.domain,
+          tier: lead.tier,
+          visibility_score: report.visibility_score,
+          created_at: report.created_at,
+          expires_at: report.expires_at,
+          is_expired: report.expires_at ? new Date(report.expires_at) < new Date() : false,
+          lead_id: lead.id,
+        })
       }
     }
 
