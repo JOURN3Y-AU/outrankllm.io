@@ -9,7 +9,7 @@
  * - Scoring reflects employer reputation, not business visibility
  */
 
-import { inngest } from '../client'
+import { inngest, whenFunctionIs } from '../client'
 import { createServiceClient } from '@/lib/supabase/server'
 import { crawlSite, combineCrawledContent } from '@/lib/ai/crawl'
 import {
@@ -2712,7 +2712,7 @@ export const processHiringBrandScanCancelledHandler = inngest.createFunction(
   { id: 'process-hiringbrand-scan-cancelled' },
   {
     event: 'inngest/function.cancelled',
-    if: 'event.data.function_id == "process-hiringbrand-scan"',
+    if: whenFunctionIs("process-hiringbrand-scan"),
   },
   async ({ event }) => {
     const originalEvent = event.data.event as

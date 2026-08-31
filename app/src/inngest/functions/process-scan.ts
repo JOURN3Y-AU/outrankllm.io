@@ -1,4 +1,4 @@
-import { inngest } from "../client"
+import { inngest, whenFunctionIs } from "../client"
 import { enrichSubscriber } from "./enrich-subscriber"
 import { createServiceClient } from "@/lib/supabase/server"
 import { crawlSite, combineCrawledContent } from "@/lib/ai/crawl"
@@ -32,11 +32,26 @@ const FREE_REPORT_EXPIRY_DAYS = parseInt(process.env.FREE_REPORT_EXPIRY_DAYS || 
 // Platform weights for scoring (from CLAUDE.md)
 const PLATFORMS = ["chatgpt", "claude", "gemini", "perplexity"] as const
 
+// How many prompts a single platform step runs at once.
+const PROMPT_CONCURRENCY = 3
+
+/**
+ * Hard ceiling on one prompt/platform pair, covering the provider call and any
+ * retries it makes internally.
+ *
+ * search-providers caps each individual attempt, but ChatGPT and Perplexity
+ * both recurse up to twice on an empty response, so one query could occupy
+ * three full attempt budgets plus back-off — six minutes for a single answer.
+ * With the prompt loop now inside a step, an unbounded query would push the
+ * step past the runtime's request limit and take the whole scan with it.
+ */
+const QUERY_TOTAL_BUDGET_MS = 150_000
+
 // onFailure handler: marks the scan as "failed" in the DB when Inngest exhausts retries
 // Without this, scan_runs stay stuck in intermediate states like "researching" forever
 const processScanFailureHandler = inngest.createFunction(
   { id: "process-scan-failure" },
-  { event: "inngest/function.failed", if: 'event.data.function_id == "process-scan"' },
+  { event: "inngest/function.failed", if: whenFunctionIs("process-scan") },
   async ({ event }) => {
     const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string; leadId?: string } } | undefined
     const scanId = originalEvent?.data?.scanId
@@ -101,7 +116,7 @@ export { processScanFailureHandler }
  */
 const processScanCancelledHandler = inngest.createFunction(
   { id: "process-scan-cancelled" },
-  { event: "inngest/function.cancelled", if: 'event.data.function_id == "process-scan"' },
+  { event: "inngest/function.cancelled", if: whenFunctionIs("process-scan") },
   async ({ event }) => {
     const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string; leadId?: string } } | undefined
     const scanId = originalEvent?.data?.scanId
@@ -171,18 +186,30 @@ export const processScan = inngest.createFunction(
     timeouts: {
       finish: "20m",
     },
-    // Limit concurrent scans to prevent LLM API rate limiting when the weekly
-    // dispatcher fires all subscriber scans at once.
+    // This limit counts concurrent STEPS across every run of this function, not
+    // concurrent scans. The distinction is the whole story behind the weekly
+    // batch failures.
     //
-    // This limit multiplies: each scan fans its ChatGPT and Perplexity queries
-    // out one step per prompt, so ~13 run concurrently within a single scan.
-    // At a limit of 5 that was ~65 simultaneous agentic web searches against
-    // one provider, which is what pushed calls into stalling. Lowered to 3
-    // (~39). The weekly batch takes longer in wall-clock but completes, which
-    // it previously did not.
+    // It was set to 3 to mean "three scans at a time". What it actually meant
+    // was three steps at a time for the entire function. Each scan then issued
+    // roughly 24 steps, because ChatGPT and Perplexity fanned out one step per
+    // prompt, so a ten-scan batch pushed ~240 steps through a three-wide gate.
+    // Runs executed a step or two, then waited. They made no further progress,
+    // burned their 20-minute `timeouts.finish` sitting in the queue, and were
+    // cancelled at whatever step they had reached. That is why the runs stuck on
+    // 2026-08-30 stopped between 27 seconds and 2 minutes in and stopped at
+    // three different stages: it was never one provider stalling.
+    //
+    // Lowering it from 5 to 3 on 2026-08-07 narrowed the gate further, and the
+    // weekly failure rate went from ~50% to 58-79%.
+    //
+    // Each scan now runs four platform steps, so 12 slots keeps roughly three
+    // scans progressing at once. With PROMPT_CONCURRENCY inside each step that
+    // is ~36 provider calls in flight, close to the ceiling the previous limit
+    // was aiming for and now actually enforced.
     concurrency: [
       {
-        limit: 3,
+        limit: 12,
         scope: "fn",
       },
     ],
@@ -594,26 +621,50 @@ export const processScan = inngest.createFunction(
       countryCode: countryToIsoCode(analysisResult.geoResult.country) || undefined,
     }
 
-    // Query all platforms IN PARALLEL using DAG pattern
-    // ChatGPT: Split into individual query steps (intermittent failures need granular retries)
-    // Other platforms: Single step per platform (more reliable)
-
-    // Helper to run a single query and save result
+    // Query all platforms in parallel, one step per platform.
+    //
+    // ChatGPT and Perplexity used to fan out one Inngest step per prompt, on the
+    // theory that intermittent failures needed granular retries. They never did:
+    // runSingleQuery catches every error and records an errored response, so it
+    // does not throw and the per-step retry budget was never reached. What the
+    // fan-out did do was multiply load. At 11 prompts each scan issued 22
+    // parallel step invocations, each one a separate request to /api/inngest
+    // running an agentic web search.
+    //
+    // On 2026-08-30 ten scheduled scans ran at once and every one of them died
+    // between 27 seconds and 2 minutes in, each at whatever step it happened to
+    // be in — three during crawl, one during query research, six during the
+    // ChatGPT phase. A stall in one provider cannot do that. Saturating the
+    // runtime with ~200 simultaneous invocations can.
+    //
+    // Four steps per scan instead of ~24, with the prompt loop bounded inside
+    // each one. Load is now a function of the number of scans, not the number
+    // of scans times the number of prompts.
     const runSingleQuery = async (
       platform: typeof PLATFORMS[number],
       prompt: { id: string; prompt_text: string },
     ): Promise<{ promptId: string; result: PlatformResult }> => {
       const db = createServiceClient()
 
+      let budgetTimer: ReturnType<typeof setTimeout> | undefined
+
       try {
-        const queryResult = await queryPlatformWithSearch(
-          platform,
-          prompt.prompt_text,
-          domain,
-          scanId,
-          locationContext,
-          analysis.businessName
-        )
+        const queryResult = await Promise.race([
+          queryPlatformWithSearch(
+            platform,
+            prompt.prompt_text,
+            domain,
+            scanId,
+            locationContext,
+            analysis.businessName
+          ),
+          new Promise<never>((_, reject) => {
+            budgetTimer = setTimeout(
+              () => reject(new Error(`Query exceeded ${QUERY_TOTAL_BUDGET_MS / 1000}s total budget`)),
+              QUERY_TOTAL_BUDGET_MS
+            )
+          }),
+        ])
         await saveResponseToDb(db, scanId, prompt.id, queryResult)
         return { promptId: prompt.id, result: queryResult }
       } catch (error) {
@@ -631,74 +682,44 @@ export const processScan = inngest.createFunction(
         }
         await saveResponseToDb(db, scanId, prompt.id, errorResult)
         return { promptId: prompt.id, result: errorResult }
+      } finally {
+        if (budgetTimer) clearTimeout(budgetTimer)
       }
     }
 
-    // ChatGPT & Perplexity: Individual steps per query (granular retries for intermittent failures)
-    // Each query gets its own Inngest step with independent retry budget
-    // Perplexity uses sonar-pro with real web search which can be slow/flaky
-    const chatgptResults = await Promise.all(
-      savedPrompts.map((prompt: { id: string; prompt_text: string; category: string }, i: number) =>
-        step.run(`query-chatgpt-${i}`, () => runSingleQuery("chatgpt", prompt))
-      )
-    )
-
-    const perplexityResults = await Promise.all(
-      savedPrompts.map((prompt: { id: string; prompt_text: string; category: string }, i: number) =>
-        step.run(`query-perplexity-${i}`, () => runSingleQuery("perplexity", prompt))
-      )
-    )
-
-    // Other platforms: Single step per platform (run queries sequentially within step)
-    const otherPlatforms = PLATFORMS.filter(p => p !== "chatgpt" && p !== "perplexity")
-    const otherPlatformResults = await Promise.all(
-      otherPlatforms.map((platform) =>
+    // One step per platform. Inside a step the prompts run PROMPT_CONCURRENCY at
+    // a time, so a scan still finishes in minutes without issuing one runtime
+    // invocation per prompt.
+    const platformResultsMap = await Promise.all(
+      PLATFORMS.map((platform) =>
         step.run(`query-platform-${platform}`, async () => {
-          const db = createServiceClient()
           log.platform(scanId, platform, "querying")
 
           const results: Array<{ promptId: string; result: PlatformResult }> = []
+          const queue = [...savedPrompts] as { id: string; prompt_text: string }[]
 
-          for (let i = 0; i < savedPrompts.length; i++) {
-            const prompt = savedPrompts[i]
-
-            try {
-              const queryResult = await queryPlatformWithSearch(
-                platform,
-                prompt.prompt_text,
-                domain,
-                scanId,
-                locationContext,
-                analysis.businessName
-              )
-              await saveResponseToDb(db, scanId, prompt.id, queryResult)
-              results.push({ promptId: prompt.id, result: queryResult })
-            } catch (error) {
-              const errorResult: PlatformResult = {
-                platform,
-                query: prompt.prompt_text,
-                response: "",
-                domainMentioned: false,
-                mentionPosition: null,
-                competitorsMentioned: [],
-                responseTimeMs: 0,
-                error: error instanceof Error ? error.message : "Unknown error",
-                searchEnabled: true,
-                sources: [],
-              }
-              await saveResponseToDb(db, scanId, prompt.id, errorResult)
-              results.push({ promptId: prompt.id, result: errorResult })
+          const worker = async () => {
+            for (;;) {
+              const prompt = queue.shift()
+              if (!prompt) return
+              results.push(await runSingleQuery(platform, prompt))
             }
           }
 
-          log.done(scanId, platform, `${savedPrompts.length} responses`)
+          await Promise.all(
+            Array.from({ length: Math.min(PROMPT_CONCURRENCY, savedPrompts.length) }, worker)
+          )
+
+          const failed = results.filter((r) => r.result.error).length
+          log.done(
+            scanId,
+            platform,
+            `${results.length} responses${failed > 0 ? ` (${failed} errored)` : ""}`
+          )
           return results
         })
       )
     )
-
-    // Combine all results
-    const platformResultsMap = [chatgptResults, perplexityResults, ...otherPlatformResults]
 
     // Update progress after all platforms complete
     await step.run("update-query-progress", async () => {
