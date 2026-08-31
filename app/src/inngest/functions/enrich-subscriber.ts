@@ -16,6 +16,7 @@ import {
   type BrandAwarenessData,
   type CompetitiveSummaryData,
   type PlatformDataInput,
+  type ScanHistoryPoint,
 } from "@/lib/ai/generate-actions"
 import {
   generatePrd,
@@ -23,6 +24,16 @@ import {
   type SiteContext,
 } from "@/lib/ai/generate-prd"
 import { getUserTier, getFeatureFlags } from "@/lib/features/flags"
+import { CLAUDE_MODEL, isModelUnavailableError, logModelUnavailable } from "@/lib/ai/anthropic-model"
+
+/** The site_analyses columns the action plan history reads. */
+type SiteAnalysisRow = {
+  has_sitemap: boolean | null
+  has_robots_txt: boolean | null
+  has_meta_descriptions: boolean | null
+  schema_types: string[] | null
+  pages_crawled: number | null
+}
 import { log } from "@/lib/logger"
 
 /**
@@ -514,6 +525,84 @@ export const enrichSubscriber = inngest.createFunction(
           aiSignals: analysis.ai_generated_signals || [],
         } : null
 
+        // Gather earlier scans of this same domain so the plan credits work the
+        // customer has already shipped and reads score moves against a known
+        // noise floor. Matched on domain rather than domain_subscription_id,
+        // which is null on rows written before the multi-domain migration.
+        const history: ScanHistoryPoint[] = []
+        if (scanData.domain) {
+          const { data: priorRuns } = await supabase
+            .from("scan_runs")
+            .select("id, created_at")
+            .eq("lead_id", leadId)
+            .eq("domain", scanData.domain)
+            .eq("status", "complete")
+            .neq("id", scanRunId)
+            .order("created_at", { ascending: false })
+            .limit(8)
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const priorIds = (priorRuns || []).map((r: any) => r.id as string)
+
+          if (priorIds.length > 0) {
+            const [{ data: priorScores }, { data: priorAnalyses }, { data: priorResponses }] =
+              await Promise.all([
+                supabase
+                  .from("score_history")
+                  .select("run_id, visibility_score")
+                  .in("run_id", priorIds),
+                supabase
+                  .from("site_analyses")
+                  .select("run_id, has_sitemap, has_robots_txt, has_meta_descriptions, schema_types, pages_crawled")
+                  .in("run_id", priorIds),
+                supabase
+                  .from("llm_responses")
+                  .select("run_id, platform, domain_mentioned")
+                  .in("run_id", priorIds)
+                  .eq("domain_mentioned", true),
+              ])
+
+            const scoreByRun = new Map<string, number>(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (priorScores || []).map((r: any) => [r.run_id as string, Number(r.visibility_score)])
+            )
+            const analysisByRun = new Map<string, SiteAnalysisRow>(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (priorAnalyses || []).map((r: any) => [r.run_id as string, r as SiteAnalysisRow])
+            )
+
+            const mentionsByRun = new Map<string, Record<string, number>>()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const r of (priorResponses || []) as any[]) {
+              const counts = mentionsByRun.get(r.run_id) || {}
+              counts[r.platform] = (counts[r.platform] || 0) + 1
+              mentionsByRun.set(r.run_id, counts)
+            }
+
+            // Oldest first, so consecutive pairs read as "what changed next".
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const run of [...(priorRuns || [])].reverse() as any[]) {
+              const score = scoreByRun.get(run.id)
+              if (score === undefined || !Number.isFinite(score)) continue
+              const priorAnalysis = analysisByRun.get(run.id)
+              history.push({
+                scanDate: new Date(run.created_at).toISOString().slice(0, 10),
+                visibilityScore: score,
+                mentionsByPlatform: mentionsByRun.get(run.id) || {},
+                hasSitemap: priorAnalysis?.has_sitemap || false,
+                hasRobotsTxt: priorAnalysis?.has_robots_txt || false,
+                hasMetaDescriptions: priorAnalysis?.has_meta_descriptions || false,
+                schemaTypes: priorAnalysis?.schema_types || [],
+                pagesCrawled: priorAnalysis?.pages_crawled || 0,
+              })
+            }
+          }
+        }
+
+        if (history.length > 0) {
+          log.info(scanRunId, `Action plan history: ${history.length} earlier scans of ${scanData.domain}`)
+        }
+
         // Build action plan input
         const actionPlanInput: ActionPlanInput = {
           analysis: {
@@ -543,6 +632,8 @@ export const enrichSubscriber = inngest.createFunction(
           domain: scanData.domain,
           platformData, // Platform/technology detection data
           completedActionTitles, // Pass to Claude to avoid re-suggesting
+          history, // Earlier scans of this domain, oldest first
+          currentScanDate: new Date().toISOString().slice(0, 10),
         }
 
         // Generate the action plan
@@ -665,9 +756,19 @@ export const enrichSubscriber = inngest.createFunction(
           actionsSkipped: generatedPlan.priorityActions.length - actionInserts.length,
         }
       } catch (error) {
-        log.error(scanRunId, "Action plan generation failed", error instanceof Error ? error.message : "Unknown error")
-        // Don't fail the enrichment - action plan is supplementary
-        return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+        const message = error instanceof Error ? error.message : "Unknown error"
+        log.error(scanRunId, "Action plan generation failed", message)
+
+        // A retired model ID, or a parameter the current model rejects, fails
+        // every call forever. Retrying never helps and the run must not look
+        // healthy afterwards — that combination hid a 77-day outage in 2026.
+        if (isModelUnavailableError(error)) {
+          logModelUnavailable("generate-action-plan", CLAUDE_MODEL, error)
+        }
+
+        // The run still finishes so the rest of the report survives, but
+        // finalize-enrichment reads this result and marks the run failed.
+        return { success: false, error: message }
       }
     })
 
@@ -928,25 +1029,54 @@ export const enrichSubscriber = inngest.createFunction(
           tasksSkipped: skippedCount,
         }
       } catch (error) {
-        log.error(scanRunId, "PRD generation failed", error instanceof Error ? error.message : "Unknown error")
-        // Don't fail enrichment - PRD is supplementary
-        return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+        const message = error instanceof Error ? error.message : "Unknown error"
+        log.error(scanRunId, "PRD generation failed", message)
+
+        if (isModelUnavailableError(error)) {
+          logModelUnavailable("generate-prd", CLAUDE_MODEL, error)
+        }
+
+        return { success: false, error: message }
       }
     })
 
-    // Step 6: Mark enrichment as complete
+    // Step 6: Record the outcome
+    //
+    // Enrichment used to stamp "complete" no matter what the steps returned. An
+    // action plan that never generated then looked identical to one that was
+    // not due yet, and the report told subscribers "Action Plan Coming Soon"
+    // for 77 days while every call 400'd. A step that failed is reported as
+    // failed, so the tab shows an error the customer can act on and the run is
+    // findable in a query.
     await step.run("finalize-enrichment", async () => {
       const supabase = createServiceClient()
+
+      const reasonFor = (result: { error?: string }) => result.error ?? "unknown error"
+
+      const failures: string[] = []
+      if ("success" in actionPlanResult && !actionPlanResult.success) {
+        failures.push(`action plan: ${reasonFor(actionPlanResult as { error?: string })}`)
+      }
+      if ("success" in prdResult && !prdResult.success) {
+        failures.push(`PRD: ${reasonFor(prdResult as { error?: string })}`)
+      }
+
+      const enrichmentFailed = failures.length > 0
 
       await supabase
         .from("scan_runs")
         .update({
-          enrichment_status: "complete",
+          enrichment_status: enrichmentFailed ? "failed" : "complete",
+          enrichment_error: enrichmentFailed ? failures.join("; ") : null,
           enrichment_completed_at: new Date().toISOString(),
         })
         .eq("id", scanRunId)
 
-      log.done(scanRunId, "Enrichment complete")
+      if (enrichmentFailed) {
+        log.error(scanRunId, "Enrichment finished with failures", failures.join("; "))
+      } else {
+        log.done(scanRunId, "Enrichment complete")
+      }
     })
 
     return {

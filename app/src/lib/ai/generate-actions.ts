@@ -2,7 +2,7 @@
  * AI-Powered Action Plan Generation
  *
  * Generates comprehensive, PRD-ready action plans using Claude with:
- * - Extended thinking for deep analysis
+ * - High reasoning effort for deep analysis
  * - Web search for current best practices
  * - Full page-level site data for specific recommendations
  *
@@ -13,7 +13,12 @@ import { generateText } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { trackCost, trackTavilyCost } from './costs'
 import { log } from '@/lib/logger'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
+import {
+  CLAUDE_MODEL,
+  CLAUDE_GATEWAY_MODEL,
+  CLAUDE_DEEP_REASONING_OPTIONS,
+  repairMalformedJson,
+} from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -150,6 +155,32 @@ export interface ActionPlanInput {
 
   // Previously completed action titles (to avoid regenerating)
   completedActionTitles?: string[]
+
+  // Earlier scans of this same domain, oldest first, excluding the current one
+  history?: ScanHistoryPoint[]
+
+  // ISO date (YYYY-MM-DD) of the scan being reported on. Without it the model
+  // has to guess where "this scan" sits on the timeline, and it guesses wrong.
+  currentScanDate?: string
+}
+
+/**
+ * One earlier scan of the same domain, used to ground the plan in what the
+ * customer has already changed and what it did to the score.
+ *
+ * Without this the plan restarts from zero every week. It re-suggests work
+ * that already shipped, and it reads a five-point drop as a regression when
+ * five points is roughly one AI answer changing its mind.
+ */
+export interface ScanHistoryPoint {
+  scanDate: string
+  visibilityScore: number
+  mentionsByPlatform: Record<string, number>
+  hasSitemap: boolean
+  hasRobotsTxt: boolean
+  hasMetaDescriptions: boolean
+  schemaTypes: string[]
+  pagesCrawled: number
 }
 
 // ============================================
@@ -464,6 +495,23 @@ CRITICAL RULES:
 6. Be an expert - use the best practices reference to ensure recommendations are current
 7. Format output as valid JSON matching the schema exactly
 
+CRITICAL - SCAN HISTORY:
+The SCAN HISTORY section lists earlier scans of this same domain, the site changes
+detected between them, and how many score points a single AI mention is worth.
+
+8. Credit work the customer has already shipped. If the history shows a sitemap,
+   schema, or meta descriptions appearing on a date, do not recommend adding them
+   again — build on them instead.
+9. Never present a score move smaller than the stated noise floor as progress or
+   as a decline. Say the number held steady within measurement error, and point
+   at the underlying mention counts instead.
+10. Where the history shows a change that did not move the score, say so and
+    explain what else has to be true before that change can pay off. Do not imply
+    the work was wasted.
+11. Judge progress on mention counts and technical readiness, which move in
+    single steps, rather than on the headline score, which is noisy at this
+    sample size.
+
 CRITICAL - SOURCE INSIGHTS:
 Each action MUST include a "sourceInsight" field that explicitly connects the recommendation to a specific finding from the scan data. This helps users understand WHY we're recommending this action based on what they've already seen in their report.
 
@@ -646,6 +694,109 @@ Language guidelines:
 - The executive summary should motivate action, not discourage the user`
 }
 
+/**
+ * Render the scan history as measurement context rather than a scoreboard.
+ *
+ * Two things have to come through. First, which site changes the customer has
+ * already made, and on what date, so the plan credits them instead of
+ * repeating them. Second, how much of a score move is real: the visibility
+ * score is built from a small number of mentions, so a single answer changing
+ * shifts it several points. A plan that treats that as a trend sends the
+ * customer chasing noise.
+ */
+function buildHistoryAnalysis(input: ActionPlanInput): string {
+  const history = input.history ?? []
+  if (history.length === 0) {
+    return 'No earlier scans of this domain. This is the first measurement, so treat the current numbers as a baseline rather than a result.'
+  }
+
+  const timeline = history
+    .map((point) => {
+      const mentions = Object.entries(point.mentionsByPlatform)
+        .map(([platform, count]) => `${platform} ${count}`)
+        .join(', ')
+      return `- ${point.scanDate}: score ${point.visibilityScore}, mentions ${mentions || 'none'}`
+    })
+    .join('\n')
+
+  // Site changes the customer shipped between consecutive scans.
+  const siteChanges: string[] = []
+  const points = [
+    ...history,
+    {
+      scanDate: input.currentScanDate ?? 'this scan',
+      visibilityScore: input.scores.overall,
+      mentionsByPlatform: {},
+      hasSitemap: input.crawlData.hasSitemap,
+      hasRobotsTxt: input.crawlData.hasRobotsTxt,
+      hasMetaDescriptions: input.crawlData.hasMetaDescriptions,
+      schemaTypes: input.crawlData.schemaTypes,
+      pagesCrawled: input.crawlData.pagesCrawled,
+    } satisfies ScanHistoryPoint,
+  ]
+
+  for (let i = 1; i < points.length; i++) {
+    const before = points[i - 1]
+    const after = points[i]
+    const when = after.scanDate
+
+    if (!before.hasSitemap && after.hasSitemap) {
+      siteChanges.push(`${when}: sitemap.xml appeared — the customer shipped this`)
+    }
+    if (before.hasSitemap && !after.hasSitemap) {
+      siteChanges.push(`${when}: sitemap.xml disappeared — flag this as a regression`)
+    }
+    if (!before.hasRobotsTxt && after.hasRobotsTxt) {
+      siteChanges.push(`${when}: robots.txt appeared`)
+    }
+    if (!before.hasMetaDescriptions && after.hasMetaDescriptions) {
+      siteChanges.push(`${when}: meta descriptions appeared`)
+    }
+    const added = after.schemaTypes.filter((t) => !before.schemaTypes.includes(t))
+    if (added.length > 0) {
+      siteChanges.push(`${when}: schema added — ${added.join(', ')}`)
+    }
+    const pageDelta = after.pagesCrawled - before.pagesCrawled
+    if (Math.abs(pageDelta) >= 3) {
+      siteChanges.push(
+        `${when}: pages crawled went from ${before.pagesCrawled} to ${after.pagesCrawled}`
+      )
+    }
+  }
+
+  const changesSection =
+    siteChanges.length > 0
+      ? siteChanges.map((c) => `- ${c}`).join('\n')
+      : '- No detected change to sitemap, robots.txt, schema, meta descriptions, or page count across these scans.'
+
+  // How many score points one mention is worth, so the model can tell a real
+  // move from sampling noise. ChatGPT carries 10 of the 17 weight.
+  const chatgptTotal = input.scores.byPlatform.chatgpt?.total ?? 0
+  const noiseFloor =
+    chatgptTotal > 0 ? Math.round((1 / chatgptTotal) * (10 / 17) * 100 * 10) / 10 : null
+
+  const resolution = noiseFloor
+    ? `This scan asks ${chatgptTotal} questions per platform. One ChatGPT answer changing its mind moves the visibility score by about ${noiseFloor} points on its own. Treat any week-to-week move smaller than ${Math.round(noiseFloor * 2)} points as sampling noise, not as a result of the customer's work.`
+    : 'Score moves of a few points between scans are sampling noise rather than results.'
+
+  const currentLine = input.currentScanDate
+    ? `- ${input.currentScanDate}: score ${input.scores.overall} (this scan, the one you are writing the plan for)`
+    : `- This scan: score ${input.scores.overall}`
+
+  return `### Score timeline (oldest first)
+
+${timeline}
+${currentLine}
+
+### Site changes detected between scans
+
+${changesSection}
+
+### How to read these numbers
+
+${resolution}`
+}
+
 function buildUserPrompt(
   input: ActionPlanInput,
   bestPractices: string
@@ -655,6 +806,7 @@ function buildUserPrompt(
   const visibilityAnalysis = buildVisibilityAnalysis(input.responses, input.scores)
   const competitiveAnalysis = buildCompetitiveAnalysis(input.brandAwareness, input.competitiveSummary)
   const platformAnalysis = buildPlatformAnalysis(input.platformData)
+  const historyAnalysis = buildHistoryAnalysis(input)
 
   // Build completed actions section if any exist
   const completedSection = input.completedActionTitles && input.completedActionTitles.length > 0
@@ -696,13 +848,17 @@ ${visibilityAnalysis}
 ## COMPETITIVE INTELLIGENCE
 
 ${competitiveAnalysis}
+
+## SCAN HISTORY AND WHAT HAS ALREADY CHANGED
+
+${historyAnalysis}
 ${completedSection}
 ---
 
 Based on the above data, generate a comprehensive action plan. You MUST respond with ONLY valid JSON matching this exact structure:
 
 {
-  "executiveSummary": "2-3 sentence summary of current state and top opportunity",
+  "executiveSummary": "3-4 sentences. Open by naming what the customer changed since the last scan and what it did or did not do to the numbers, using the SCAN HISTORY section. Then give the current state and the top opportunity. If a score move is inside the noise floor, say so plainly rather than presenting it as progress or decline.",
   "priorityActions": [
     {
       "rank": 1,
@@ -763,7 +919,7 @@ Generate 10-15 priority actions, 3-5 page edits, 3-5 content priorities, 8-12 ke
 /**
  * Generate comprehensive AI-powered action plan
  *
- * Uses Claude with extended thinking for deep analysis
+ * Uses Claude at high reasoning effort for deep analysis
  * and web search for current best practices
  */
 export async function generateActionPlan(
@@ -782,7 +938,7 @@ export async function generateActionPlan(
 
   log.info(runId, `Action plan prompt: ~${Math.round(userPrompt.length / 4)} tokens input`)
 
-  // Step 3: Generate with Claude using extended thinking
+  // Step 3: Generate with Claude at high reasoning effort
   const startTime = Date.now()
 
   try {
@@ -790,20 +946,27 @@ export async function generateActionPlan(
       model: anthropic(CLAUDE_MODEL),
       system: systemPrompt,
       prompt: userPrompt,
-      maxOutputTokens: 8000,
-      providerOptions: {
-        anthropic: {
-          // Enable extended thinking for deeper analysis
-          thinking: {
-            type: 'enabled',
-            budgetTokens: 10000, // Allow up to 10k tokens for reasoning
-          },
-        },
-      },
+      // Sonnet 5 counts adaptive thinking against the same budget as the visible
+      // text, and at high effort the thinking is substantial. A plan carrying
+      // 15 actions with implementation steps runs to roughly 10k tokens of JSON
+      // on its own, so the budget has to cover both. 8000 truncated the payload
+      // mid-array, and the parser turned that into an empty plan.
+      maxOutputTokens: 32000,
+      providerOptions: CLAUDE_DEEP_REASONING_OPTIONS,
     })
 
     const responseTimeMs = Date.now() - startTime
-    log.info(runId, `Action plan generated in ${(responseTimeMs / 1000).toFixed(1)}s`)
+    log.info(
+      runId,
+      `Action plan generated in ${(responseTimeMs / 1000).toFixed(1)}s ` +
+        `(finish: ${result.finishReason}, ${result.text.length} chars)`
+    )
+
+    // `length` means the budget ran out mid-JSON. The parse below would fail on
+    // the truncated payload, so name the real cause here.
+    if (result.finishReason === 'length') {
+      log.warn(runId, 'Action plan hit the output token budget and was truncated')
+    }
 
     // Track cost
     if (result.usage) {
@@ -820,7 +983,7 @@ export async function generateActionPlan(
     }
 
     // Parse JSON response
-    const actionPlan = parseActionPlanResponse(result.text, runId)
+    const actionPlan = await parseActionPlanResponse(result.text, runId)
 
     log.done(runId, 'Action plan', `${actionPlan.priorityActions.length} actions, ${actionPlan.pageEdits.length} page edits`)
 
@@ -835,7 +998,11 @@ export async function generateActionPlan(
 /**
  * Parse and validate action plan JSON response
  */
-function parseActionPlanResponse(text: string, runId: string): GeneratedActionPlan {
+async function parseActionPlanResponse(
+  text: string,
+  runId: string,
+  repaired = false
+): Promise<GeneratedActionPlan> {
   // Try to extract JSON from response (may be wrapped in markdown code blocks)
   let jsonStr = text
 
@@ -894,17 +1061,23 @@ function parseActionPlanResponse(text: string, runId: string): GeneratedActionPl
     return parsed
 
   } catch (parseError) {
-    log.error(runId, 'Failed to parse action plan JSON', parseError instanceof Error ? parseError.message : 'Parse error')
+    const detail = parseError instanceof Error ? parseError.message : 'Parse error'
 
-    // Return minimal valid structure
-    return {
-      executiveSummary: 'Action plan generation encountered an error. Please try regenerating.',
-      priorityActions: [],
-      pageEdits: [],
-      contentPriorities: [],
-      keywordMap: [],
-      keyTakeaways: ['Generation encountered a parsing error - please regenerate'],
+    // Sonnet 5 intermittently wraps the payload in fences or pads it with
+    // prose. Try the shared repair before giving up.
+    if (!repaired) {
+      const candidate = await repairMalformedJson({ text })
+      if (candidate && candidate !== jsonStr) {
+        log.warn(runId, `Action plan JSON needed repair: ${detail}`)
+        return parseActionPlanResponse(candidate, runId, true)
+      }
     }
+
+    // Returning an empty plan here used to look like success: the caller stored
+    // a plan with zero actions and the report showed a blank Action Plan tab
+    // with no error anywhere. Throw so the enrichment step records a failure.
+    log.error(runId, 'Failed to parse action plan JSON', detail)
+    throw new Error(`Action plan JSON was unparseable: ${detail}`)
   }
 }
 

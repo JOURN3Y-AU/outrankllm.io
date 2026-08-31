@@ -17,7 +17,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
 import { type PlatformDataInput } from './generate-actions'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL } from './anthropic-model'
+import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, CLAUDE_DEEP_REASONING_OPTIONS } from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -543,7 +543,7 @@ IMPORTANT REMINDERS:
 /**
  * Generate PRD document from action plan
  *
- * Uses Claude with extended thinking for detailed technical output
+ * Uses Claude at high reasoning effort for detailed technical output
  *
  * @param actionPlan - The action plan to convert to PRD tasks
  * @param siteContext - Site context (domain, business name, tech stack)
@@ -576,15 +576,7 @@ export async function generatePrd(
       system: systemPrompt,
       prompt: userPrompt,
       maxOutputTokens: 16000, // Increased to prevent truncation of code snippets
-      providerOptions: {
-        anthropic: {
-          // Enable extended thinking for detailed technical output
-          thinking: {
-            type: 'enabled',
-            budgetTokens: 10000,
-          },
-        },
-      },
+      providerOptions: CLAUDE_DEEP_REASONING_OPTIONS,
     })
 
     const responseTimeMs = Date.now() - startTime

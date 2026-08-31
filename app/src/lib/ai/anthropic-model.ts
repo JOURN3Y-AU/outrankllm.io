@@ -138,3 +138,33 @@ export function logModelUnavailable(context: string, model: string, error: unkno
       `   Check all models: GET /api/admin/model-health\n`
   )
 }
+
+/**
+ * Provider options for the two long-form generation jobs — action plans and
+ * PRDs — where reasoning quality is worth the extra latency and tokens.
+ *
+ * Sonnet 5 removed `thinking: { type: 'enabled', budgetTokens }`. Sending it
+ * returns a 400:
+ *
+ *   "thinking.type.enabled" is not supported for this model. Use
+ *   "thinking.type.adaptive" and "output_config.effort" to control thinking
+ *   behavior.
+ *
+ * That 400 is why no action plan generated between 2026-08-03, when
+ * CLAUDE_MODEL moved to Sonnet 5, and 2026-08-31 — and no PRD either, because
+ * the PRD step only runs once a plan exists. From 2026-06-15 to 2026-08-03 the
+ * same two steps were failing on the retired-model 404 instead. Both failures
+ * were swallowed by a catch that marked enrichment complete anyway, so every
+ * subscriber saw "Action Plan Coming Soon" for 77 days.
+ *
+ * Sonnet 5 runs adaptive thinking by default, so the fix is to say nothing
+ * about `thinking` and raise the effort instead. `effort` maps to
+ * `output_config.effort` in @ai-sdk/anthropic 3.x.
+ *
+ * `max_tokens` caps thinking and visible text together, so pair this with a
+ * generous `maxOutputTokens`. A tight budget truncates the JSON payload, and
+ * the caller's parse then throws with the same symptom as an outright failure.
+ */
+export const CLAUDE_DEEP_REASONING_OPTIONS = {
+  anthropic: { effort: 'high' as const },
+} as const
