@@ -10,6 +10,15 @@ const ScheduleSchema = z.object({
   scan_timezone: z.string().min(1).max(100),
 })
 
+/**
+ * Account-level scan schedule.
+ *
+ * Scans are dispatched from `domain_subscriptions`, one schedule per domain,
+ * set per domain in the dashboard. This endpoint holds the account default and
+ * writes through to every active subscription, so a change here cannot report
+ * success while leaving the scan times untouched.
+ */
+
 // GET: Fetch current schedule
 export async function GET() {
   try {
@@ -81,6 +90,7 @@ export async function PATCH(request: NextRequest) {
 
     const supabase = createServiceClient()
 
+    // The account-level default, applied to domains added later.
     const { error } = await supabase
       .from('leads')
       .update({
@@ -95,11 +105,35 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update schedule' }, { status: 500 })
     }
 
+    // hourly-scan-dispatcher reads domain_subscriptions and never looks at the
+    // lead row, so writing only the lead row returns success and changes
+    // nothing. Apply the schedule to the subscriptions that actually drive
+    // scans, and report how many moved.
+    const { data: updatedSubscriptions, error: subscriptionError } = await supabase
+      .from('domain_subscriptions')
+      .update({
+        scan_schedule_day,
+        scan_schedule_hour,
+        scan_timezone,
+      })
+      .eq('lead_id', session.lead_id)
+      .eq('status', 'active')
+      .select('id')
+
+    if (subscriptionError) {
+      console.error('Error updating domain subscription schedules:', subscriptionError)
+      return NextResponse.json(
+        { error: 'Failed to update schedule' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
       scan_schedule_day,
       scan_schedule_hour,
       scan_timezone,
+      domains_updated: updatedSubscriptions?.length ?? 0,
     })
   } catch (error) {
     console.error('Error updating schedule:', error)
