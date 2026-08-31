@@ -39,7 +39,7 @@ const INCOMPLETE_SUB_THRESHOLD_HOURS = 1
 /**
  * Scan Health Monitor
  *
- * Runs every 6 hours and checks for:
+ * Runs hourly and checks for:
  * 1. Stuck scans (not complete/failed after STUCK_THRESHOLD_MINUTES)
  * 2. Domain subscriptions stuck in "incomplete" state (signup flow failures)
  * 3. High failure rate in recent scans
@@ -51,9 +51,22 @@ export const scanHealthMonitor = inngest.createFunction(
     id: "scan-health-monitor",
     retries: 1,
   },
-  { cron: "0 23,5,11,17 * * *" }, // Every 6 hours starting 9am AEST (23:00 UTC)
+  // Hourly, not six-hourly. STUCK_THRESHOLD_MINUTES already keeps this off runs
+  // that are still legitimately executing, so the only thing a six-hour gap
+  // bought was a six-hour blind spot: ten scans from the 2026-08-30 batch sat
+  // in a non-terminal state for hours with nothing recorded anywhere. This is a
+  // backstop for runs that hang without emitting any event — the failure and
+  // cancellation handlers cover the rest, now that they match.
+  { cron: "0 * * * *" },
   async ({ step }) => {
     const issues: string[] = []
+
+    // Stuck scans are discrete events: this run recovers them, so they are gone
+    // by the next sweep and alerting every time is correct. The other two checks
+    // describe standing conditions that persist for hours, so at an hourly cron
+    // they would mail the same thing 24 times a day. Report those on the old
+    // six-hourly cadence.
+    const isDigestHour = [23, 5, 11, 17].includes(new Date().getUTCHours())
 
     // Check 1: Stuck scans
     const stuckScans = await step.run("check-stuck-scans", async () => {
@@ -253,7 +266,7 @@ export const scanHealthMonitor = inngest.createFunction(
       return subsWithoutScans
     })
 
-    if (incompleteSubscriptions.length > 0) {
+    if (incompleteSubscriptions.length > 0 && isDigestHour) {
       issues.push(
         `**${incompleteSubscriptions.length} incomplete subscription(s) with no scan:**\n` +
           incompleteSubscriptions
@@ -289,7 +302,7 @@ export const scanHealthMonitor = inngest.createFunction(
       }
     })
 
-    if (failureRate.total > 0 && failureRate.rate > 50) {
+    if (failureRate.total > 0 && failureRate.rate > 50 && isDigestHour) {
       issues.push(
         `**High failure rate in last 24h:** ${failureRate.failed}/${failureRate.total} scans failed (${failureRate.rate}%)`
       )
