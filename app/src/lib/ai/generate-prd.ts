@@ -17,7 +17,12 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { trackCost } from './costs'
 import { log } from '@/lib/logger'
 import { type PlatformDataInput } from './generate-actions'
-import { CLAUDE_MODEL, CLAUDE_GATEWAY_MODEL, CLAUDE_DEEP_REASONING_OPTIONS } from './anthropic-model'
+import {
+  CLAUDE_MODEL,
+  CLAUDE_GATEWAY_MODEL,
+  CLAUDE_DEEP_REASONING_OPTIONS,
+  repairMalformedJson,
+} from './anthropic-model'
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -575,12 +580,27 @@ export async function generatePrd(
       model: anthropic(CLAUDE_MODEL),
       system: systemPrompt,
       prompt: userPrompt,
-      maxOutputTokens: 16000, // Increased to prevent truncation of code snippets
+      // A PRD carries per-task code snippets, so it is the largest payload the
+      // app asks for — and Sonnet 5 counts adaptive thinking against the same
+      // budget. At 16000 the JSON truncated mid-object and the parse threw, so
+      // both PRDs requested on 2026-08-31 billed for the model call and wrote
+      // nothing. Sonnet 5 accepts 64000; 48000 leaves headroom for thinking.
+      maxOutputTokens: 48000,
       providerOptions: CLAUDE_DEEP_REASONING_OPTIONS,
     })
 
     const responseTimeMs = Date.now() - startTime
-    log.info(runId, `PRD generated in ${(responseTimeMs / 1000).toFixed(1)}s`)
+    log.info(
+      runId,
+      `PRD generated in ${(responseTimeMs / 1000).toFixed(1)}s ` +
+        `(finish: ${result.finishReason}, ${result.text.length} chars)`
+    )
+
+    // `length` means the budget ran out mid-JSON, which the parse below reports
+    // as malformed. Name the real cause here so the two are not confused.
+    if (result.finishReason === 'length') {
+      log.warn(runId, 'PRD hit the output token budget and was truncated')
+    }
 
     // Track cost
     if (result.usage) {
@@ -600,7 +620,17 @@ export async function generatePrd(
     log.info(runId, `PRD response length: ${result.text.length} chars`)
 
     // Parse JSON response
-    const prd = parsePrdResponse(result.text, runId, siteContext)
+    let prd = parsePrdResponse(result.text, runId, siteContext)
+
+    // Sonnet 5 intermittently fences the payload or pads it with prose. Try the
+    // shared repair before treating this as a failure.
+    if (prd.tasks.length === 0 && prd.overview.includes('encountered an error')) {
+      const repaired = await repairMalformedJson({ text: result.text })
+      if (repaired) {
+        log.warn(runId, 'PRD JSON needed repair')
+        prd = parsePrdResponse(repaired, runId, siteContext)
+      }
+    }
 
     // If parsing failed (empty tasks with error message), throw to make it visible
     if (prd.tasks.length === 0 && prd.overview.includes('encountered an error')) {
