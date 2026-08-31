@@ -81,7 +81,10 @@ export async function GET(request: Request) {
         )
       `)
       .eq('status', 'complete')
-      .order('created_at', { ascending: true })
+      // Most recent `limit` runs; reversed to chronological order below.
+      // Ordering ascending before the limit returns the OLDEST runs, so a
+      // long-running account never sees its recent competitive position.
+      .order('created_at', { ascending: false })
       .limit(limit)
 
     if (domainSubscriptionId) {
@@ -90,7 +93,8 @@ export async function GET(request: Request) {
       scanRunsQuery = scanRunsQuery.eq('lead_id', session.lead_id)
     }
 
-    const { data: reports, error } = await scanRunsQuery
+    const { data: recentRuns, error } = await scanRunsQuery
+    const reports = (recentRuns || []).slice().reverse()
 
     if (error) {
       console.error('Error fetching competitor history:', error)
@@ -121,7 +125,7 @@ export async function GET(request: Request) {
     const snapshots: CompetitorSnapshot[] = []
     const competitorCounts = new Map<string, number>()
 
-    for (const run of reports || []) {
+    for (const run of reports) {
       // Handle both array and single object cases
       const reportData = Array.isArray(run.reports)
         ? run.reports[0]

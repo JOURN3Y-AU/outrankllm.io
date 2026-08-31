@@ -18,8 +18,20 @@ export interface ScoreSnapshot {
   recorded_at: string
 }
 
+/**
+ * A scan that ran but produced no score, so the trend line has no point for
+ * that week. Returned alongside the snapshots so a hole in the chart reads as
+ * a missed measurement rather than as a flat stretch.
+ */
+export interface TrendGap {
+  run_id: string
+  attempted_at: string
+  reason: string | null
+}
+
 export interface TrendData {
   snapshots: ScoreSnapshot[]
+  gaps: TrendGap[]
   hasHistory: boolean
   periodStart: string | null
   periodEnd: string | null
@@ -62,8 +74,12 @@ export async function GET(request: Request) {
       query = query.eq('lead_id', session.lead_id)
     }
 
-    const { data: snapshots, error } = await query
-      .order('recorded_at', { ascending: true })
+    // Take the most recent `limit` scans, then flip to chronological order for
+    // the chart. Ordering ascending before the limit returns the OLDEST scans
+    // instead, which on a long-running account renders a trend that stops
+    // months back and never includes the report the reader is looking at.
+    const { data: recent, error } = await query
+      .order('recorded_at', { ascending: false })
       .limit(limit)
 
     if (error) {
@@ -74,12 +90,41 @@ export async function GET(request: Request) {
       )
     }
 
-    const hasHistory = snapshots && snapshots.length > 0
+    const snapshots = (recent || []).slice().reverse()
+    const hasHistory = snapshots.length > 0
     const periodStart = hasHistory ? snapshots[0].recorded_at : null
     const periodEnd = hasHistory ? snapshots[snapshots.length - 1].recorded_at : null
 
+    // Scans that ran inside the charted window but produced no score. Without
+    // these the chart draws a straight line across a month of failed scans, so
+    // a measurement outage reads as a plateau.
+    let gaps: TrendGap[] = []
+    if (periodStart) {
+      let runsQuery = supabase
+        .from('scan_runs')
+        .select('id, created_at, error_message')
+        .eq('status', 'failed')
+        .gte('created_at', periodStart)
+        .order('created_at', { ascending: true })
+
+      runsQuery = domainSubscriptionId
+        ? runsQuery.eq('domain_subscription_id', domainSubscriptionId)
+        : runsQuery.eq('lead_id', session.lead_id)
+
+      const { data: failedRuns } = await runsQuery
+
+      gaps = (failedRuns || []).map(
+        (run: { id: string; created_at: string; error_message: string | null }) => ({
+          run_id: run.id,
+          attempted_at: run.created_at,
+          reason: run.error_message ?? null,
+        })
+      )
+    }
+
     return NextResponse.json({
-      snapshots: snapshots || [],
+      snapshots,
+      gaps,
       hasHistory,
       periodStart,
       periodEnd,

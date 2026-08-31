@@ -8,6 +8,17 @@ import { UpgradeModal } from '../UpgradeModal'
 import type { Response, Analysis, BrandAwarenessResult } from '../shared'
 import { platformColors, platformNames, calculateReadinessScore, handlePricingClick } from '../shared'
 
+/**
+ * A scan that ran but produced no score. Named under the chart so a missing
+ * week reads as a scan we failed to complete, not as a week where nothing
+ * changed.
+ */
+interface TrendGap {
+  run_id: string
+  attempted_at: string
+  reason: string | null
+}
+
 interface ScoreSnapshot {
   id: string
   run_id: string
@@ -63,6 +74,7 @@ export function MeasurementsTab({
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [scoreCalloutExpanded, setScoreCalloutExpanded] = useState(true)
   const [rawTrendData, setRawTrendData] = useState<ScoreSnapshot[]>([])
+  const [trendGaps, setTrendGaps] = useState<TrendGap[]>([])
   const [trendLoading, setTrendLoading] = useState(false)
   const [rawCompetitorData, setRawCompetitorData] = useState<CompetitorSnapshot[]>([])
   const [competitorTopNames, setCompetitorTopNames] = useState<string[]>([])
@@ -86,6 +98,7 @@ export function MeasurementsTab({
         if (res.ok) {
           const data = await res.json()
           setRawTrendData(data.snapshots || [])
+          setTrendGaps(data.gaps || [])
         }
       } catch (error) {
         console.error('Error fetching trends:', error)
@@ -123,6 +136,19 @@ export function MeasurementsTab({
 
     fetchCompetitorTrends()
   }, [isSubscriber, domainSubscriptionId])
+
+  // Failed scans inside the charted window. The chart can only draw the scans
+  // that produced a score, so without this a month of failed scans looks like a
+  // flat line rather than a month we did not measure.
+  const visibleGaps = useMemo(() => {
+    if (trendGaps.length === 0 || rawTrendData.length === 0) return []
+    const firstShown = new Date(rawTrendData[0].recorded_at).getTime()
+    const lastShown = new Date(rawTrendData[rawTrendData.length - 1].recorded_at).getTime()
+    return trendGaps.filter((gap) => {
+      const at = new Date(gap.attempted_at).getTime()
+      return at >= firstShown && at <= lastShown
+    })
+  }, [trendGaps, rawTrendData])
 
   // Filter trend data to only show data up to and including the current report
   // This ensures the trend chart values match the gauges shown above it
@@ -788,6 +814,39 @@ export function MeasurementsTab({
                     },
                   ]}
                 />
+
+                {visibleGaps.length > 0 && (
+                  <div
+                    className="border border-[var(--border)]"
+                    style={{ marginTop: '16px', padding: '12px 16px', backgroundColor: 'var(--surface)' }}
+                  >
+                    <div className="flex items-start" style={{ gap: '10px' }}>
+                      <AlertCircle
+                        size={14}
+                        className="text-[var(--gold)] flex-shrink-0"
+                        style={{ marginTop: '2px' }}
+                      />
+                      <div>
+                        <p className="text-[var(--text)] text-xs" style={{ marginBottom: '4px' }}>
+                          {visibleGaps.length === 1
+                            ? '1 scan in this period did not complete, so the chart has no reading for it.'
+                            : `${visibleGaps.length} scans in this period did not complete, so the chart has no reading for those dates.`}
+                        </p>
+                        <p className="text-[var(--text-ghost)] text-xs font-mono">
+                          {visibleGaps
+                            .map((gap) =>
+                              new Date(gap.attempted_at).toLocaleDateString(undefined, {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                              })
+                            )
+                            .join(' · ')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
