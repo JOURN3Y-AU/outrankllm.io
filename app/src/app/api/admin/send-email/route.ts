@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getAdminSession } from '@/lib/admin'
 import { sendScanCompleteEmail } from '@/lib/email/resend'
+import { getPreviousScoreForDomain } from '@/lib/score-history'
 
 /**
  * Admin endpoint to manually send scan_complete email
@@ -132,19 +133,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get previous score for comparison
-    let previousScore: number | undefined
-    const { data: prevScores } = await supabase
-      .from('score_history')
-      .select('visibility_score')
-      .eq('lead_id', leadId)
-      .neq('run_id', targetScanRunId)
-      .order('recorded_at', { ascending: false })
-      .limit(1)
-
-    if (prevScores && prevScores.length > 0) {
-      previousScore = prevScores[0].visibility_score
-    }
+    // Compare against this domain's own previous scan, not the account's
+    const previousScore = await getPreviousScoreForDomain(
+      supabase,
+      leadId,
+      targetDomain,
+      targetScanRunId
+    )
 
     const score = report.visibility_score ?? 0
 

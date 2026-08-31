@@ -19,6 +19,7 @@ import {
 import { extractTopCompetitors } from "@/lib/ai/query"
 // Brand awareness is now handled by enrich-subscriber function
 import { sendVerificationEmail, sendScanCompleteEmail } from "@/lib/email/resend"
+import { getPreviousScoreForDomain } from "@/lib/score-history"
 import { trackServerEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { detectGeography, extractTldCountry, detectLocationFromContent, countryToIsoCode } from "@/lib/geo/detect"
 import { log } from "@/lib/logger"
@@ -1021,19 +1022,13 @@ export const processScan = inngest.createFunction(
       // Only send scan complete email if user is a subscriber AND has verified email
       // This prevents trial users from getting the wrong email before verification
       if (isSubscriber && isEmailVerified) {
-        // Get previous score for comparison
-        let previousScore: number | undefined
-        const { data: prevScores } = await supabase
-          .from("score_history")
-          .select("visibility_score")
-          .eq("lead_id", leadId)
-          .neq("run_id", scanId)
-          .order("recorded_at", { ascending: false })
-          .limit(1)
-
-        if (prevScores && prevScores.length > 0) {
-          previousScore = prevScores[0].visibility_score
-        }
+        // Compare against this domain's own previous scan, not the account's
+        const previousScore = await getPreviousScoreForDomain(
+          supabase,
+          leadId,
+          domain,
+          scanId
+        )
 
         log.info(scanId, `Sending scan complete email (prev: ${previousScore ?? "none"})`)
         emailResult = await sendScanCompleteEmail(

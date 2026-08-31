@@ -34,6 +34,7 @@ import { extractTopCompetitors } from '@/lib/ai/query'
 //   runBrandAwarenessQueries,
 // } from '@/lib/ai/brand-awareness'
 import { sendVerificationEmail, sendScanCompleteEmail } from '@/lib/email/resend'
+import { getPreviousScoreForDomain } from '@/lib/score-history'
 import { detectGeography, extractTldCountry, countryToIsoCode } from '@/lib/geo/detect'
 import { log } from '@/lib/logger'
 import { getUserTier } from '@/lib/features/flags'
@@ -537,17 +538,13 @@ export async function POST(request: NextRequest) {
         // Get previous score for comparison
         let previousScore: number | undefined
         if (currentLeadId) {
-          const { data: prevScores } = await supabase
-            .from('score_history')
-            .select('visibility_score')
-            .eq('lead_id', currentLeadId)
-            .neq('run_id', scanId)
-            .order('recorded_at', { ascending: false })
-            .limit(1)
-
-          if (prevScores && prevScores.length > 0) {
-            previousScore = prevScores[0].visibility_score
-          }
+          // Compare against this domain's own previous scan, not the account's
+          previousScore = await getPreviousScoreForDomain(
+            supabase,
+            currentLeadId,
+            domain,
+            scanId
+          )
         }
 
         log.info(scanId, `Sending scan complete email to subscriber (prev score: ${previousScore ?? 'none'})`)
