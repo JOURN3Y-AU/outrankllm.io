@@ -113,66 +113,64 @@ export { processScanFailureHandler }
  *
  * Runs are cancelled either by `timeouts.finish` expiring or by `cancelOn`
  * matching a newer run for the same scan.
+ *
+ * Resolve the scan by `inngest_run_id`, NOT by `event.data.event`.
+ * `inngest/function.cancelled` carries only { function_id, run_id,
+ * correlation_id }; unlike `inngest/function.failed` it does not embed the
+ * original trigger. This handler was copied from the failure handler and read
+ * `event.data.event`, so scanId, domain and leadId were all undefined, the
+ * fallback lookup was skipped, and it resolved nothing. It recorded zero of
+ * 326 failures between 2026-03-23 and 2026-09-07.
  */
 const processScanCancelledHandler = inngest.createFunction(
   { id: "process-scan-cancelled" },
   { event: "inngest/function.cancelled", if: whenFunctionIs("process-scan") },
   async ({ event }) => {
-    const originalEvent = event.data.event as { data?: { scanId?: string; domain?: string; leadId?: string } } | undefined
-    const scanId = originalEvent?.data?.scanId
-    const domain = originalEvent?.data?.domain
-    const leadId = originalEvent?.data?.leadId
+    const runId = event.data.run_id
 
-    const supabase = createServiceClient()
-
-    let resolvedScanId = scanId || null
-
-    // Weekly scans use scanId: null — same fallback as the failure handler.
-    if (!resolvedScanId && domain && leadId) {
-      const { data: scan } = await supabase
-        .from("scan_runs")
-        .select("id")
-        .eq("lead_id", leadId)
-        .eq("domain", domain)
-        .not("status", "in", '("complete","failed")')
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
-
-      if (scan) {
-        resolvedScanId = scan.id
-      }
-    }
-
-    if (!resolvedScanId) {
-      console.error("[process-scan-cancelled] Could not resolve scanId, cannot update DB")
+    if (!runId) {
+      console.error("[process-scan-cancelled] Cancellation event carried no run_id")
       return { updated: false }
     }
 
-    // Record the stage it died at — that is the diagnostic signal. A run
-    // cancelled mid-"querying" means a provider call hung rather than threw.
-    const { data: existing } = await supabase
+    const supabase = createServiceClient()
+
+    // Resolve by inngest_run_id, recorded in setup-scan. The cancellation
+    // event carries nothing else usable: no domain, no leadId, no original
+    // event. Record the stage it died at too — that is the diagnostic signal.
+    // A run cancelled mid-"querying" means a provider call hung rather than
+    // threw; one cancelled seconds in means it was superseded.
+    const { data: scan } = await supabase
       .from("scan_runs")
-      .select("status, progress")
-      .eq("id", resolvedScanId)
-      .single()
+      .select("id, domain, status, progress")
+      .eq("inngest_run_id", runId)
+      .not("status", "in", '("complete","failed")')
+      .limit(1)
+      .maybeSingle()
+
+    if (!scan) {
+      // Already terminal, or cancelled before setup-scan committed the run id.
+      return { updated: false }
+    }
 
     await supabase
       .from("scan_runs")
       .update({
         status: "failed",
+        completed_at: new Date().toISOString(),
         error_message:
-          `Inngest cancelled the run (timeouts.finish expired or superseded). ` +
-          `Stalled at stage "${existing?.status ?? "unknown"}" (${existing?.progress ?? "?"}%). ` +
+          `Inngest cancelled the run (timeouts.finish expired, or a newer scan/process ` +
+          `event for the same scanId superseded it). ` +
+          `Stalled at stage "${scan.status}" (${scan.progress}%). ` +
           `A run cancelled mid-stage usually means a provider call hung without throwing.`.slice(0, 500),
       })
-      .eq("id", resolvedScanId)
+      .eq("id", scan.id)
 
     console.error(
-      `[process-scan-cancelled] Marked scan ${resolvedScanId} (${domain}) as failed — ` +
-        `stalled at "${existing?.status}" (${existing?.progress}%)`
+      `[process-scan-cancelled] Marked scan ${scan.id} (${scan.domain}) as failed — ` +
+        `stalled at "${scan.status}" (${scan.progress}%)`
     )
-    return { updated: true, scanId: resolvedScanId, domain }
+    return { updated: true, scanId: scan.id, domain: scan.domain }
   }
 )
 
@@ -213,19 +211,30 @@ export const processScan = inngest.createFunction(
         scope: "fn",
       },
     ],
-    // Cancel any existing runs for the same scan when a new one starts
-    // Only match when scanId is not null — weekly scans use scanId: null,
-    // and null == null would cancel ALL concurrent weekly scans
+    // Cancel a superseded run for the same scan — but only when the scan is
+    // actually the same one.
+    //
+    // Do NOT reach for `match` here. `match: "data.scanId"` compiles to
+    // `event.data.scanId == async.data.scanId`, and weekly scans send
+    // `scanId: null`, so null == null made every dispatched event cancel every
+    // weekly run still in flight. Only the last domain of the batch survived.
+    //
+    // A guard was added alongside `match` on 2026-03-23 and never took effect:
+    // the SDK drops `if` whenever `match` is present
+    // (`if (match) ret.if = ...; else if (ifStr) ret.if = ifStr`), so the
+    // deployed expression stayed the unguarded null == null compare. Nine
+    // domains went unrefreshed from 2026-08-03 to 2026-09-07 because of it.
+    //
+    // Express the whole condition in `if` so nothing can silently discard it.
     cancelOn: [
       {
         event: "scan/process",
-        match: "data.scanId",
-        if: "event.data.scanId != null",
+        if: "event.data.scanId != null && event.data.scanId == async.data.scanId",
       },
     ],
   },
   { event: "scan/process" },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
     const { domain, email, verificationToken, skipEmail, domainSubscriptionId } = event.data
     const startTime = Date.now()
 
@@ -260,6 +269,8 @@ export const processScan = inngest.createFunction(
           progress: 5,
           started_at: new Date().toISOString(),
           domain: domain,  // CRITICAL: Store domain for multi-domain isolation
+          // The only key inngest/function.cancelled can be resolved by.
+          inngest_run_id: runId,
         }
         if (domainSubscriptionId) {
           updateData.domain_subscription_id = domainSubscriptionId
@@ -279,6 +290,7 @@ export const processScan = inngest.createFunction(
         progress: 5,
         started_at: new Date().toISOString(),
         trigger_type: "scheduled",
+        inngest_run_id: runId,
       }
       if (domainSubscriptionId) {
         insertData.domain_subscription_id = domainSubscriptionId

@@ -723,7 +723,7 @@ export const processHiringBrandScan = inngest.createFunction(
     cancelOn: [{ event: 'hiringbrand/scan', match: 'data.monitoredDomainId' }],
   },
   { event: 'hiringbrand/scan' },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
     const { domain, organizationId, monitoredDomainId } = event.data
     const startTime = Date.now()
 
@@ -742,6 +742,8 @@ export const processHiringBrandScan = inngest.createFunction(
           progress: 5,
           brand: 'hiringbrand',
           started_at: new Date().toISOString(),
+          // The only key inngest/function.cancelled can be resolved by.
+          inngest_run_id: runId,
         })
         .select('id')
         .single()
@@ -2707,6 +2709,12 @@ function generateEmployerSummary(
  * Runs are cancelled either by `timeouts.finish` expiring or by `cancelOn`
  * matching a newer dispatch for the same monitored_domain_id — the latter is
  * easy to trigger accidentally by dispatching the same brand twice.
+ *
+ * Resolve the scan by `inngest_run_id`, NOT by `event.data.event`.
+ * `inngest/function.cancelled` carries only { function_id, run_id,
+ * correlation_id }; unlike `inngest/function.failed` it does not embed the
+ * original trigger. Reading `event.data.event` left every field undefined and
+ * this handler resolved nothing.
  */
 export const processHiringBrandScanCancelledHandler = inngest.createFunction(
   { id: 'process-hiringbrand-scan-cancelled' },
@@ -2715,31 +2723,29 @@ export const processHiringBrandScanCancelledHandler = inngest.createFunction(
     if: whenFunctionIs("process-hiringbrand-scan"),
   },
   async ({ event }) => {
-    const originalEvent = event.data.event as
-      | { data?: { domain?: string; organizationId?: string; monitoredDomainId?: string } }
-      | undefined
-    const monitoredDomainId = originalEvent?.data?.monitoredDomainId
-    const domain = originalEvent?.data?.domain
+    const runId = event.data.run_id
 
-    if (!monitoredDomainId) {
-      console.error('[hiringbrand-scan-cancelled] No monitoredDomainId on the event, cannot update')
+    if (!runId) {
+      console.error('[hiringbrand-scan-cancelled] Cancellation event carried no run_id')
       return { updated: false }
     }
 
     const supabase = createServiceClient()
 
-    // The most recent non-terminal run for this brand is the cancelled one.
+    // Resolve by inngest_run_id, recorded in setup-scan. The cancellation
+    // event carries no domain, no monitoredDomainId and no original event —
+    // see the note above.
     const { data: scan } = await supabase
       .from('scan_runs')
-      .select('id, status, progress')
-      .eq('monitored_domain_id', monitoredDomainId)
-      .eq('brand', 'hiringbrand')
+      .select('id, domain, status, progress')
+      .eq('inngest_run_id', runId)
       .not('status', 'in', '("complete","failed")')
-      .order('created_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (!scan) return { updated: false }
+
+    const domain = scan.domain
 
     await supabase
       .from('scan_runs')
