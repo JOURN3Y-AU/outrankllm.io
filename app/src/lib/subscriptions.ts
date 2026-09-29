@@ -4,6 +4,7 @@
  */
 
 import { createServiceClient } from '@/lib/supabase/server'
+import { allocateScanSlot } from '@/lib/scan-slots'
 import type { SubscriptionTier } from './stripe-config'
 
 // ============================================
@@ -226,6 +227,12 @@ export async function getSubscriptionByDomain(leadId: string, domain: string): P
 export async function createDomainSubscription(input: CreateDomainSubscriptionInput): Promise<DomainSubscription | null> {
   const supabase = createServiceClient()
 
+  // Give every subscription its own slot at creation. Leaving the schedule null
+  // used to mean the dispatcher's Monday 09:00 default, so each new domain
+  // joined the same slot and the weekly batch lost scans to the concurrency
+  // gate. The client can still change this from the dashboard afterwards.
+  const slot = await allocateScanSlot(supabase)
+
   const { data, error } = await supabase
     .from('domain_subscriptions')
     .insert({
@@ -237,6 +244,9 @@ export async function createDomainSubscription(input: CreateDomainSubscriptionIn
       status: input.status || 'incomplete',
       current_period_start: input.current_period_start,
       current_period_end: input.current_period_end,
+      scan_schedule_day: slot.day,
+      scan_schedule_hour: slot.hour,
+      scan_timezone: slot.timezone,
     })
     .select()
     .single()
