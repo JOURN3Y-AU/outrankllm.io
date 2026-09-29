@@ -180,6 +180,9 @@ export const scanHealthMonitor = inngest.createFunction(
                     leadId: scan.lead_id,
                     domainSubscriptionId: scan.domain_subscription_id || undefined,
                     skipEmail: false,
+                    // A recovered scan is still a scheduled refresh, so it
+                    // reports through the Monday digest like the original.
+                    notify: "weekly_digest",
                   },
                 })
               }

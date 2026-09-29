@@ -236,6 +236,7 @@ export const processScan = inngest.createFunction(
   { event: "scan/process" },
   async ({ event, step, runId }) => {
     const { domain, email, verificationToken, skipEmail, domainSubscriptionId } = event.data
+    const notify = event.data.notify ?? "immediate"
     const startTime = Date.now()
 
 
@@ -1051,6 +1052,15 @@ export const processScan = inngest.createFunction(
       const isEmailVerified = leadData?.email_verified === true
 
       let emailResult: { success: boolean; messageId?: string; error?: string }
+
+      // A scheduled scan reports through the Monday digest instead, so that
+      // scans can be spread across the whole week without emailing a client
+      // whenever their slot happens to fall. Verification still goes out below:
+      // an unverified subscriber cannot open the report the digest links to.
+      if (notify === "weekly_digest" && isSubscriber && isEmailVerified) {
+        log.info(scanId, "Deferring scan-complete email to the weekly digest")
+        return { deferred: true }
+      }
 
       // Only send scan complete email if user is a subscriber AND has verified email
       // This prevents trial users from getting the wrong email before verification

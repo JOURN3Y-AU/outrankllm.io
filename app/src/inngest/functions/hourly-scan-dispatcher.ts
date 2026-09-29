@@ -1,6 +1,7 @@
 import { inngest } from "../client"
 import { createServiceClient } from "@/lib/supabase/server"
 import { MAX_SCANS_PER_SLOT, DEFAULT_SCAN_TIMEZONE } from "@/lib/scan-slots"
+import { getLocalTime } from "@/lib/local-time"
 
 /** Gap between scans dispatched in the same slot. */
 const STAGGER_SECONDS = 300
@@ -138,6 +139,9 @@ export const hourlyScanDispatcher = inngest.createFunction(
           leadId: sub.lead_id,
           domainSubscriptionId: sub.id,
           skipEmail: false,
+          // The Monday digest tells the client, not this scan. That is what
+          // lets a slot sit anywhere in the week.
+          notify: "weekly_digest",
         },
       })
     }
@@ -153,43 +157,3 @@ export const hourlyScanDispatcher = inngest.createFunction(
     }
   }
 )
-
-/**
- * Get local day of week and hour from a UTC date and timezone
- */
-function getLocalTime(
-  utcDate: Date,
-  timezone: string
-): { day: number; hour: number } {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      weekday: "short",
-      hour: "numeric",
-      hour12: false,
-    })
-
-    const parts = formatter.formatToParts(utcDate)
-    const dayMap: Record<string, number> = {
-      Sun: 0,
-      Mon: 1,
-      Tue: 2,
-      Wed: 3,
-      Thu: 4,
-      Fri: 5,
-      Sat: 6,
-    }
-
-    const dayPart = parts.find((p) => p.type === "weekday")?.value || "Mon"
-    const hourPart = parts.find((p) => p.type === "hour")?.value || "9"
-
-    return {
-      day: dayMap[dayPart] ?? 1,
-      hour: parseInt(hourPart, 10),
-    }
-  } catch {
-    // If timezone is invalid, return Monday 9am
-    console.error(`Invalid timezone: ${timezone}, using defaults`)
-    return { day: 1, hour: 9 }
-  }
-}

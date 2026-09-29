@@ -24,13 +24,14 @@ export const MAX_SCANS_PER_SLOT = 3
 
 export const DEFAULT_SCAN_TIMEZONE = 'Australia/Sydney'
 
-/** Day numbering matches `getLocalTime` in the dispatcher: 0 = Sunday. */
-const MONDAY = 1
-const FRIDAY = 5
+/**
+ * When the weekly digest email goes out, in the client's local timezone.
+ * Day numbering matches `getLocalTime` in the dispatcher: 0 = Sunday.
+ */
+export const DIGEST_DAY = 1
+export const DIGEST_HOUR = 9
 
-/** Local hours a scan may be scheduled in. */
-const FIRST_HOUR = 8
-const LAST_HOUR = 17
+const HOURS_PER_WEEK = 168
 
 export interface ScanSlot {
   day: number
@@ -39,19 +40,31 @@ export interface ScanSlot {
 }
 
 /**
- * Candidate slots in preference order: Monday first, then later weekdays.
+ * Candidate slots in preference order, walking backwards from the digest hour.
  *
- * Business hours only, because a client is emailed when their scan finishes.
- * Once the Monday digest is split from scan completion, this can open up to all
- * 168 hours of the week.
+ * A scan can run in any of the week's 168 hours, because no email fires when it
+ * finishes — the Monday digest reports whatever data is current. The order is
+ * what makes that useful: the first candidate is the hour before the digest, so
+ * early slots hold the freshest data. At thirteen domains every scan lands
+ * overnight before Monday's email. At a hundred the oldest is four days, which
+ * is still within a weekly refresh.
+ *
+ * The digest hour itself is never a candidate. A scan running then races the
+ * email that reports it.
  */
 export function candidateSlots(): ScanSlot[] {
+  const digestOffset = DIGEST_DAY * 24 + DIGEST_HOUR
   const slots: ScanSlot[] = []
-  for (let day = MONDAY; day <= FRIDAY; day++) {
-    for (let hour = FIRST_HOUR; hour <= LAST_HOUR; hour++) {
-      slots.push({ day, hour, timezone: DEFAULT_SCAN_TIMEZONE })
-    }
+
+  for (let hoursBefore = 1; hoursBefore < HOURS_PER_WEEK; hoursBefore++) {
+    const offset = (digestOffset - hoursBefore + HOURS_PER_WEEK) % HOURS_PER_WEEK
+    slots.push({
+      day: Math.floor(offset / 24),
+      hour: offset % 24,
+      timezone: DEFAULT_SCAN_TIMEZONE,
+    })
   }
+
   return slots
 }
 
@@ -92,6 +105,10 @@ export async function allocateScanSlot(supabase: SupabaseClient): Promise<ScanSl
     occupancy.set(key, (occupancy.get(key) ?? 0) + 1)
   }
 
+  return pickEmptiestSlot(candidates, occupancy)
+}
+
+function pickEmptiestSlot(candidates: ScanSlot[], occupancy: Map<string, number>): ScanSlot {
   let best = candidates[0]
   let bestLoad = Number.POSITIVE_INFINITY
 

@@ -35,6 +35,18 @@ export type ScanProcessEvent = {
     domainSubscriptionId?: string // For subscriber scans - links scan_run to domain_subscription
     verificationToken?: string
     skipEmail?: boolean
+    /**
+     * When the subscriber hears about this scan.
+     *
+     * "immediate" (the default) emails as soon as the scan finishes, which is
+     * what a signup or a manual rescan needs. "weekly_digest" stays silent and
+     * leaves the telling to the Monday digest, so a scheduled scan can run in
+     * any hour of the week without emailing someone at 3am.
+     *
+     * Unlike `skipEmail` this only suppresses the scan-complete email. An
+     * unverified subscriber still gets their verification email.
+     */
+    notify?: "immediate" | "weekly_digest"
   }
 }
 

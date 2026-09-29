@@ -6,6 +6,7 @@ import { enrichSubscriber } from "@/inngest/functions/enrich-subscriber"
 import { processHiringBrandScan, processHiringBrandScanCancelledHandler } from "@/inngest/functions/process-hiringbrand-scan"
 import { hiringBrandWeeklyDispatcher } from "@/inngest/functions/hiringbrand-weekly-dispatcher"
 import { scanHealthMonitor } from "@/inngest/functions/scan-health-monitor"
+import { weeklyDigestDispatcher } from "@/inngest/functions/weekly-digest-dispatcher"
 
 // Allow up to 600 seconds (10 min) for Inngest to execute function steps
 // Required for long-running steps like PRD generation with extended thinking
@@ -16,5 +17,5 @@ export const maxDuration = 600
 // This route handles all Inngest events and cron triggers
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [processScan, processScanFailureHandler, processScanCancelledHandler, hourlyScanDispatcher, enrichSubscriber, processHiringBrandScan, processHiringBrandScanCancelledHandler, hiringBrandWeeklyDispatcher, scanHealthMonitor],
+  functions: [processScan, processScanFailureHandler, processScanCancelledHandler, hourlyScanDispatcher, enrichSubscriber, processHiringBrandScan, processHiringBrandScanCancelledHandler, hiringBrandWeeklyDispatcher, scanHealthMonitor, weeklyDigestDispatcher],
 })
