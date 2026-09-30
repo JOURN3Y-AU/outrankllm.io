@@ -185,29 +185,34 @@ export const processScan = inngest.createFunction(
       finish: "20m",
     },
     // This limit counts concurrent STEPS across every run of this function, not
-    // concurrent scans. The distinction is the whole story behind the weekly
-    // batch failures.
+    // concurrent scans. Each scan holds four platform steps.
     //
-    // It was set to 3 to mean "three scans at a time". What it actually meant
-    // was three steps at a time for the entire function. Each scan then issued
-    // roughly 24 steps, because ChatGPT and Perplexity fanned out one step per
-    // prompt, so a ten-scan batch pushed ~240 steps through a three-wide gate.
-    // Runs executed a step or two, then waited. They made no further progress,
-    // burned their 20-minute `timeouts.finish` sitting in the queue, and were
-    // cancelled at whatever step they had reached. That is why the runs stuck on
-    // 2026-08-30 stopped between 27 seconds and 2 minutes in and stopped at
-    // three different stages: it was never one provider stalling.
+    // KEEP THIS AT OR BELOW THE INNGEST PLAN LIMIT, currently 5. Inngest
+    // validates the whole app's config on registration and rejects ALL of it if
+    // one function exceeds the plan:
     //
-    // Lowering it from 5 to 3 on 2026-08-07 narrowed the gate further, and the
-    // weekly failure rate went from ~50% to 58-79%.
+    //   PUT /api/inngest -> 400
+    //   "The function 'process-scan' has higher concurrency limits (12) than
+    //    your plan limit of 5"   {"modified": false}
     //
-    // Each scan now runs four platform steps, so 12 slots keeps roughly three
-    // scans progressing at once. With PROMPT_CONCURRENCY inside each step that
-    // is ~36 provider calls in flight, close to the ceiling the previous limit
-    // was aiming for and now actually enforced.
+    // Raising this to 12 on 2026-08-31 silently froze the deployed Inngest
+    // config at its 2026-08-30 state for a month. Vercel kept deploying, so app
+    // code shipped normally and the failure was invisible — but no function
+    // config synced, which meant:
+    //   - the cancelOn fix in 74db1af never reached Inngest, so weekly scans
+    //     kept cancelling each other and every Sunday batch lost nine of ten;
+    //   - process-scan-cancelled was never registered, so 326 failures in a row
+    //     were labelled by the health monitor instead of naming cancellation;
+    //   - the real gate stayed at 3, not 12.
+    //
+    // A raise here is not a code change, it is a plan change. Check the plan
+    // first, then confirm `PUT /api/inngest` returns 200 with "modified": true.
+    //
+    // Five is ample now that scan-slots gives every domain its own hour: one
+    // scan runs at a time, so its four steps fit with a slot to spare.
     concurrency: [
       {
-        limit: 12,
+        limit: 5,
         scope: "fn",
       },
     ],
