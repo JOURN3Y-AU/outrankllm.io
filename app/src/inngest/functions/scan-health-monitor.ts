@@ -197,8 +197,18 @@ export const scanHealthMonitor = inngest.createFunction(
         await step.run("auto-recover-stuck-hb-scans", async () => {
           const supabase = createServiceClient()
 
+          // Mark them failed, but do NOT re-queue. The HB dispatcher now runs
+          // hourly and dispatches whatever is overdue, so a scan marked failed
+          // here is picked up within the hour on its own.
+          //
+          // Re-queueing as well did active harm. Both this monitor and the
+          // dispatcher run at :00, so each stuck brand got two
+          // `hiringbrand/scan` events in the same minute — and because
+          // process-hiringbrand-scan cancels on `data.monitoredDomainId`, the
+          // second cancelled the first. It also re-queued every stuck brand in
+          // one loop, which is the pile-up that cost
+          // therecruitmentcompany.ie its 2026-10-11 scan.
           for (const scan of hbRecoverable) {
-            // Mark as failed
             await supabase
               .from("scan_runs")
               .update({
@@ -207,24 +217,6 @@ export const scanHealthMonitor = inngest.createFunction(
                 completed_at: new Date().toISOString(),
               })
               .eq("id", scan.id)
-
-            // Re-queue if we have the organization_id and monitored_domain_id,
-            // but only if this brand hasn't already been retried today.
-            if (
-              scan.organization_id &&
-              scan.monitored_domain_id &&
-              scan.domain &&
-              !(await alreadyRetried(scan))
-            ) {
-              await inngest.send({
-                name: "hiringbrand/scan" as const,
-                data: {
-                  domain: scan.domain,
-                  organizationId: scan.organization_id,
-                  monitoredDomainId: scan.monitored_domain_id,
-                },
-              })
-            }
           }
 
           console.log(`[HealthMonitor] Auto-recovered ${hbRecoverable.length} stuck HiringBrand scan(s)`)
