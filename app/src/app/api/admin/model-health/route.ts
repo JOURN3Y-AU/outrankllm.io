@@ -7,7 +7,7 @@ import { createPerplexity } from '@ai-sdk/perplexity'
 import { getAdminSession } from '@/lib/admin'
 import {
   CLAUDE_MODEL,
-  CLAUDE_GATEWAY_MODEL,
+  CLAUDE_SEARCH_MODEL,
   CLAUDE_PROVIDER_OPTIONS,
   isModelUnavailableError,
 } from '@/lib/ai/anthropic-model'
@@ -56,12 +56,31 @@ const CHECKS = [
   { platform: 'chatgpt', model: 'gpt-4o-mini', via: 'openai' as const },
   { platform: 'chatgpt', model: OPENAI_SEARCH_MODEL, via: 'openai' as const },
   { platform: 'claude', model: CLAUDE_MODEL, via: 'anthropic' as const },
+  // The Claude platform simulation (search_claude_*, brand_*_claude). Changing
+  // CLAUDE_SEARCH_MODEL without checking it here is how a retirement on this
+  // model would go unnoticed — it is 6% of the score but every scan uses it.
+  { platform: 'claude', model: CLAUDE_SEARCH_MODEL, via: 'anthropic' as const },
   { platform: 'gemini', model: 'gemini-2.5-flash', via: 'google' as const },
   { platform: 'perplexity', model: 'sonar-pro', via: 'perplexity' as const },
   // brand-awareness.ts / query-research.ts / employer-research.ts
   { platform: 'chatgpt', model: 'gpt-4o', via: 'openai' as const },
-  { platform: 'claude', model: CLAUDE_GATEWAY_MODEL, via: 'gateway' as const },
 ]
+
+/**
+ * The Vercel AI Gateway is NOT checked, deliberately.
+ *
+ * Nothing routes Claude through it. CLAUDE_GATEWAY_MODEL is only a cost label —
+ * process-hiringbrand-scan calls `anthropic(CLAUDE_MODEL)` directly at both
+ * sites that record it, and analyze.ts falls back to the OpenAI SDK when no
+ * gateway key is set.
+ *
+ * It was checked until 2026-10-26, and the gateway has no paid credits
+ * ("Free tier users do not have access to this model"), so this endpoint
+ * returned 503 on every call regardless of the real state of the pipeline. The
+ * one tool meant to catch a retired model was permanently red — which is worse
+ * than no check, because nobody reads it. Add the gateway back here only if
+ * something starts actually serving traffic through it.
+ */
 
 type Via = 'openai' | 'anthropic' | 'google' | 'perplexity' | 'gateway'
 
