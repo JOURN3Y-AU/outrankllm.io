@@ -10,13 +10,14 @@ import {
   type CompetitiveSummaryData,
   type PlatformDataInput,
 } from '@/lib/ai/generate-actions'
+import type { ClaudeEffort } from '@/lib/ai/anthropic-model'
 
 /**
  * Admin endpoint to regenerate action plans for a specific report
  * This is useful for testing changes to action plan generation
  *
  * POST /api/admin/regenerate-actions
- * Body: { reportToken: string }
+ * Body: { reportToken: string, effort?: 'low' | 'medium' | 'high' }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +32,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { reportToken } = body
+
+    // Optional, admin-only: run the generation at a different reasoning effort
+    // so the cost/quality tradeoff can be measured on real data instead of
+    // guessed. Defaults to the production level.
+    const effort: ClaudeEffort =
+      body.effort === 'low' || body.effort === 'medium' ? body.effort : 'high'
 
     if (!reportToken) {
       return NextResponse.json({ error: 'Must provide reportToken' }, { status: 400 })
@@ -243,7 +250,7 @@ export async function POST(request: NextRequest) {
 
     // Generate the action plan
     console.log(`[regenerate-actions] Generating action plan...`)
-    const generatedPlan = await generateActionPlan(actionPlanInput, scanRunId)
+    const generatedPlan = await generateActionPlan(actionPlanInput, scanRunId, effort)
 
     console.log(`[regenerate-actions] Generated ${generatedPlan.priorityActions.length} actions`)
 

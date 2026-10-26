@@ -17,6 +17,8 @@ import {
   CLAUDE_MODEL,
   CLAUDE_GATEWAY_MODEL,
   CLAUDE_DEEP_REASONING_OPTIONS,
+  claudeReasoningOptions,
+  type ClaudeEffort,
   repairMalformedJson,
 } from './anthropic-model'
 
@@ -924,9 +926,14 @@ Generate 10-15 priority actions, 3-5 page edits, 3-5 content priorities, 8-12 ke
  */
 export async function generateActionPlan(
   input: ActionPlanInput,
-  runId: string
+  runId: string,
+  /**
+   * Reasoning effort. Defaults to 'high'; lower it only with a measured
+   * comparison in hand, since this output is what the subscriber reads.
+   */
+  effort: ClaudeEffort = 'high'
 ): Promise<GeneratedActionPlan> {
-  log.step(runId, 'Generating AI-powered action plan')
+  log.step(runId, `Generating AI-powered action plan (effort: ${effort})`)
 
   // Step 1: Search for current best practices
   log.info(runId, 'Searching for current GEO/SEO best practices...')
@@ -952,7 +959,7 @@ export async function generateActionPlan(
       // on its own, so the budget has to cover both. 8000 truncated the payload
       // mid-array, and the parser turned that into an empty plan.
       maxOutputTokens: 32000,
-      providerOptions: CLAUDE_DEEP_REASONING_OPTIONS,
+      providerOptions: claudeReasoningOptions(effort),
     })
 
     const responseTimeMs = Date.now() - startTime

@@ -171,3 +171,23 @@ export function logModelUnavailable(context: string, model: string, error: unkno
 export const CLAUDE_DEEP_REASONING_OPTIONS = {
   anthropic: { effort: 'high' as const },
 } as const
+
+/** Effort levels Sonnet 5 accepts for the long-form generation jobs. */
+export type ClaudeEffort = 'low' | 'medium' | 'high'
+
+/**
+ * Same options at a chosen effort, so the level can be measured rather than
+ * assumed.
+ *
+ * Effort is the lever that matters for these two steps. generate_prd and
+ * generate_action_plan emit ~26k and ~17k output tokens per call and together
+ * are over half the Anthropic bill; Sonnet 5.5 costs the same as Sonnet 5, so
+ * there is no cheaper model to move to. Output volume is the only thing left,
+ * and effort controls it directly.
+ *
+ * Default stays 'high' — these are customer-facing deliverables and a cheaper
+ * plan that reads thin costs more than it saves.
+ */
+export function claudeReasoningOptions(effort: ClaudeEffort = 'high') {
+  return { anthropic: { effort } } as const
+}

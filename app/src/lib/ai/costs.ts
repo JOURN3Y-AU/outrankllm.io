@@ -26,6 +26,22 @@ const TAVILY_COST_CENTS_PER_SEARCH = 1  // $0.01 = 1 cent
  */
 const OPENAI_WEB_SEARCH_COST_CENTS_PER_CALL = 1
 
+/**
+ * Google Search grounding is NOT billed here, and that is correct today.
+ *
+ * Gemini 2.5 includes 1,500 grounded requests per day free, and search_gemini
+ * issues roughly 50 on a batch day — so grounding costs nothing at current
+ * volume. Recording a fee would overstate the bill.
+ *
+ * It is a cliff, not a discount. Past the free allowance Gemini 2.5 grounding
+ * is $35 per 1,000 grounded prompts, which at ~200 prompts a week would be
+ * ~$7/week against $0.58 of tokens — grounding would instantly become the
+ * largest Gemini line. Gemini 3+ allows 5,000 free per month, then $14/1,000.
+ *
+ * If scan volume grows roughly 30x, or the model moves to a Gemini 3 line,
+ * add the fee here the way estimateCostCents handles searchCalls.
+ */
+
 // Pricing per 1K tokens (as of Jan 2025)
 // Source: https://vercel.com/docs/ai-gateway/pricing, https://openai.com/pricing, https://ai.google.dev/pricing
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -55,10 +71,22 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },  // retired 2026-06-15
   'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
   'claude-3-haiku-20240307': { input: 0.00025, output: 0.00125 },
-  // Google
+  // Google — paid-tier rates from ai.google.dev/gemini-api/docs/pricing (2026-10-26).
+  //
+  // 2.5-flash was recorded at $0.15/$0.60 per million against a real
+  // $0.30/$2.50, understating every Gemini line by 4.2x on output. Gemini is
+  // output-heavy here (~1,200 tokens per grounded answer), so this was the
+  // second-largest error in this file after the missing OpenAI search fee.
+  //
+  // Note on newer models: Gemini 3.x flash is NOT cheaper. gemini-3.6-flash and
+  // gemini-3.8-flash are $0.75/$3.75 now and $1.50/$7.50 from 2027-01-01, and
+  // gemini-3.5-flash-lite matches 2.5-flash exactly. The only cheaper option is
+  // 2.5-flash-lite below.
   'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
-  'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },  // Newer flash model
-  'gemini-2.5-flash-grounded': { input: 0.00015, output: 0.0006 },  // With search grounding
+  'gemini-2.5-flash': { input: 0.0003, output: 0.0025 },
+  'gemini-2.5-flash-grounded': { input: 0.0003, output: 0.0025 },
+  'gemini-2.5-flash-lite': { input: 0.0001, output: 0.0004 },
+  'gemini-2.5-flash-lite-grounded': { input: 0.0001, output: 0.0004 },
   'gemini-1.5-pro': { input: 0.00125, output: 0.005 },
   // Perplexity (sonar-pro pricing - includes search)
   'sonar-pro': { input: 0.003, output: 0.015 },
@@ -87,6 +115,8 @@ const MODEL_MAP: Record<string, string> = {
   'google/gemini-2.0-flash': 'gemini-2.0-flash',
   'google/gemini-2.5-flash': 'gemini-2.5-flash',
   'google/gemini-2.5-flash-grounded': 'gemini-2.5-flash-grounded',
+  'google/gemini-2.5-flash-lite': 'gemini-2.5-flash-lite',
+  'google/gemini-2.5-flash-lite-grounded': 'gemini-2.5-flash-lite-grounded',
   'google/gemini-1.5-pro': 'gemini-1.5-pro',
   // Perplexity
   'perplexity/sonar-pro': 'sonar-pro',
