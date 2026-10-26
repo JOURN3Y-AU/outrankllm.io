@@ -14,7 +14,8 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createPerplexity } from '@ai-sdk/perplexity'
-import { trackCost } from './costs'
+import { trackCost, countWebSearchCalls } from './costs'
+import { OPENAI_SEARCH_MODEL, OPENAI_SEARCH_COST_MODEL } from './openai-model'
 import { log } from '@/lib/logger'
 import { CLAUDE_SEARCH_MODEL, CLAUDE_SEARCH_GATEWAY_MODEL } from './anthropic-model'
 
@@ -208,9 +209,17 @@ async function extractCompetitorsFromResponse(
 }
 
 /**
- * Query OpenAI with o4-mini reasoning model and web_search tool
- * Uses direct API for real-time web search with agentic multi-step reasoning
- * o4-mini is better at deciding when to search again and synthesizing results
+ * Query OpenAI with a reasoning model and the web_search tool.
+ * Uses the direct API for real-time web search with agentic multi-step reasoning.
+ *
+ * The model comes from OPENAI_SEARCH_MODEL — never hardcode it here. A
+ * hardcoded `o4-mini` in this function, brand-awareness, and the health check
+ * is what made its 2026-10-25 deprecation a three-file fix instead of one.
+ *
+ * The model is chosen for search depth, not prose: it must decide to search
+ * again rather than answer from training knowledge, because the score measures
+ * what ChatGPT can find about a business. See openai-model.ts for the measured
+ * comparison.
  */
 async function queryOpenAIWithSearch(
   query: string,
@@ -259,12 +268,11 @@ async function queryOpenAIWithSearch(
       }
     }
 
-    // Use OpenAI Responses API with o4-mini reasoning model and web_search tool
-    // o4-mini provides agentic multi-step search for more comprehensive results
-    // Using 'medium' context size to balance cost vs coverage
+    // OpenAI Responses API with the search model and web_search tool, for
+    // agentic multi-step search. 'medium' context size balances cost vs coverage.
     const result = await withAbortTimeout(CHATGPT_TIMEOUT_MS, (abortSignal) =>
       generateText({
-        model: openai.responses('o4-mini'),
+        model: openai.responses(OPENAI_SEARCH_MODEL),
         tools: {
           web_search: openai.tools.webSearch({
             searchContextSize: 'medium',
@@ -319,12 +327,15 @@ async function queryOpenAIWithSearch(
       await trackCost({
         runId,
         step: `search_${platform}`,
-        model: 'openai/o4-mini-search',
+        model: OPENAI_SEARCH_COST_MODEL,
         usage: {
           inputTokens: result.usage.inputTokens || 0,
           outputTokens: result.usage.outputTokens || 0,
           totalTokens: (result.usage.inputTokens || 0) + (result.usage.outputTokens || 0),
         },
+        // Billed per call on top of tokens, and the search model makes ~10 per
+        // query — omitting this under-reports the step by more than its tokens.
+        searchCalls: countWebSearchCalls(result),
       })
     }
 

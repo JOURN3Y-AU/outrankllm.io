@@ -10,6 +10,22 @@ import { createServiceClient } from '@/lib/supabase/server'
 // Source: https://tavily.com/pricing - ~$0.01 per search on paid plans
 const TAVILY_COST_CENTS_PER_SEARCH = 1  // $0.01 = 1 cent
 
+/**
+ * OpenAI bills the built-in web_search tool per call, on top of tokens:
+ * $10 per 1,000 calls = $0.01 = 1 cent.
+ *
+ * This was missing entirely until 2026-10-26, and it is the largest single
+ * error in api_costs. The search model issues ~10 searches per query, so the
+ * fee is roughly twice the token cost of the step it belongs to — the 18 Oct
+ * batch recorded $10.81 for ChatGPT against a real ~$40. It also explains most
+ * of the long-standing gap between the OpenAI invoice and what we record.
+ *
+ * Note the search *content* is already counted: results come back as billed
+ * input tokens, which is why input is ~25k per call. This fee is the tool
+ * invocation, not the content, so adding it is not double counting.
+ */
+const OPENAI_WEB_SEARCH_COST_CENTS_PER_CALL = 1
+
 // Pricing per 1K tokens (as of Jan 2025)
 // Source: https://vercel.com/docs/ai-gateway/pricing, https://openai.com/pricing, https://ai.google.dev/pricing
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -17,15 +33,24 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o': { input: 0.0025, output: 0.01 },
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
-  'o4-mini': { input: 0.0011, output: 0.0044 },  // Reasoning model
-  'o4-mini-search': { input: 0.0011, output: 0.0044 },  // o4-mini with web search
+  // o4-mini was deprecated by OpenAI on 2026-10-25. Kept priced so historical
+  // api_costs rows still resolve; OPENAI_SEARCH_MODEL no longer points at it.
+  'o4-mini': { input: 0.0011, output: 0.0044 },
+  'o4-mini-search': { input: 0.0011, output: 0.0044 },
+  'o3': { input: 0.002, output: 0.008 },  // Reasoning model — current OPENAI_SEARCH_MODEL
+  // Token cost only. The web_search tool is billed separately per call, which
+  // estimateCostCents adds via searchCalls — see OPENAI_WEB_SEARCH_COST_CENTS_PER_CALL.
+  'o3-search': { input: 0.002, output: 0.008 },
   'gpt-4o-search': { input: 0.0025, output: 0.01 },  // gpt-4o with web search (outrankllm brand scans)
   // Anthropic
   // NOTE: when CLAUDE_MODEL changes in src/lib/ai/anthropic-model.ts, add the new
   // ID here too — an unpriced model silently tracks $0 cost.
-  'claude-sonnet-5': { input: 0.003, output: 0.015 },
-  // $1/$5 per million tokens — a third of Sonnet. Used for the Claude platform
-  // simulation only (CLAUDE_SEARCH_MODEL), not internal analysis.
+  // $2/$10 per million. This was recorded at $3/$15 until 2026-10-26, which
+  // overstated the biggest Anthropic line by 1.5x in every cost report.
+  'claude-sonnet-5': { input: 0.002, output: 0.010 },
+  // $0.10/$0.50 per million — 10x cheaper than Haiku 4.5 for the same job.
+  // Used for the Claude platform simulation only (CLAUDE_SEARCH_MODEL).
+  'claude-haiku-5-5': { input: 0.0001, output: 0.0005 },
   'claude-haiku-4-5': { input: 0.001, output: 0.005 },
   'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },  // retired 2026-06-15
   'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
@@ -47,11 +72,14 @@ const MODEL_MAP: Record<string, string> = {
   'openai/gpt-4-turbo': 'gpt-4-turbo',
   'openai/o4-mini': 'o4-mini',
   'openai/o4-mini-search': 'o4-mini-search',
+  'openai/o3': 'o3',
+  'openai/o3-search': 'o3-search',
   'openai/gpt-4o-search': 'gpt-4o-search',
   // Tavily fallback for the brand ChatGPT queries — a plain gpt-4o completion
   // over search results. Was unmapped, so every fallback tracked $0.
   'openai/gpt-4o-tavily': 'gpt-4o',
   'anthropic/claude-sonnet-5': 'claude-sonnet-5',
+  'anthropic/claude-haiku-5-5': 'claude-haiku-5-5',
   'anthropic/claude-haiku-4-5': 'claude-haiku-4-5',
   'anthropic/claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
   'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
@@ -65,6 +93,17 @@ const MODEL_MAP: Record<string, string> = {
   'perplexity/sonar': 'sonar',
 }
 
+/**
+ * Counts built-in web_search invocations in an AI SDK result so trackCost can
+ * bill them. The SDK exposes one entry per tool call across `steps`; an older
+ * SDK or a non-tool call has no steps, which correctly yields 0.
+ */
+export function countWebSearchCalls(result: unknown): number {
+  const steps = (result as { steps?: Array<{ toolCalls?: unknown[] }> } | null)?.steps
+  if (!Array.isArray(steps)) return 0
+  return steps.reduce((n, step) => n + (Array.isArray(step?.toolCalls) ? step.toolCalls.length : 0), 0)
+}
+
 export interface UsageData {
   inputTokens: number
   outputTokens: number
@@ -76,6 +115,12 @@ export interface CostRecord {
   step: string  // 'analyze', 'prompts', 'query_chatgpt', 'query_claude', 'query_gemini', 'competitors'
   model: string
   usage: UsageData
+  /**
+   * Number of built-in web_search calls the model made. Billed per call on top
+   * of tokens, so leaving it unset under-reports an OpenAI search step by more
+   * than its token cost. Count it from the AI SDK result's steps.
+   */
+  searchCalls?: number
 }
 
 interface ApiCostRow {
@@ -92,7 +137,11 @@ interface ApiCostRow {
 /**
  * Calculate estimated cost in cents based on token usage
  */
-export function estimateCostCents(model: string, usage: UsageData): number {
+export function estimateCostCents(
+  model: string,
+  usage: UsageData,
+  searchCalls = 0
+): number {
   const pricingKey = MODEL_MAP[model] || model
   const pricing = MODEL_PRICING[pricingKey]
 
@@ -104,8 +153,9 @@ export function estimateCostCents(model: string, usage: UsageData): number {
   // Pricing is in dollars per 1K tokens, convert to cents
   const inputCost = (usage.inputTokens / 1000) * pricing.input * 100
   const outputCost = (usage.outputTokens / 1000) * pricing.output * 100
+  const searchCost = searchCalls * OPENAI_WEB_SEARCH_COST_CENTS_PER_CALL
 
-  return inputCost + outputCost
+  return inputCost + outputCost + searchCost
 }
 
 /**
@@ -137,7 +187,7 @@ export async function trackTavilyCost(runId: string, step: string, searchCount: 
 export async function trackCost(record: CostRecord): Promise<void> {
   try {
     const supabase = createServiceClient()
-    const costCents = estimateCostCents(record.model, record.usage)
+    const costCents = estimateCostCents(record.model, record.usage, record.searchCalls ?? 0)
 
     await supabase.from('api_costs').insert({
       run_id: record.runId,

@@ -32,6 +32,9 @@ export const CLAUDE_GATEWAY_MODEL = `anthropic/${CLAUDE_MODEL}` as const
  * which Haiku handles well, and the step is already an approximation of Claude's
  * real product rather than the product itself.
  *
+ * Moved from claude-haiku-4-5 to claude-haiku-5-5 on 2026-10-26: same job, same
+ * tier, $0.10/$0.50 per million against $1/$5 — a tenth of the cost.
+ *
  * Internal analysis — sentiment, differentiation, strategic summaries — stays on
  * CLAUDE_MODEL. Those are cheap (all of them together are a few dollars a month)
  * and quality there moves the customer-visible numbers.
@@ -39,7 +42,7 @@ export const CLAUDE_GATEWAY_MODEL = `anthropic/${CLAUDE_MODEL}` as const
  * Same retirement rules apply: add any new ID to MODEL_PRICING and MODEL_MAP in
  * src/lib/ai/costs.ts, or it silently tracks $0.
  */
-export const CLAUDE_SEARCH_MODEL = 'claude-haiku-4-5'
+export const CLAUDE_SEARCH_MODEL = 'claude-haiku-5-5'
 
 /** Same search model addressed through the Vercel AI Gateway. */
 export const CLAUDE_SEARCH_GATEWAY_MODEL = `anthropic/${CLAUDE_SEARCH_MODEL}` as const

@@ -32,6 +32,20 @@ const FREE_REPORT_EXPIRY_DAYS = parseInt(process.env.FREE_REPORT_EXPIRY_DAYS || 
 // Platform weights for scoring (from CLAUDE.md)
 const PLATFORMS = ["chatgpt", "claude", "gemini", "perplexity"] as const
 
+/**
+ * Reach weights from the scoring formula:
+ *   (chatgpt% x 10 + perplexity% x 4 + gemini% x 2 + claude% x 1) / 17 x 100
+ *
+ * Used by verify-platform-coverage to decide whether a wholly dead platform
+ * should fail the scan. ChatGPT alone is 59% of the score.
+ */
+const PLATFORM_WEIGHTS: Record<(typeof PLATFORMS)[number], number> = {
+  chatgpt: 10,
+  perplexity: 4,
+  gemini: 2,
+  claude: 1,
+}
+
 // How many prompts a single platform step runs at once.
 const PROMPT_CONCURRENCY = 3
 
@@ -738,6 +752,59 @@ export const processScan = inngest.createFunction(
         })
       )
     )
+
+    /**
+     * Refuse to finish a scan whose dominant platform produced nothing.
+     *
+     * A provider failure does not throw — search-providers catches it, records
+     * the error text as the response, and the scan completes with a score
+     * computed from the platforms that did work. On 2026-10-25 OpenAI
+     * deprecated o4-mini mid-batch: all 105 ChatGPT responses came back empty,
+     * and because ChatGPT carries 10 of the 17 scoring weight, commbank.com.au
+     * published 20 instead of 73 and journ3y.com.au 9 instead of 25. Every scan
+     * said "complete", and the Monday digest emailed thirteen subscribers a
+     * link to the wrong report.
+     *
+     * A score missing 59% of its input is not a low score, it is a broken one.
+     * Fail here instead: the health monitor alerts, the run shows as failed,
+     * and the digest keeps pointing at the last good report rather than
+     * announcing a bad one.
+     *
+     * The threshold is per platform and weight-aware — a platform worth 10/17
+     * failing wholesale is fatal, while Claude at 1/17 is not worth discarding
+     * a scan over. Partial failure stays tolerated: providers time out on
+     * individual prompts routinely and the score absorbs that.
+     */
+    await step.run("verify-platform-coverage", async () => {
+      const FATAL_WEIGHT_THRESHOLD = 4 // chatgpt (10) and perplexity (4)
+
+      const dead: string[] = []
+      for (let i = 0; i < PLATFORMS.length; i++) {
+        const platform = PLATFORMS[i]
+        if (PLATFORM_WEIGHTS[platform] < FATAL_WEIGHT_THRESHOLD) continue
+
+        const results = platformResultsMap[i] ?? []
+        if (results.length === 0) continue
+
+        const usable = results.filter(
+          (r) => !r.result.error && (r.result.response ?? "").trim().length > 0
+        ).length
+
+        if (usable === 0) {
+          dead.push(`${platform} (weight ${PLATFORM_WEIGHTS[platform]}, ${results.length} queries)`)
+        }
+      }
+
+      if (dead.length > 0) {
+        const detail = dead.join("; ")
+        log.error(scanId, `Aborting: no usable responses from ${detail}`)
+        throw new Error(
+          `Scan aborted: no usable responses from ${detail}. ` +
+            `The score would omit that platform's weight entirely. ` +
+            `Check GET /api/admin/model-health — a deprecated model ID is the usual cause.`
+        )
+      }
+    })
 
     // Update progress after all platforms complete
     await step.run("update-query-progress", async () => {

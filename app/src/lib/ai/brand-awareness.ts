@@ -4,7 +4,7 @@
  * compared to what the website claims
  *
  * Uses grounded search (web search enabled) for more accurate results:
- * - ChatGPT: o4-mini with web_search tool
+ * - ChatGPT: OPENAI_SEARCH_MODEL with the web_search tool
  * - Claude: Tavily search + Claude for response
  * - Gemini: Google Search grounding
  * - Perplexity: Native search (sonar-pro) - already grounded
@@ -15,7 +15,8 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createPerplexity } from '@ai-sdk/perplexity'
-import { trackCost, trackTavilyCost } from './costs'
+import { trackCost, trackTavilyCost, countWebSearchCalls } from './costs'
+import { OPENAI_SEARCH_MODEL, OPENAI_SEARCH_COST_MODEL } from './openai-model'
 import { log } from '@/lib/logger'
 import type { BusinessAnalysis } from './analyze'
 import {
@@ -234,19 +235,30 @@ async function runChatGPTQuery(
   query: BrandAwarenessQuery,
   runId: string,
   retryCount = 0
-): Promise<{ text: string; usage?: { inputTokens?: number; outputTokens?: number }; usedTavily?: boolean }> {
+): Promise<{
+  text: string
+  usage?: { inputTokens?: number; outputTokens?: number }
+  usedTavily?: boolean
+  /** web_search invocations, billed per call on top of tokens. */
+  searchCalls?: number
+}> {
   const MAX_RETRIES = 1 // Reduce retries since we have Tavily fallback
   const MIN_RESPONSE_LENGTH = 100 // Minimum chars for a useful response
 
   let result: { text: string; usage?: { inputTokens?: number; outputTokens?: number } } | null = null
+  // The web_search fee is per call, so the count has to survive back to
+  // trackCost. Only the direct OpenAI path searches; the Tavily fallback is
+  // billed by trackTavilyCost instead.
+  let searchCalls = 0
 
   try {
-    // o4-mini, matching the main search_chatgpt step. These brand queries were
+    // OPENAI_SEARCH_MODEL, matching the main search_chatgpt step. These brand
+    // queries were
     // the only ChatGPT simulation running on gpt-4o — same platform, two
     // different models, with the pricier one on the brand steps. Aligning them
     // makes the two ChatGPT numbers comparable and costs less per call.
     result = await generateText({
-      model: openai.responses('o4-mini'),
+      model: openai.responses(OPENAI_SEARCH_MODEL),
       tools: {
         web_search: openai.tools.webSearch({
           searchContextSize: 'medium',
@@ -256,6 +268,7 @@ async function runChatGPTQuery(
       prompt: query.prompt,
       maxOutputTokens: 4000,  // Increased to capture full rich comparisons
     })
+    searchCalls = countWebSearchCalls(result)
   } catch (error) {
     log.warn(runId, `ChatGPT gpt-4o failed for ${query.type}: ${error instanceof Error ? error.message : 'Unknown error'}`)
     result = { text: '' }
@@ -327,7 +340,7 @@ Provide a helpful answer based on the search results.`,
     }
   }
 
-  return { text: result?.text || '', usage: result?.usage }
+  return { text: result?.text || '', usage: result?.usage, searchCalls }
 }
 
 /**
@@ -349,7 +362,7 @@ async function runQueryOnPlatform(
       case 'chatgpt': {
         // Use gpt-4o with web_search tool for grounded search (with retry + Tavily fallback)
         const result = await runChatGPTQuery(query, runId)
-        modelString = result.usedTavily ? 'openai/gpt-4o-tavily' : 'openai/o4-mini-search'
+        modelString = result.usedTavily ? 'openai/gpt-4o-tavily' : OPENAI_SEARCH_COST_MODEL
 
         responseText = result.text
 
@@ -363,6 +376,9 @@ async function runQueryOnPlatform(
               outputTokens: result.usage.outputTokens || 0,
               totalTokens: (result.usage.inputTokens || 0) + (result.usage.outputTokens || 0),
             },
+            // Per-call web_search fee. Zero on the Tavily fallback, which
+            // trackTavilyCost bills separately.
+            searchCalls: result.usedTavily ? 0 : (result.searchCalls ?? 0),
           })
         }
         break

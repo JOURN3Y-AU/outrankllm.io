@@ -11,6 +11,7 @@ import {
   CLAUDE_PROVIDER_OPTIONS,
   isModelUnavailableError,
 } from '@/lib/ai/anthropic-model'
+import { OPENAI_SEARCH_MODEL } from '@/lib/ai/openai-model'
 
 // Constructed exactly as in src/lib/ai/search-providers.ts, so this checks what
 // the scan actually runs rather than an approximation of it.
@@ -53,7 +54,7 @@ export const maxDuration = 60
 const CHECKS = [
   // search-providers.ts — the main scan
   { platform: 'chatgpt', model: 'gpt-4o-mini', via: 'openai' as const },
-  { platform: 'chatgpt', model: 'o4-mini', via: 'openai' as const },
+  { platform: 'chatgpt', model: OPENAI_SEARCH_MODEL, via: 'openai' as const },
   { platform: 'claude', model: CLAUDE_MODEL, via: 'anthropic' as const },
   { platform: 'gemini', model: 'gemini-2.5-flash', via: 'google' as const },
   { platform: 'perplexity', model: 'sonar-pro', via: 'perplexity' as const },
