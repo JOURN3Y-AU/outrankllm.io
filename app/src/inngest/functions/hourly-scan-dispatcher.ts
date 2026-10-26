@@ -61,6 +61,9 @@ export const hourlyScanDispatcher = inngest.createFunction(
           )
         `)
         .eq("status", "active")
+        // Internal and demo domains are paused rather than deactivated, so they
+        // keep their reports and entitlements without costing a scan a week.
+        .eq("scan_paused", false)
 
       if (error) {
         console.error("Error fetching domain subscriptions:", error)

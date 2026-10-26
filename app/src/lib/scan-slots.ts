@@ -89,6 +89,9 @@ export async function allocateScanSlot(supabase: SupabaseClient): Promise<ScanSl
     .from('domain_subscriptions')
     .select('scan_schedule_day, scan_schedule_hour')
     .neq('status', 'canceled')
+    // A paused subscription does not scan, so its slot is free to reuse. Left
+    // in, the internal and demo domains would reserve hours nothing runs in.
+    .eq('scan_paused', false)
 
   if (error) {
     console.error('Error reading slot occupancy, falling back to first slot:', error)

@@ -64,6 +64,9 @@ export const weeklyDigestDispatcher = inngest.createFunction(
           )
         `)
         .eq("status", "active")
+        // A paused domain stops refreshing, so a digest would keep announcing
+        // the same increasingly stale report every Monday.
+        .eq("scan_paused", false)
 
       if (error) {
         console.error("[weekly-digest] Error fetching subscriptions:", error)
